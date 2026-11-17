@@ -305,6 +305,7 @@ async function loadObserveRuntime() {
 //  内置唤醒状态（独立 autonomy job/run store，不是 scheduler proposal）
 // ══════════════════════════════════════════════════════════
 async function loadObserveAutonomy() {
+  void loadAutonomyDeliveryReceipts();
   const overviewEl = document.getElementById('autonomy-overview');
   const runsEl = document.getElementById('autonomy-runs');
   if (!overviewEl) return;
@@ -322,6 +323,27 @@ async function loadObserveAutonomy() {
     _renderAutonomyTools(host, tools.tools || []);
 
   } catch (e) { overviewEl.innerHTML = `<div class="empty">读取唤醒状态失败：${escapeHtml(e.message)}</div>`; }
+}
+
+async function loadAutonomyDeliveryReceipts() {
+  const host=document.getElementById('autonomy-delivery-receipts');
+  if(!host)return;
+  try {
+    const data=await api('GET','/observability/autonomy-deliveries');
+    const rows=(data.receipts||[]).slice(-100).reverse();
+    const cell=value=>escapeHtml(String(value??'-'));
+    const label=value=>t('autonomy.delivery.'+value,value);
+    const headers=['time','identity','state','persisted','channels','reason'];
+    const body=rows.map(row=>{
+      const channels=Object.entries(row.channels||{}).map(([name,status])=>
+        `${cell(name)}: ${cell(label(status))}<br><small>${cell(row.channel_reason_codes?.[name]||'')}</small>`).join('<br>');
+      const persisted=t(row.persisted?'autonomy.delivery.written':'autonomy.delivery.not_written',row.persisted?'Written':'Not written');
+      return `<tr><td>${cell(_autonomyTime(row.updated_at||row.created_at))}</td>
+        <td><code>${cell(row.run_id)}</code><br><code>${cell(row.correlation_id)}</code><br><code>${cell(row.turn_id||row.transport_id)}</code></td>
+        <td>${cell(label(row.status))}</td><td>${cell(persisted)}</td><td>${channels}</td><td><code>${cell(row.reason_code)}</code></td></tr>`;
+    }).join('');
+    host.innerHTML=rows.length ? `<table style="table-layout:fixed;width:min(100%,1000px);min-width:900px;overflow-wrap:anywhere"><thead><tr>${headers.map(key=>`<th>${cell(t('autonomy.delivery.'+key,key))}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>` : `<div class="empty">${cell(t('autonomy.delivery.empty','暂无投递记录'))}</div>`;
+  }catch(error){host.textContent=t('common.load_failed','读取失败');}
 }
 
 function _renderAutonomyFunnel(host, funnel) {
@@ -530,6 +552,7 @@ function _autonomyCardBody(card) {
     };
   }
   if (card === 'overflow') return {overflow: {enabled: chk('autonomy-overflow-enabled'), threshold: num('autonomy-overflow-threshold')}};
+  if (card === 'phone') return {phone_ambient: {enabled:chk('autonomy-phone-enabled'),light:chk('autonomy-phone-light'),motion:chk('autonomy-phone-motion'),usage:chk('autonomy-phone-usage')}};
   if (card === 'interval') return {interval: {enabled: chk('autonomy-interval-enabled'), seconds: num('autonomy-interval')}};
   const weekdays = document.getElementById('autonomy-schedule-weekdays').value.split(',').map(x => x.trim()).filter(Boolean).map(Number);
   const start = document.getElementById('autonomy-window-start').value;
@@ -2095,6 +2118,13 @@ async function loadAutonomySettings() {
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
     document.getElementById('autonomy-intents').checked = !!config.character_intents_enabled;
+    const phone = config.phone_ambient || {};
+    document.getElementById('autonomy-phone-enabled').checked = phone.enabled === true;
+    for (const kind of ['light','motion','usage']) document.getElementById('autonomy-phone-'+kind).checked = phone[kind] !== false;
+    api('GET','/observability/phone-ambient').then(data=>{
+      const node=document.getElementById('autonomy-phone-state');
+      if(node)node.textContent=JSON.stringify(data,null,2);
+    }).catch(()=>{const node=document.getElementById('autonomy-phone-state');if(node)node.textContent=t('common.load_failed','读取失败');});
     void loadCharacterIntentionStatus();
     document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
     document.getElementById('autonomy-min-interval').value = config.min_interval_seconds || 0;

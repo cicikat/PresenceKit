@@ -1,3 +1,16 @@
+## 第一轮：手机环境候选
+
+R4手机ACK：原有 `/mobile/ack`、ack_seq与队列协议保持不变。确认属于客户端已持久化收件，
+不代表用户已读；按队列中的owner/char/message ID更新对应Autonomy回执，其他scope不受影响。
+先持久化回执再删队列；任一持久化失败返回503（mobile_ack_persistence_unavailable），
+保留原信封供同一ACK重试，不重新执行生成或工具。桌面正文仍fire-and-forget，无收件ACK。
+
+POST /sensor/ambient 保持既有 Reality session、mobile profile、120秒TTL和30秒前台节奏。
+新增 GET/PATCH /sensor/ambient/policy 控制后端候选授权，不改变采集或消息 poll/ACK。
+手机进入后台以既有会话上传 unavailable 清除三项事实；网络失败仍由TTL兜底。
+撤权/换token/换角色/会话失效在候选消费与取得对话锁后重新校验，重启不恢复观测基线。
+当前合成链路和管理面浏览器通过；真机、真实模型及线上投递 observe。
+
 ## 手机前台 R2 本地实现（mobile43）
 
 2026-10-26修复：已有段落兜底开关开启时，双端共同展示出口按句号合同处理普通正文，只在`。`后分段；逗号旁及句中单换行/空行合并，代码/列表结构保留。桌面delta与最终正文共用状态机并在结束时flush。字段、消息身份与ACK不变，不改原始生成/记忆或既有历史；Dream不受影响。首轮词内修复及后续句号修正均已选择性部署，245项本地/65项服务器规则验证通过；完整证据见 [reply-boundaries.md](reply-boundaries.md)，手机R2仍未部署。

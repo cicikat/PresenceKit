@@ -164,8 +164,10 @@ function importPresetJson() {
     // The existing visual editor supports scalar parameters only; reject nested data
     // before changing any field rather than silently coercing it to a string.
     if (data.params && Object.entries(data.params).some(([key,value])=>['__proto__','constructor','prototype'].includes(key) || !['string','number','boolean'].includes(typeof value))) throw new Error();
+    if (data.force_stream !== undefined && typeof data.force_stream !== 'boolean') throw new Error();
     if (!changes.size && data.params === undefined) throw new Error();
     for (const [field,value] of changes) field.value = value;
+    if (data.force_stream !== undefined) document.getElementById('mr-preset-force-stream').checked = data.force_stream;
     if (data.params !== undefined) renderKeyValueEditor('mr-preset-params',data.params);
     if (typeof data.reasoning_native === 'boolean') document.getElementById('mr-preset-reasoning-native').checked = data.reasoning_native;
     if (data.reasoning_extra_body !== undefined) {

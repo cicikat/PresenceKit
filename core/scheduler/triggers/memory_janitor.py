@@ -280,8 +280,7 @@ async def _check_vector_consistency(char_id: str, uid: str) -> None:
     from core.memory.episodic_memory import _load_memories
 
     entries = _vs.list_entries(uid, char_id, limit=1_000_000)
-    if not entries:
-        return
+    await _repair_missing_vectors(char_id, uid, entries)
 
     episodic_ids = {str(m.get("id")) for m in _load_memories(uid, char_id=char_id) if m.get("id")}
     valid_turn_ids = _recent_event_log_turn_ids(uid, char_id)
@@ -298,7 +297,7 @@ async def _check_vector_consistency(char_id: str, uid: str) -> None:
         elif source == "event_log":
             checked += 1
             # rebuild() 写入的聚合行以 "recent_" 前缀命名，不对应单条 turn_id，视为有效。
-            if not (source_id.startswith("recent_") or source_id in valid_turn_ids):
+            if not (source_id.startswith(("recent_", "recent-safe-v2:")) or source_id in valid_turn_ids):
                 orphan_count += 1
         # 其他 source（profile/web）不在本 brief 真相源核对范围内，跳过。
 
@@ -318,3 +317,51 @@ async def _check_vector_consistency(char_id: str, uid: str) -> None:
             "[memory_janitor] 向量库孤儿观测 uid=%s char_id=%s orphan=%d/%d(%.1f%%)（未触发 rebuild）",
             uid, char_id, orphan_count, checked, orphan_frac * 100,
         )
+
+
+async def _repair_missing_vectors(char_id: str, uid: str, entries: list[dict]) -> None:
+    """Rebuild at most ten missing projections from canonical scoped evidence.
+
+    No new message truth or replayable tool action; failed embeds remain missing
+    and are retried on a later existing daily janitor pass.
+    """
+    import time
+    from core.memory import vector_store as vs
+    from core.memory.episodic_memory import _load_memories
+    from core.memory.source_policy import is_isolated
+    from core.memory.fixation_pipeline import _load_fixation_state, _save_fixation_state
+    from core.memory.event_log import get_recent_days, _TURN_ID_RE
+    from core.memory.event_log_source import split_blocks, block_is_recallable
+
+    present = {(row.get("source"), str(row.get("source_id"))) for row in entries}
+    documents = {}
+    for ep in _load_memories(uid, char_id=char_id):
+        sources = ep.get("source") or []
+        sources = sources if isinstance(sources, list) else [sources]
+        text = (ep.get("narrative_summary") or ep.get("summary") or " ".join(ep.get("raw_facts") or [])).strip()
+        if ep.get("id") and text and not any(is_isolated(source) for source in sources):
+            documents[("episodic", str(ep["id"]))] = (float(ep.get("occurred_at") or ep.get("timestamp") or 0), text)
+    grouped = {}
+    for block in split_blocks(get_recent_days(uid, days=30, char_id=char_id)):
+        if not block_is_recallable(block):
+            continue
+        ids = {value for line in block for value in _TURN_ID_RE.findall(line)}
+        if len(ids) == 1:
+            grouped.setdefault(next(iter(ids)), []).extend(block)
+    for turn_id, lines in grouped.items():
+        # Preserve the event-time used by the source. Legacy IDs lacking a
+        # timestamp stay zero rather than becoming fresh evidence on recovery.
+        match = re.search(r"_(\d{13})(?:_|$)", turn_id)
+        documents[("event_log", turn_id)] = (int(match[1]) / 1000 if match else 0, "\n".join(lines))
+    missing = [(key, value) for key, value in documents.items() if key not in present]
+    selected = missing[:10]
+    for (source, source_id), (ts, text) in selected:
+        await vs.upsert(uid, char_id, source, source_id, ts, text)
+    actual = {(row.get("source"), str(row.get("source_id"))) for row in vs.list_entries(uid, char_id, limit=1_000_000)} if selected else present
+    from core.post_process.memory_outbox import record_index_ready
+    record_index_ready(uid,char_id,(source_id for source,source_id in actual if source=="event_log"))
+    state = _load_fixation_state(uid, char_id=char_id)
+    state["janitor_vector_repair"] = {"checked_at":time.time(), "canonical_count":len(documents),
+        "missing":len(missing), "attempted":len(selected), "repaired":sum(key in actual for key, _ in selected),
+        "remaining":sum(key not in actual for key, _ in missing), "batch_limit":10}
+    _save_fixation_state(uid, state, char_id=char_id)

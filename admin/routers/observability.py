@@ -7,6 +7,12 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get("/observability/memory-task-outbox", summary="读取记忆补偿队列计数（不含正文）")
+async def memory_task_outbox_observability(_auth=Depends(require_scopes("state.read"))):
+    from core.post_process.memory_outbox import snapshot
+    return snapshot()
+
+
 @router.get("/observability/dream-settings", summary="读取梦境设置归属脱敏状态（不含正文）")
 async def dream_settings_observability(
     uid: str = "",

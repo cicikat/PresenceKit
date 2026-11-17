@@ -4,7 +4,10 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 
-def catalogue_url(base_url: str) -> str:
+def catalogue_url(base_url: str, protocol: str = "chat_completions") -> str:
+    if protocol == "gemini_generate_content":
+        from core.llm_gemini_protocol import endpoint
+        return endpoint(base_url, "catalogue").split("/models/", 1)[0] + "/models"
     parsed = urlsplit(base_url.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("请填写有效的 HTTP(S) 模型地址")
@@ -22,12 +25,14 @@ def catalogue_url(base_url: str) -> str:
 
 async def discover(base_url: str, api_key: str, protocol: str, auth_mode: str) -> dict:
     from core.model_registry import _get_proxy_url, _make_http_client
-    url = catalogue_url(base_url)
+    url = catalogue_url(base_url, protocol)
     headers = {}
     if protocol == "anthropic_messages":
         headers["anthropic-version"] = "2023-06-01"
     if api_key:
-        if protocol == "anthropic_messages" and auth_mode == "x_api_key":
+        if protocol == "gemini_generate_content":
+            headers["x-goog-api-key"] = api_key
+        elif protocol == "anthropic_messages" and auth_mode == "x_api_key":
             headers["x-api-key"] = api_key
         else:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -39,13 +44,15 @@ async def discover(base_url: str, api_key: str, protocol: str, auth_mode: str) -
             status = "unauthorized" if code in (401, 403) else "unsupported" if code in (404, 405, 501) else "http_error"
             return {"status": status, "models": [], "http_status": code}
         payload = response.json()
-        rows = payload.get("data") if isinstance(payload, dict) else payload
+        rows = payload.get("models" if protocol == "gemini_generate_content" else "data") if isinstance(payload, dict) else payload
         if not isinstance(rows, list):
             return {"status": "invalid_response", "models": []}
-        models = sorted({row["id"].strip() for row in rows if isinstance(row, dict)
-                         and isinstance(row.get("id"), str) and row["id"].strip()})
+        field = "name" if protocol == "gemini_generate_content" else "id"
+        models = sorted({row[field].strip().removeprefix("models/") if protocol == "gemini_generate_content" else row[field].strip()
+                         for row in rows if isinstance(row, dict) and isinstance(row.get(field), str) and row[field].strip()
+                         and (protocol != "gemini_generate_content" or "generateContent" in row.get("supportedGenerationMethods", ["generateContent"]))})
         return {"status": "ok" if models else "empty", "models": models,
-                "has_more": bool(payload.get("has_more", False)) if isinstance(payload, dict) else False}
+                "has_more": bool(payload.get("nextPageToken") if protocol == "gemini_generate_content" else payload.get("has_more", False)) if isinstance(payload, dict) else False}
     except httpx.TimeoutException:
         return {"status": "timeout", "models": []}
     except (ValueError, TypeError):

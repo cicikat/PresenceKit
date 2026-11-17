@@ -33,6 +33,8 @@ def partition_key(source: object) -> str:
 
 
 def role_source_allowed(source: object) -> bool:
+    if isinstance(source, (list, tuple, set)):
+        return all(role_source_allowed(item) for item in source)
     return not is_isolated(source)
 
 

@@ -225,6 +225,34 @@ def format_for_prompt(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> str:
     return "\n".join(lines)
 
 
+def apply_global_facts_patch_checked(uid: str, char_id: str, items: list, *,
+                                    expected_current: dict, trigger_signal: str = "") -> None:
+    """Recovery-only compare-and-apply; never overwrite newer facts on replay."""
+    from core.memory.user_profile import _profile_lock
+    with _profile_lock(uid, char_id):
+        proposed = {item["key"]:item["value"] for item in items[:_MAX_GLOBAL_FACTS_PER_RUN]
+            if isinstance(item,dict) and isinstance(item.get("key"),str)
+            and item["key"] in ALLOWED_FIELDS and "value" in item}
+        def applied(current):
+            for key,value in proposed.items():
+                existing = current.get(key)
+                if isinstance(existing,list):
+                    values = value if isinstance(value,list) else [value]
+                    if any(item not in existing for item in values):
+                        return False
+                elif existing != value or key not in current:
+                    return False
+            return True
+        current = load_user_facts(uid,char_id=char_id)
+        if applied(current):
+            return
+        if current != expected_current:
+            raise RuntimeError("user_facts_changed_during_recovery")
+        apply_global_facts_patch(uid,char_id,items,trigger_signal=trigger_signal)
+        if not applied(load_user_facts(uid,char_id=char_id)):
+            raise RuntimeError("user_facts_commit_incomplete")
+
+
 def apply_global_facts_patch(
     uid: str,
     char_id: str,

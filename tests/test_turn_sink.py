@@ -60,6 +60,150 @@ class _Channel:
         self.msg_ids.append(msg_id)
 
 
+async def test_autonomy_rechecks_policy_after_waiting_for_conversation_gate(sandbox, monkeypatch):
+    """R4/F3: revocation while a user turn holds the gate must prevent persistence and send."""
+    from core.autonomy import talk_gate, store
+    from core.conversation_gate import conversation_lock
+    from channels import registry
+    allowed = [True]
+    channel = _Channel("inbox")
+    monkeypatch.setattr(registry, "_channels", {"inbox":channel})
+    pipeline = _FakePipeline()
+    monkeypatch.setattr("core.pipeline_registry.get", lambda:pipeline)
+    monkeypatch.setattr(talk_gate, "check", lambda *a, **k:("allow","ok") if allowed[0] else ("hard","permission_revoked"))
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_send", lambda *a, **k:None)
+    async with conversation_lock("guard-owner"):
+        task = asyncio.create_task(talk_gate.send("guard-owner","fixture_character","hello",source="test",run_id="guard-run"))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert store.load("guard-owner","fixture_character")["delivery_receipts"][-1]["status"]=="attempted"
+        allowed[0] = False
+    ok, reason = await asyncio.wait_for(task,2)
+    assert not ok and reason == "permission_revoked"
+    assert channel.sent == []
+
+
+async def test_autonomy_rechecks_revocation_after_critical_write_wait(sandbox,monkeypatch):
+    """A policy change during a critical-write await still stops channel delivery."""
+    from core.autonomy import talk_gate,store
+    from channels import registry
+    entered,release=asyncio.Event(),asyncio.Event()
+    allowed=[True]
+    channel=_Channel("inbox")
+    class WaitingPipeline(_FakePipeline):
+        async def post_process_critical(self,*args,**kwargs):
+            entered.set();await release.wait()
+            return await super().post_process_critical(*args,**kwargs)
+    monkeypatch.setattr(registry,"_channels",{"inbox":channel})
+    monkeypatch.setattr("core.pipeline_registry.get",lambda:WaitingPipeline())
+    monkeypatch.setattr(talk_gate,"check",lambda *a,**k:("allow","ok") if allowed[0] else ("hard","permission_revoked"))
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_send",lambda *a,**k:None)
+    task=asyncio.create_task(talk_gate.send("guard-owner","fixture_character","hello",source="test",run_id="critical-guard-run"))
+    await asyncio.wait_for(entered.wait(),2)
+    allowed[0]=False;release.set()
+    ok,reason=await asyncio.wait_for(task,2)
+    assert not ok and reason=="permission_revoked"
+    assert channel.sent==[]
+    receipt=store.load("guard-owner","fixture_character")["delivery_receipts"][-1]
+    assert receipt["persisted"] is True and receipt["reason_code"]=="permission_revoked"
+
+
+async def test_autonomy_revocation_stops_later_channels_without_replaying_first(sandbox,monkeypatch):
+    from core.autonomy import store,talk_gate
+    from channels import registry
+    allowed=[True]
+    class First(_Channel):
+        async def send(self,*args,**kwargs):
+            await super().send(*args,**kwargs)
+            allowed[0]=False
+    first,second=First("first"),_Channel("second")
+    monkeypatch.setattr(registry,"_channels",{"first":first,"second":second})
+    monkeypatch.setattr("core.pipeline_registry.get",lambda:_FakePipeline())
+    monkeypatch.setattr(talk_gate,"check",lambda *a,**k:("allow","ok") if allowed[0] else ("hard","permission_revoked"))
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_send",lambda *a,**k:None)
+    assert await talk_gate.send("guard-owner","fixture_character","hello",source="test",run_id="partial-guard-run")== (True,"sent")
+    assert len(first.sent)==1 and second.sent==[]
+    receipt=store.load("guard-owner","fixture_character")["delivery_receipts"][-1]
+    assert receipt["channels"]=={"first":"accepted","second":"failed"}
+
+
+async def test_stale_desktop_activity_is_not_a_live_proactive_receiver(sandbox,monkeypatch):
+    from core.autonomy import talk_gate,store
+    from channels import registry
+    from unittest.mock import AsyncMock
+    pipeline=_FakePipeline()
+    critical=AsyncMock(wraps=pipeline.post_process_critical)
+    pipeline.post_process_critical=critical
+    monkeypatch.setattr(registry,"_channels",{"desktop":_Channel("desktop")})
+    monkeypatch.setattr("channels.desktop_ws.is_connected",lambda:False)
+    monkeypatch.setattr("core.pipeline_registry.get",lambda:pipeline)
+    monkeypatch.setattr(talk_gate,"check",lambda *a,**k:("allow","ok"))
+    result=await talk_gate.send("guard-owner","fixture_character","hello",source="test",run_id="stale-desktop-run")
+    assert result==(False,"no_delivery_channel")
+    assert critical.await_count==0
+    assert store.load("guard-owner","fixture_character")["delivery_receipts"]==[]
+
+
+async def test_running_autonomy_job_observes_talk_revocation_while_waiting(sandbox,monkeypatch):
+    """The real runner must refresh its talk grant, not retain its initial config."""
+    from core.autonomy import runner,store,talk_gate
+    from core.autonomy.models import Job,Run
+    from core.conversation_gate import conversation_lock
+    from channels import registry
+    from types import SimpleNamespace
+    uid,char_id="running-job-owner","fixture_character"
+    state=store.load(uid,char_id);state["config"]["enabled"]=True;store.save(uid,char_id,state)
+    channel=_Channel("inbox")
+    monkeypatch.setattr(registry,"_channels",{"inbox":channel})
+    monkeypatch.setattr("core.pipeline_registry.get",lambda:_FakePipeline())
+    monkeypatch.setattr(runner,"_runtime_tools",lambda *a:([],{}))
+    monkeypatch.setattr(runner,"_user_became_active_for_job",lambda job:False)
+    monkeypatch.setattr(talk_gate,"check",lambda *a,**k:("allow","ok"))
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_send",lambda *a,**k:None)
+    async def chat_turn(*args,**kwargs):
+        return SimpleNamespace(tool_calls=[{"id":"synthetic-talk","name":"talk_owner","arguments":{"text":"synthetic current fact","reason":"synthetic observation"}}],continuation_items=[],assistant_message={})
+    monkeypatch.setattr("core.llm_client.chat_turn",chat_turn)
+    job=Job(uid=uid,char_id=char_id,source="autonomy")
+    async with conversation_lock(uid):
+        task=asyncio.create_task(runner._run_locked(job,state,Run(uid=uid,char_id=char_id,source="autonomy",job_id=job.id)))
+        for _ in range(100):
+            if store.load(uid,char_id)["delivery_receipts"]:break
+            await asyncio.sleep(.01)
+        assert store.load(uid,char_id)["delivery_receipts"][-1]["status"]=="attempted"
+        fresh=store.load(uid,char_id);fresh["config"]["talk_enabled"]=False;store.save(uid,char_id,fresh)
+    result=await asyncio.wait_for(task,3)
+    assert result.talk_sent is False
+    assert channel.sent==[]
+    assert store.load(uid,char_id)["delivery_receipts"][-1]["reason_code"]=="autonomy_talk_disabled"
+
+
+@pytest.mark.parametrize("critical,schedule", [(True, True), (True, False), (False, True), (False, False)])
+async def test_post_process_scheduled_reports_actual_background_work(sandbox, critical, schedule):
+    """R5: response flag matches admitted work for both capture modes."""
+    from starlette.background import BackgroundTasks
+    from core.turn_sink import record_assistant_turn
+    calls = []
+
+    class Pipeline(_FakePipeline):
+        async def post_process_slow(self, *args, **kwargs):
+            calls.append("slow")
+
+        async def post_process(self, *args, **kwargs):
+            calls.append("combined")
+
+    background = BackgroundTasks()
+    result = await record_assistant_turn(
+        pipeline=Pipeline(), uid="schedule-owner", assistant_text="reply",
+        source="user_chat", user_text="hello", fanout=[],
+        await_critical_post_process=critical, schedule_slow=schedule,
+        background_tasks=background,
+    )
+    await background()
+    await asyncio.sleep(0)
+    assert calls == (["slow" if critical else "combined"] if schedule else [])
+    assert result.post_process_scheduled is schedule
+
+
 @pytest.mark.asyncio
 async def test_disabled_channel_cannot_send_even_when_active(monkeypatch):
     from channels import registry

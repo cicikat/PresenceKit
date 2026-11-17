@@ -5,6 +5,19 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
 from uuid import uuid4
+import logging
+
+_leases: dict[int, int] = {}
+_retired: dict[int, object] = {}
+
+
+def defer_client_close(client) -> bool:
+    """Reload retires leased pools; the last turn closes them on release."""
+    key = id(client)
+    if _leases.get(key, 0):
+        _retired[key] = client
+        return True
+    return False
 
 
 @dataclass
@@ -17,6 +30,41 @@ class TurnRoute:
     switch_reason: str = ""
     steps: int = 0
     closed: bool = False
+    routes: dict = field(default_factory=dict)
+    clients: dict = field(default_factory=dict)
+
+    def freeze(self, primary, fallback, skip, category, char_id, explicit):
+        key = (category, char_id, primary.name if explicit else None)
+        if key not in self.routes:
+            self.routes[key] = (primary, fallback, skip)
+            for mc in (primary, fallback):
+                client = getattr(mc, "client", None)
+                if client is not None and id(client) not in self.clients:
+                    self.clients[id(client)] = client
+                    _leases[id(client)] = _leases.get(id(client), 0) + 1
+        return self.routes[key]
+
+    async def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        closing = []
+        for key in self.clients:
+            remaining = _leases.get(key, 1) - 1
+            if remaining:
+                _leases[key] = remaining
+            else:
+                _leases.pop(key, None)
+                client = _retired.pop(key, None)
+                if client is not None:
+                    closing.append(client)
+        self.clients.clear()
+        for client in closing:
+            try:
+                close = getattr(client, "close", None) or getattr(client, "aclose", None)
+                await close()
+            except Exception:
+                logging.getLogger(__name__).warning("retired turn client close failed", exc_info=True)
 
     def select(self, primary, fallback, category, char_id, explicit):
         self.steps += 1
@@ -65,7 +113,7 @@ class _RoutedStream:
         try:
             await self.source.aclose()
         finally:
-            self.state.closed = True
+            await self.state.close()
 
 
 def scoped_tool_turn(fn):
@@ -87,6 +135,6 @@ def scoped_tool_turn(fn):
             return result
         finally:
             if not deferred:
-                state.closed = True
+                await state.close()
             _current.reset(token)
     return wrapped

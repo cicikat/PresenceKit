@@ -50,6 +50,7 @@ async def send(
     correlation_id: str = "",
     bypass_soft_once: bool = False,
     call_scoped: bool = False,
+    source_guard=None,
 ) -> tuple[bool, str]:
     text = str(text or "").strip()
     if not text or len(text) > 600: return False, "empty_text"
@@ -76,12 +77,17 @@ async def send(
     pipeline = pipeline_registry.get()
     if pipeline is None: return False, "pipeline_unavailable"
     from channels.registry import get_active
-    if not get_active():
+    from channels import desktop_ws
+    receivers=[channel for channel in get_active()
+        if getattr(channel,"name","")!="desktop" or desktop_ws.is_connected()]
+    if not receivers:
         return False, "no_delivery_channel"
-    from core.autonomy.store import claim_delivery_correlation
+    from core.autonomy.store import claim_delivery_correlation, record_delivery, record_delivery_channel
     correlation_id = str(correlation_id or run_id)
     if not claim_delivery_correlation(uid, char_id, correlation_id):
         return False, Disposition.DUPLICATE.value
+    if not record_delivery(uid, char_id, correlation_id, status="attempted", run_id=run_id):
+        return False, "delivery_receipt_unavailable"
     from core.turn_sink import TurnSource, record_assistant_turn
     from core.write_envelope import stamp_trigger
     from core.event_context import EventContext
@@ -100,19 +106,45 @@ async def send(
         observe_context(stage="ingress", disposition="accepted", context=event_context)
     except Exception:
         pass
-    result = await record_assistant_turn(
-        pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
-        trigger_name="autonomy", char_id=char_id, bypass_gate=False,
-        audit_extras={
-            "source": "autonomy",
-            "trigger_source": source,
-            "run_id": run_id,
-            "correlation_id": correlation_id,
-        },
-        event_context=event_context,
-        envelope=stamp_trigger(),
-    )
-    if not result.fanout_targets: return False, "no_delivery_channel"
+    def recheck_delivery():
+        mode, reason = check(uid, allow_soft=True, call_char_id=char_id if call_scoped else None)
+        if mode == "hard" or mode == "soft" and not bypass_soft_once:
+            return reason
+        return source_guard() if source_guard is not None else ""
+    def delivery_ready(turn_id,transport_id,persisted):
+        return record_delivery(uid,char_id,correlation_id,status="attempted",run_id=run_id,
+            turn_id=turn_id,transport_id=transport_id,persisted=persisted)
+    def delivery_channel(channel,status,reason):
+        return record_delivery_channel(uid,char_id,correlation_id,channel,status,reason)
+    try:
+        result = await record_assistant_turn(
+            pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
+            trigger_name="autonomy", char_id=char_id, bypass_gate=False,
+            audit_extras={
+                "source": "autonomy",
+                "trigger_source": source,
+                "run_id": run_id,
+                "correlation_id": correlation_id,
+            },
+            event_context=event_context,
+            envelope=stamp_trigger(),
+            delivery_guard=recheck_delivery,
+            delivery_ready=delivery_ready,
+            delivery_channel=delivery_channel,
+        )
+    except BaseException:
+        record_delivery(uid, char_id, correlation_id, status="outcome_unknown", run_id=run_id)
+        raise
+    record_delivery(uid, char_id, correlation_id,
+        status="accepted" if result.fanout_targets else "failed", run_id=run_id,
+        turn_id=str(getattr(result, "turn_id", "") or ""),
+        transport_id=str(getattr(result,"msg_id","") or ""),
+        persisted=bool(getattr(result, "written_to_memory", False)),
+        reason_code=str(getattr(result, "suppression_reason", "") or ""),
+        channels={**{name: "accepted" for name in result.fanout_targets},
+                  **{name: "failed" for name in getattr(result, "fanout_failures", {})}})
+    if not result.fanout_targets:
+        return False, getattr(result, "suppression_reason", "") or "no_delivery_channel"
     from core.scheduler.proactive_ledger import record_send
     record_send("autonomy", channel="autonomy", gist=text, uid=uid, char_id=char_id)
     if call_scoped:

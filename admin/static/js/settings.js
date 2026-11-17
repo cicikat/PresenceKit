@@ -12,6 +12,7 @@ async function loadLlmParams() {
     document.getElementById('llm-max-tokens').value          = mt;
     document.getElementById('llm-max-tokens-val').textContent = mt;
     document.getElementById('llm-frequency-penalty').value   = fp;
+    document.getElementById('llm-frequency-penalty').disabled = data.frequency_penalty_supported === false;
     document.getElementById('llm-fp-val').textContent        = fp.toFixed(2);
   } catch(e) {
     toast(t('status.llm.load_error', '加载 LLM 参数失败'), 'err');
@@ -24,7 +25,9 @@ async function saveLlmParams() {
   const max_tokens        = parseInt(document.getElementById('llm-max-tokens').value);
   const frequency_penalty = parseFloat(document.getElementById('llm-frequency-penalty').value);
   try {
-    await api('PUT', '/llm-params', { temperature, top_p, max_tokens, frequency_penalty });
+    const body = { temperature, top_p, max_tokens };
+    if (!document.getElementById('llm-frequency-penalty').disabled) body.frequency_penalty = frequency_penalty;
+    await api('PUT', '/llm-params', body);
     toast(t('status.llm.saved', 'LLM 参数已保存'), 'ok');
   } catch(e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');

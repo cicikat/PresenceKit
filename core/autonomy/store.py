@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import json
 import time
+import re
 from copy import deepcopy
 from threading import Lock, RLock
+from uuid import uuid4
 
 from core.autonomy.models import Job, Opportunity, Run, Signal, evaluation_status_for
 from core.safe_write import safe_write_json
@@ -17,11 +19,13 @@ LEASE_SECONDS = 90
 _DREAM_ONE_SHOT_SOURCES = frozenset({"desktop_wake"})
 _scope_locks: dict[tuple[str, str], RLock] = {}
 _scope_locks_guard = Lock()
+_PROCESS_EPOCH = uuid4().hex
 
 DEFAULT_CONFIG = {
     "enabled": False,
     "talk_enabled": True,
     "character_intents_enabled": False,
+    "phone_ambient": {"enabled": False, "light": True, "motion": True, "usage": True, "revision": 0},
     "daily_evaluation_budget": 96,
     "min_interval_seconds": 15 * 60,
     "max_steps": 4,
@@ -61,6 +65,7 @@ def _default() -> dict:
         "pending_signals": [],
         "durable_signal_keys": [],
         "delivered_correlations": [],
+        "delivery_receipts": [],
         "daily": {"day": "", "evaluations": 0, "tools": 0, "talks": 0},
         "circuit": {"consecutive_failures": 0, "open_until": 0.0},
     }
@@ -79,13 +84,18 @@ def _load_unlocked(uid: str, char_id: str) -> dict:
                 if isinstance(raw.get("config"), dict):
                     merged = deepcopy(DEFAULT_CONFIG)
                     merged.update(raw["config"])
-                    for section in ("schedule", "interval", "overflow"):
+                    for section in ("schedule", "interval", "overflow", "phone_ambient"):
                         if isinstance(raw["config"].get(section), dict):
                             merged[section] = {**DEFAULT_CONFIG[section], **raw["config"][section]}
                     data["config"] = merged
     except Exception:
         # Config/state read failure is fail-safe: no autonomous start is admitted.
         data["config"]["enabled"] = False
+    for receipt in data["delivery_receipts"]:
+        if isinstance(receipt,dict) and receipt.get("status") in {"claimed","attempted"} and receipt.get("process_epoch") != _PROCESS_EPOCH:
+            receipt.update(status="outcome_unknown",reason_code="process_interrupted")
+            receipt["channels"]={name:("outcome_unknown" if value=="attempted" else value)
+                for name,value in (receipt.get("channels") or {}).items()}
     return data
 
 
@@ -99,6 +109,7 @@ def _save_unlocked(uid: str, char_id: str, state: dict) -> bool:
     state["runs"] = list(state.get("runs", []))[-MAX_RUNS:]
     state["pending_signals"] = list(state.get("pending_signals", []))[-MAX_PENDING_SIGNALS:]
     state["delivered_correlations"] = list(state.get("delivered_correlations", []))[-MAX_RUNS:]
+    state["delivery_receipts"] = list(state.get("delivery_receipts", []))[-MAX_RUNS:]
     path = _path(uid, char_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     return bool(safe_write_json(path, state))
@@ -253,7 +264,75 @@ def claim_delivery_correlation(uid: str, char_id: str, correlation_id: str) -> b
         if correlation_id in delivered:
             return False
         delivered.append(correlation_id)
+        state["delivery_receipts"].append({
+            "correlation_id": correlation_id, "status": "claimed",
+            "reason_code": "claimed", "created_at": time.time(),
+            "persisted": False, "attempted": False, "acknowledged": False,
+            "channels": {}, "run_id": "", "turn_id": "",
+            "process_epoch":_PROCESS_EPOCH,
+        })
         return bool(_save_unlocked(uid, char_id, state))
+
+
+def record_delivery(uid: str, char_id: str, correlation_id: str, *, status: str,
+                    run_id: str = "", turn_id: str = "", persisted: bool = False,
+                    channels: dict | None = None, reason_code: str = "", transport_id: str = "") -> bool:
+    """Metadata-only attempt receipt. Channel acceptance is not client ACK.
+
+    An interrupted attempt stays consumed; this function never schedules resend.
+    Legacy delivered_correlations keep their conservative dedupe semantics.
+    """
+    if status not in {"attempted", "accepted", "failed", "outcome_unknown"}:
+        raise ValueError("unsupported delivery status")
+    with _scope_lock(uid, char_id):
+        state = _load_unlocked(uid, char_id)
+        row = next((r for r in state["delivery_receipts"] if r["correlation_id"] == correlation_id), None)
+        if row is None or row["status"] not in {"claimed", "attempted"}:
+            return False
+        safe_reason = reason_code if re.fullmatch(r"[a-z0-9_]{1,96}", reason_code) else status
+        row.update(status=status, reason_code=safe_reason, run_id=run_id,
+                   turn_id=turn_id or row.get("turn_id",""),
+                   transport_id=transport_id or row.get("transport_id",""),
+                   persisted=bool(persisted or row.get("persisted")), attempted=True,
+                   updated_at=time.time())
+        previous=row.get("channels") or {}
+        incoming={str(name):value for name,value in (channels or {}).items()
+            if value in {"accepted","failed","acknowledged","outcome_unknown"}}
+        row["channels"] = {**previous,**incoming,**{name:value for name,value in previous.items()
+            if value=="acknowledged" or value=="outcome_unknown" and incoming.get(name)!="accepted"}}
+        return bool(_save_unlocked(uid, char_id, state))
+
+
+def record_delivery_channel(uid: str, char_id: str, correlation_id: str, channel: str, status: str, reason: str) -> bool:
+    if status not in {"attempted","accepted","failed","outcome_unknown"}:
+        raise ValueError("unsupported channel delivery status")
+    with _scope_lock(uid,char_id):
+        state=_load_unlocked(uid,char_id)
+        row=next((item for item in state["delivery_receipts"] if item.get("correlation_id")==correlation_id),None)
+        if row is None:
+            return False
+        if row.setdefault("channels",{}).get(channel)!="acknowledged":
+            row["channels"][channel]=status
+            row.setdefault("channel_reason_codes",{})[channel]=reason if re.fullmatch(r"[a-z0-9_]{1,96}",reason) else status
+        return bool(_save_unlocked(uid,char_id,state))
+
+
+def acknowledge_mobile_deliveries(uid: str, char_id: str, message_ids: set[str]) -> bool:
+    """The existing mobile ACK means durable client inbox acceptance, not reading."""
+    if not uid or not char_id or not message_ids:
+        return True
+    with _scope_lock(uid,char_id):
+        state=_load_unlocked(uid,char_id)
+        rows=[row for row in state["delivery_receipts"] if message_ids & {
+            row.get("transport_id"),row.get("turn_id")}]
+        if not rows:
+            return True
+        for row in rows:
+            row.setdefault("channels",{})["mobile"]="acknowledged"
+            row["acknowledged"]=True
+            row.setdefault("channel_reason_codes",{})["mobile"]="durable_client_inbox_ack"
+            row.setdefault("mobile_acknowledged_at",time.time())
+        return bool(_save_unlocked(uid,char_id,state))
 
 
 def enqueue(

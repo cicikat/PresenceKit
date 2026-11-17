@@ -282,7 +282,10 @@ async def mobile_ack(body: dict = Body(...), auth=Depends(require_scopes("chat")
     mobile = _get_mobile_channel()
     if mobile is None:
         return {"ok": False, "remaining": 0, "error": "mobile channel 未注册"}
-    remaining = await mobile.ack(ack_seq)
+    try:
+        remaining = await mobile.ack(ack_seq)
+    except OSError:
+        raise HTTPException(503,"mobile_ack_persistence_unavailable") from None
     return {"ok": True, "remaining": remaining}
 
 

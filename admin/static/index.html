@@ -261,6 +261,7 @@
             <select id="mr-preset-kind">
               <option value="openai">openai（OpenAI 官方 / 兼容 OpenAI 协议的中转、代理）</option>
               <option value="deepseek">deepseek（DeepSeek 官方 / 兼容 DeepSeek 协议）</option>
+              <option value="gemini">gemini（Google Gemini）</option>
               <option value="anthropic_compat" data-i18n="routing.preset.provider_anthropic">anthropic_compat（Claude 模型；协议由 api_protocol 指定）</option>
               <option value="local">local（自己本地部署，如 Ollama/vLLM）</option>
             </select>
@@ -277,13 +278,15 @@
             <select id="mr-preset-api-protocol">
               <option value="chat_completions">chat_completions</option>
               <option value="responses">responses</option>
+              <option value="gemini_generate_content" data-i18n="model.gemini_native">gemini_generate_content（Google 原生 generateContent）</option>
               <option value="systemone">systemone（Jev 原生结构化判断；不生成聊天正文）</option>
               <option value="anthropic_messages" data-i18n="routing.preset.protocol_anthropic_messages">anthropic_messages（Claude 原生 /v1/messages）</option>
             </select>
+            <small data-i18n="routing.preset.gemini_hint">原生 Gemini 选择 gemini，地址填原生 /v1beta 根路径；OpenAI 兼容连接继续选原协议。密钥使用 x-goog-api-key。</small>
           </label>
           <label class="field">
             <input type="checkbox" id="mr-preset-force-stream">
-            <span data-i18n="settings_center.force_streaming_for_chat_completions_including_tool_calls_mobile_still_receives_complete_replies">强制流式请求（仅 Chat Completions；含工具调用，手机仍接收完整回复）</span>
+            <span data-i18n="settings_center.force_streaming_for_chat_completions_including_tool_calls_mobile_still_receives_complete_replies">强制流式请求（Chat Completions / Gemini 原生；含工具调用，手机仍接收完整回复）</span>
           </label>
           <label class="field">
             <span data-i18n="routing.preset.stream_compatibility">流兼容（默认 strict；关闭恢复原有校验）</span>
@@ -678,11 +681,11 @@
 
 <div id="toast"></div>
 
-<script defer src="/static/i18n.js?v=finance-overview-330-v2"></script>
+<script defer src="/static/i18n.js?v=round1-native-i18n-v2"></script>
 <script defer src="/static/js/i18n-runtime.js?v=ar01-modules-325"></script>
 <script defer src="/static/js/admin-page-registry.js?v=ar03-services-328"></script>
 <!-- legacy cache marker: <script src="/static/i18n.js?v=image-diary-296"></script> -->
-<script defer src="/static/js/core.js?v=finance-overview-330-v2"></script>
+<script defer src="/static/js/core.js?v=round1-delivery-receipts-v1"></script>
 <script defer src="/static/js/shared/api-client.js?v=ar03-services-328"></script>
 <script defer src="/static/js/shared/observers.js?v=ar03-services-328"></script>
 <script defer src="/static/js/shared/events.js?v=ar03-components-328"></script>
@@ -704,7 +707,7 @@
 <script defer src="/static/js/status-users.js?v=ar03-components-328"></script>
 <script defer src="/static/js/runtime-config.js?v=288-experiments-20261013"></script>
 <script defer src="/static/js/lorebook.js?v=ar03-components-328"></script>
-<script defer src="/static/js/settings.js?v=ar03-components-328"></script>
+<script defer src="/static/js/settings.js?v=round1-gemini-v1"></script>
 <script defer src="/static/js/image-generation.js?v=gmail-304"></script>
 <script defer src="/static/js/owner-turn-api.js?v=brief-173-owner-turn-1"></script>
 <script defer src="/static/js/agent-runtime-browser.js?v=brief-239-browser-admin-1"></script>
@@ -712,7 +715,7 @@
 <script defer src="/static/js/character.js?v=dist-04-stt"></script>
 <script defer src="/static/js/scheduler.js?v=289-first-run-20261013"></script>
 <script defer src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>
-<script defer src="/static/js/observability.js?v=intention-311-ci"></script>
+<script defer src="/static/js/observability.js?v=round1-delivery-receipts-v1"></script>
 <script defer src="/static/js/memory-event-control.js?v=288-frozen-20261012"></script>
 <script defer src="/static/js/dream-operations.js?v=brief-175-scenario-reconciler-1"></script>
 <script defer src="/static/js/user-data.js?v=asset-partial-20261011"></script>
@@ -722,7 +725,7 @@
 <!-- legacy cache marker: /static/js/dream-settings.js?v=ar03-components-328 -->
 <script defer src="/static/js/provenance-vector.js?v=brief-251-thinking-cache-mcp-1"></script>
 <script defer src="/static/js/settings-center.js?v=finance-overview-330-v2"></script>
-<script defer src="/static/js/admin-design.js?v=admin-consolidation-1"></script>
+<script defer src="/static/js/admin-design.js?v=round1-gemini-v1"></script>
 <script defer src="/static/js/listening-player.js?v=v1-260-admin-surface-1"></script>
 <script defer src="/static/js/local-runtime.js?v=v1-stt-sherpa-1"></script>
 <script defer src="/static/js/video-call-presence.js?v=v1-call-presence-1"></script>

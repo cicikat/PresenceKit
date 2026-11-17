@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 # Per-provider generation parameter whitelist + default prompt style.
 # Extend when adding new providers; existing callers pick up changes automatically.
 PROVIDER_PROFILES: dict[str, dict] = {
+    "gemini": {
+        "params": {"temperature", "top_p", "top_k", "max_tokens", "stop", "seed"},
+        "default_prompt_style": "narrative",
+    },
     "openai": {
         "params": {"temperature", "top_p", "max_tokens", "frequency_penalty", "presence_penalty"},
         "default_prompt_style": "narrative",
@@ -510,6 +514,8 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
     prompt_style = preset.get("prompt_style") or profile["default_prompt_style"]
     tool_call_mode = preset.get("tool_call_mode", "function_calling")
     api_protocol = preset.get("api_protocol", "chat_completions")
+    from core.llm_gemini_protocol import validate_preset
+    validate_preset(preset)
     if api_protocol not in VALID_API_PROTOCOLS:
         raise ValueError(
             "[model_registry] invalid api_protocol "
@@ -517,8 +523,8 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
             f"{api_protocol!r}; expected one of {sorted(VALID_API_PROTOCOLS)}"
         )
     force_stream = preset.get("force_stream", False)
-    if type(force_stream) is not bool or (force_stream and api_protocol != "chat_completions"):
-        raise ValueError("force_stream must be boolean and is supported only for chat_completions")
+    if type(force_stream) is not bool or (force_stream and api_protocol not in {"chat_completions", "gemini_generate_content"}):
+        raise ValueError("force_stream requires chat_completions or gemini_generate_content")
     stream_compatibility = preset.get("stream_compatibility", "strict")
     protocol_recovery = preset.get("protocol_recovery", "off")
     if stream_compatibility not in {"strict", "openlux"}:
@@ -551,7 +557,7 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
     # Native Anthropic Messages calls use httpx directly; Chat Completions and
     # Responses retain the OpenAI SDK client.  Both own the same pool lifecycle.
     client: Any
-    if api_protocol in {"anthropic_messages", "systemone"}:
+    if api_protocol in {"anthropic_messages", "systemone", "gemini_generate_content"}:
         client = http_client
     else:
         client = AsyncOpenAI(

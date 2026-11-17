@@ -1,4 +1,33 @@
+## 第一轮：手机环境主动行为（current / observe）
+
+R4只读观测：「系统状态/主动活动记录」新增投递回执，展示运行/机会/消息关联、关键落盘、
+各通道结果及脱敏reason_code。`GET /observability/autonomy-deliveries`（state.read）最多100条。
+mobile ACK表示持久收件；desktop正文无ACK，accepted不能当收到或已读。中断尝试在重启后
+显示outcome_unknown，保留去重，永不自动重发。无新运营开关或客户端设置。
+
+Autonomy 设置页「手机环境触发主动行为」独立于手机上传和系统 Usage Access；
+默认 enabled=false，light/motion/usage 分项默认 true。关闭恢复原行为。
+管理面 PATCH /admin/autonomy/config 的 phone_ambient，手机 GET/PATCH
+/sensor/ambient/policy 使用同凭据 Reality session。手机读需 state.read+chat，
+写需 persona+sensor.write+chat；管理面写需 admin。保存为角色 scoped 原子配置，
+返回 configured/effective/reason_codes，观测 /observability/phone-ambient（state.read）。
+effective 表示授权及可用事实，不保证开口；仍经去抖、冷却、Autonomy 和 talk gate。
+真实设备/生产端到端待验收。完整合同见 three-repo-interface-catalog.md。
+
 ## 330 自动记账
+
+第一轮 Gemini 原生文本：模型预设显式选择 gemini_generate_content/provider_kind=gemini，
+创建、编辑、JSON 导入、目录、测试与保存沿原管理面入口。force_stream 同时支持此协议。
+配置热重载只影响新回合，原协议默认不变。`/llm-params` 新增
+frequency_penalty_supported；原生 Gemini 为 false，管理页不发送该不支持参数。
+
+第一轮记忆恢复观测：`GET /observability/memory-task-outbox`（state.read）只返回状态计数、
+最早积压时间、容量1000与重试上限3；恢复仅作用于幂等记忆任务，不增加运营开关。
+
+第一轮主动投递观测：`GET /observability/autonomy-deliveries`（state.read）返回当前
+owner/char 的最多100条无正文回执。claimed、attempted、accepted、failed 与
+outcome_unknown 分开；accepted 仅代表通道接口接受，acknowledgement_available=false。
+不新增配置开关，不自动重投已占用的关联 ID。
 
 「功能开关总览 → 功能总开关 → 自动记账」与服务配置的详细卡片共用 `finance_ingest.enabled`，支持搜索、热切换和已生效提示；细分设置指向「消息分发与客户端设置」中的原卡片。只切换总开关不会改变独立的角色读取授权或手机系统权限。
 
@@ -269,7 +298,7 @@ observe：真实手机安装、不同应用删除反馈、断网后上传以及�
 `GET /settings/prompt-assets` 的 lorebooks/jailbreaks `label` 由扫描写入（标题/关键词/条目标题），`id` 仍是 stem。
 `PATCH` 只接受 id，不接受 label/filename。无新落盘或观测端点；桌面仍走管理面，手机若展示资产名需改读 label（observe）。
 
-危险模式与功能分类（2026-09-14）：`PATCH /system/meta-mode` 开启 danger 不再写过期时间，忽略 `ttl_seconds`；GET 在 danger 时 `expires_at=null`。管理面功能与行为按感知与电脑、输出与互动、外部能力分组，开关行带细分跳转；`device-policy` 去掉 TTL。手机若仍传 ttl 被忽略且保持常驻（observe）。
+功能分类：管理面功能与行为按感知与电脑、输出与互动、外部能力分组，开关行带细分跳转。危险模式及其接口已退役；现行工具与设备授权使用普通角色权限和各设备控制入口。
 
 管理服务的设置面分三层：
 

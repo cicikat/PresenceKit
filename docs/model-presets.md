@@ -1,5 +1,9 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+第一轮可靠性修复：工具回合冻结首次解析的 category/char/显式 preset 主备上下文。
+备用接管后在同一 turn 驻留；热重载只影响新回合，已租用连接池在最后一个回合结束后关闭。
+工具回执不重跑，协议不兼容的历史仍按现有守卫拒绝。
+
 275：`minecraft_reaction` 是同角色的快速动作判断路由，可分配小模型 JSON 或 Jev 原生 systemone 预设（263 A）；原生 choice 的 confidence 低于 0.65 回到本地规则；未分配沿用 sensor_judge → intent → chat。每次3秒总预算、零SDK重试，主模型仍负责角色表达；不是第二人格。模型路由页和 Minecraft 共玩页编辑同一生效 routing profile，后者显式显示角色覆盖及来源。修改模型配置撤销旧共玩授权，不让迟到判断继续动作。见 [Minecraft Activity](minecraft-activity.md)。
 
 `food_extract` 是饮食证据抽取的独立路由，管理面可配置小模型，遵循既有 fallback。发送后执行，20秒总限与零 SDK 重试；见 [food-memory.md](food-memory.md)。
@@ -363,6 +367,36 @@ model_presets:
 | `chat_completions`（默认） | 调用 `client.chat.completions.create(...)`，完整保持旧配置行为 |
 | `responses` | 调用 `client.responses.create(...)`，由适配层转换消息、工具和结果 |
 | `anthropic_messages` | 调用 Anthropic 原生 `POST /v1/messages`，转换 system、tool_use/tool_result 与 SSE 文本流 |
+| `gemini_generate_content` | 显式选择 Gemini 原生 generateContent / streamGenerateContent；provider_kind=gemini，x-goog-api-key 鉴权 |
+
+原生 Gemini 示例（与 OpenAI-compatible Gemini 连接分别保存）：
+
+```yaml
+provider_kind: gemini
+api_protocol: gemini_generate_content
+base_url: https://generativelanguage.googleapis.com/v1beta
+api_key: <local-secret>
+model: <available-model-id>
+tool_call_mode: function_calling
+force_stream: false
+params:
+  temperature: 0.7
+  max_tokens: 1024
+```
+
+管理面支持创建、编辑、JSON 导入、模型目录、连接测试、保存与热重载。
+base_url 必须为显式原生 `/v1beta` 或 `/v1` 根路径；空值使用上例官方根路径。
+官方实测系统指令在 `/v1` 返回 INVALID_ARGUMENT，要求使用 `/v1beta`；
+需要系统提示或完整工具能力时请明确配置上例 `/v1beta`，适配器不会静默切换 API 版本。
+`/v1beta/openai` 不会被静默改写。支持 temperature/top_p/top_k/max_tokens/stop/seed，
+未知参数拒绝，OpenAI reasoning_extra_body 不适用于该协议。force_stream 可用于原生工具调用，
+完整校验 STOP 后才返回可执行函数；截断、拒答、空候选与冲突调用均失败，绝不提前执行。
+同一协议续轮保留 functionCall、functionResponse 的身份与 thoughtSignature 等不透明字段，
+显式 thought 文本仅进入独立思考存档。断流和工具后 failover 沿用同一回合闸门。
+没有新增客户端字段、权限或运营总开关，切回原 preset 即回滚。Interactions 不在本协议范围内。
+
+参考：[Google GenerateContent REST](https://ai.google.dev/api/generate-content)、
+[Google function calling](https://ai.google.dev/gemini-api/docs/function-calling)。
 
 未知值会在该 preset 首次构建时 fail-fast，并在错误中包含 preset、provider、model 和非法值。
 legacy `llm:` 合成 preset 始终是 `chat_completions`。不根据模型名、`provider_kind` 或

@@ -118,7 +118,7 @@ def test_capture_turn_passes_char_id_to_event_log(sandbox):
 
     el_char_ids: list[str] = []
 
-    def _spy_el(user_id, role, content, emotion="neutral", intensity=0, turn_id=None, trigger_name="", *, char_id=TEST_CHAR_ID, source=""):
+    def _spy_el(user_id, role, content, emotion="neutral", intensity=0, turn_id=None, trigger_name="", *, char_id=TEST_CHAR_ID, source="", occurred_at=None):
         el_char_ids.append(char_id)
         return True
 

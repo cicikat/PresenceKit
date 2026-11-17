@@ -52,6 +52,7 @@ async def receive_ambient(
         ambient_state.update(
             grant.owner_id, grant.char_id, device, hash_token(credential),
             grant.expires_at, body,
+            session_id=grant.session_id, token_label=auth.label,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
@@ -66,6 +67,41 @@ async def get_ambient_snapshot(
     from admin.routers.chat import _owner_media_scope
 
     return ambient_state.snapshot(*_owner_media_scope(), device)
+
+
+def _phone_policy_scope(auth, session_id):
+    from admin.routers.chat import _session_grant
+    if auth.profile != "mobile":
+        raise HTTPException(403, "mobile_profile_required")
+    grant = _session_grant(session_id, auth.label)
+    if grant is None:
+        raise HTTPException(422, "session_scope_required")
+    return grant.owner_id, grant.char_id
+
+
+@router.get("/sensor/ambient/policy", summary="手机环境主动行为的配置与生效状态")
+async def phone_ambient_policy(request: Request, session_id: str = Header(alias="X-Presence-Session"),
+                               auth=Depends(require_scopes("state.read", "chat"))):
+    from core.perception.phone_ambient import effective
+    from admin.token_registry import hash_token
+    uid, char_id = _phone_policy_scope(auth, session_id)
+    digest = hash_token(request.headers["Authorization"].split(None, 1)[1])
+    return effective(uid, char_id, credential_hash=digest)
+
+
+@router.patch("/sensor/ambient/policy", summary="更新手机环境主动行为授权（独立于采集）")
+async def update_phone_ambient_policy(body: dict, request: Request,
+        session_id: str = Header(alias="X-Presence-Session"),
+        auth=Depends(require_scopes("persona", "sensor.write", "chat"))):
+    from core.perception.phone_ambient import configure
+    uid, char_id = _phone_policy_scope(auth, session_id)
+    try:
+        configure(uid, char_id, body)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except OSError:
+        raise HTTPException(503, "phone_ambient_policy_unavailable") from None
+    return await phone_ambient_policy(request, session_id, auth)
 
 # 最近一次手机传感器快照（内存缓存，重启清零）
 _last_sensor_data: dict = {}

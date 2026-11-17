@@ -200,6 +200,7 @@ inside modules resolve to the registered lifecycle name before admission.
 | `letter_writer` | active | Bounded weekly SMTP delivery via mail subsystem; no autonomy/chat signal consumer. Task/副链 artifact migration remains roadmap until delivery is implemented. |
 | `coplay_commentary` | migrated | Session fact -> optional signal, no direct executor |
 | `desktop_wake`, `restart` | active | One-shot bounded signal; no direct assistant turn |
+| `phone_ambient` | migrated | Consented, fresh and debounced device fact -> autonomy candidate; source authorization rechecked before speech |
 | `interval`, `schedule` | active | Native clocks; produce signal/task, never prose |
 | `dream_postcards` | active | Due authored postcard delivery; calls the bounded mail artifact adapter, never the assistant speech outlet |
 | `coplay_watch`, `diary_inject` | maintenance-only | Silent Task worker/state maintenance |

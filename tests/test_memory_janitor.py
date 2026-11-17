@@ -227,3 +227,58 @@ def test_forget_episodes_does_not_feed_storyline(sandbox):
     with patch.object(slow_queue, "enqueue") as enq:
         assert forget_episodes(uid, episode_id="f1", char_id=_CHAR) == ["f1"]
     assert not any(c.args and c.args[0] == "storyline_evicted_input" for c in enq.call_args_list)
+
+
+def test_janitor_recovers_missing_vectors_without_rebuilding_existing_sources(sandbox, monkeypatch):
+    """A failed async upsert must heal from canonical episodes on the next sweep.
+
+    Keep an unrelated web vector to prove repair is additive, and run twice to
+    assert observable idempotency through the actual sqlite index.
+    """
+    from core.memory import vector_store as vs
+    from core.scheduler.triggers import memory_janitor as janitor
+    uid = "fixture-vector-recovery"
+    _seed(uid, [_ep("missing-episode", narrative_summary="A synthetic durable memory")])
+    monkeypatch.setattr(vs, "_configured_dim", lambda: 4)
+    monkeypatch.setattr("core.memory.embedding.embed", AsyncMock(return_value=[[.1,.2,.3,.4]]))
+    async def run():
+        await vs.upsert(uid,_CHAR,"web","existing-web",100,"synthetic reference")
+        # Missing asynchronous projection with temporarily unavailable DB IO.
+        with patch.object(vs, "_open_db", return_value=None):
+            await janitor._check_vector_consistency(_CHAR,uid)
+        from core.memory.fixation_pipeline import _load_fixation_state
+        status=_load_fixation_state(uid,char_id=_CHAR)["janitor_vector_repair"]
+        assert status["repaired"] == 0 and status["remaining"] == 1
+        await janitor._check_vector_consistency(_CHAR,uid)
+        entries=vs.list_entries(uid,_CHAR)
+        assert {(e["source"],e["source_id"]) for e in entries} == {
+            ("web","existing-web"),("episodic","missing-episode")}
+        await janitor._check_vector_consistency(_CHAR,uid)
+        assert len(vs.list_entries(uid,_CHAR)) == 2
+    asyncio.run(run())
+
+
+def test_vector_repair_is_bounded_and_preserves_isolated_sources(sandbox, monkeypatch):
+    """Recovery must expose pending work without indexing web/Dream/coplay."""
+    from core.memory import vector_store as vs, event_log
+    from core.memory.fixation_pipeline import _load_fixation_state
+    from core.scheduler.triggers import memory_janitor as janitor
+    uid="fixture-bounded-recovery"
+    _seed(uid, [_ep(f"ep-{n}",narrative_summary=f"Synthetic distinct fact {n}") for n in range(12)] +
+        [_ep(f"isolated-{source}",source=source) for source in ("web","dream_echo","coplay")])
+    event_log.append(uid,"user","Ordinary synthetic fact",turn_id="fixture-normal",char_id=_CHAR)
+    event_log.append(uid,"user","Isolated synthetic fact",turn_id="fixture-web",source="web",char_id=_CHAR)
+    monkeypatch.setattr(vs,"_configured_dim",lambda:4)
+    monkeypatch.setattr("core.memory.embedding.embed",AsyncMock(return_value=[[.1,.2,.3,.4]]))
+    async def run():
+        await janitor._check_vector_consistency(_CHAR,uid)
+        assert len(vs.list_entries(uid,_CHAR))==10
+        status=_load_fixation_state(uid,char_id=_CHAR)["janitor_vector_repair"]
+        assert status["attempted"]==10 and status["remaining"]==3
+        await janitor._check_vector_consistency(_CHAR,uid)
+        entries=vs.list_entries(uid,_CHAR)
+        assert len(entries)==13
+        assert any(row["source_id"]=="fixture-normal" for row in entries)
+        assert not any(row["source_id"]=="fixture-web" or row["source_id"].startswith("isolated-") for row in entries)
+        assert vs.list_entries(uid,"another-character")==[]
+    asyncio.run(run())

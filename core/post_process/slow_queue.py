@@ -4,7 +4,7 @@
 - 单 worker，失败退避重试（0.5s × retry，最多 2 次）
 - 超限写入 DLQ：data/dead_letter_queue/{ms_ts}_{task_type}.json
   内容：{task, error(traceback 字符串), failed_at}
-- 不持久化队列，进程退出丢失（有意设计）
+- capture_turn_retry / summarize_to_midterm / reflect_to_episodic / consolidate_to_identity 持久化；其余仍是内存队列。
 """
 
 import asyncio
@@ -41,8 +41,13 @@ def register_handler(task_type: str, fn: Callable) -> None:
     _handlers[task_type] = fn
 
 
-def enqueue(task_type: str, payload: dict) -> None:
-    """入队。不持久化，进程退出即丢失。"""
+def enqueue(task_type: str, payload: dict) -> str | None:
+    """Only explicitly replay-safe memory jobs enter the durable outbox."""
+    from core.post_process import memory_outbox
+    if task_type in memory_outbox.DURABLE_TYPES:
+        key = memory_outbox.put(task_type, payload)
+        _queue.put_nowait({"outbox_wakeup": True})
+        return key
     _queue.put_nowait({"task_type": task_type, "payload": payload})
 
 
@@ -51,6 +56,9 @@ def start_worker() -> "asyncio.Task":
     global _worker_task
     if _worker_task is not None and not _worker_task.done():
         return _worker_task
+    from core.post_process import memory_outbox
+    memory_outbox.recover()
+    _queue.put_nowait({"outbox_wakeup": True})
     _worker_task = asyncio.create_task(worker(), name="slow_queue_worker")
     logger.info("[slow_queue] worker 已启动")
     return _worker_task
@@ -102,45 +110,64 @@ async def _write_dlq(task: dict, error: str) -> None:
 
 
 async def worker() -> None:
-    """单 worker 循环，永不主动退出。task 失败时退避重试，超限写 DLQ。"""
+    """Own queue accounting even when shutdown cancels an in-flight handler."""
     global _current_task_type
     while True:
         item = await _queue.get()
-        task_type = item.get("task_type", "")
-        payload = item.get("payload", {})
-        if task_type == "practice_session":
-            from core.runtime_signal_observability import record
-            record(category="slow_queue", code="retired_practice_skipped", status="ok", context={"reason": "subsystem_retired"})
-            logger.info("[slow_queue] practice_session skipped: subsystem_retired")
+        try:
+            if item.get("outbox_wakeup"):
+                from core.post_process import memory_outbox
+                item = memory_outbox.claim()
+                if item is None:
+                    continue
+            await _process_item(item)
+        finally:
+            _current_task_type = None
             _queue.task_done()
-            continue
-        handler = _handlers.get(task_type)
 
-        if handler is None:
-            logger.error(f"[slow_queue] 无 handler，丢弃任务: {task_type}")
-            _queue.task_done()
-            continue
 
-        _current_task_type = task_type
-        last_error = ""
-        succeeded = False
-        for attempt in range(_MAX_RETRIES + 1):  # 0, 1, 2
-            try:
-                await handler(payload)
-                succeeded = True
+async def _process_item(item: dict) -> None:
+    global _current_task_type
+    from core.post_process import memory_outbox
+    task_type = item.get("task_type", "")
+    payload = item.get("payload", {})
+    if task_type == "practice_session":
+        from core.runtime_signal_observability import record
+        record(category="slow_queue", code="retired_practice_skipped", status="ok", context={"reason": "subsystem_retired"})
+        return
+    handler = _handlers.get(task_type)
+    if handler is None:
+        if item.get("outbox_id"):
+            memory_outbox.finish(item["outbox_id"], succeeded=False)
+            _queue.put_nowait({"outbox_wakeup": True})
+        logger.error(f"[slow_queue] 无 handler，丢弃任务: {task_type}")
+        return
+    _current_task_type = task_type
+    last_error = ""
+    succeeded = False
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            if item.get("outbox_id") and not memory_outbox.attempt(item["outbox_id"]):
+                last_error = "memory task retry limit reached"
                 break
-            except Exception:
-                last_error = traceback.format_exc()
-                logger.warning(
-                    f"[slow_queue] {task_type} attempt={attempt} 失败:\n{last_error.splitlines()[-1]}"
-                )
-                if attempt < _MAX_RETRIES:
-                    await asyncio.sleep(0.5 * (attempt + 1))
-
-        _current_task_type = None
-        if not succeeded:
-            await _write_dlq(item, last_error)
-            from core import silent_failure
-            silent_failure.note(f"slow_queue.{task_type}", last_error.splitlines()[-1] if last_error else "unknown")
-
-        _queue.task_done()
+            if item.get("outbox_id") and task_type == "summarize_to_midterm":
+                from core.memory.scope import MemoryScope
+                scope = MemoryScope.from_payload(payload["scope"]) if payload.get("scope") else MemoryScope.reality_scope(payload["uid"],payload["char_id"])
+                memory_outbox.record_turn_stage(scope.uid,scope.character_id,payload["turn_id"],"slow_pending")
+            await handler(payload)
+            if item.get("outbox_id") and task_type == "summarize_to_midterm":
+                memory_outbox.record_turn_stage(scope.uid,scope.character_id,payload["turn_id"],"slow_completed")
+            succeeded = True
+            break
+        except Exception:
+            last_error = traceback.format_exc()
+            logger.warning(f"[slow_queue] {task_type} attempt={attempt} failed")
+            if attempt < _MAX_RETRIES:
+                await asyncio.sleep(0.5 * (attempt + 1))
+    if item.get("outbox_id"):
+        memory_outbox.finish(item["outbox_id"], succeeded=succeeded)
+        _queue.put_nowait({"outbox_wakeup": True})
+    if not succeeded:
+        await _write_dlq(item, last_error)
+        from core import silent_failure
+        silent_failure.note(f"slow_queue.{task_type}", last_error.splitlines()[-1] if last_error else "unknown")

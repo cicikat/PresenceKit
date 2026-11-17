@@ -1061,6 +1061,9 @@ class DataPaths:
     def dead_letter_queue(self) -> Path:
         return self._p("logs", "dead_letter_queue")
 
+    def memory_task_outbox(self) -> Path:
+        return self._p("runtime", "memory_tasks.sqlite3")
+
     def fixation_state_dir(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("chars", char_id, "fixation_state")
 

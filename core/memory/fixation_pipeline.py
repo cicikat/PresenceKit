@@ -41,6 +41,7 @@ _COUNTER_EVIDENCE_HALFLIFE_DAYS = 30  # identity-1: counter_evidence_count 半�
 
 # fixation_state 字段默认值（扩展了 4 个基本字段 + high_strength_since_last）
 _STATE_DEFAULTS: dict = {
+    "janitor_vector_repair": None,
     "last_consolidated_at": 0.0,
     "episodic_since_last": 0,
     "high_strength_since_last": 0,   # 本字段为扩展，spec JSON 不含但向后兼容
@@ -195,6 +196,29 @@ def _load_fixation_state(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
 
 def _save_fixation_state(uid: str, state: dict, *, char_id: str = DEFAULT_CHAR_ID) -> None:
     safe_write_json(_state_write_file(uid, char_id=char_id), state)
+
+
+def _refresh_fixation_from_evidence(uid: str, char_id: str, episodes: list[dict]) -> dict:
+    """Rebuild counters after a partial commit, never increment them on replay."""
+    from core.memory.source_policy import role_source_allowed
+    remaining = [ep for ep in episodes if ep.get("consolidated_at") is None
+        and not ep.get("invalidated") and role_source_allowed(ep.get("source"))]
+    strong = [ep for ep in remaining if float(ep.get("strength") or 0) >= _HIGH_STRENGTH_THRESHOLD]
+    state = _load_fixation_state(uid,char_id=char_id)
+    state.update(episodic_since_last=len(remaining),high_strength_since_last=len(strong),
+        high_strength_days=sorted({_episode_day(ep) for ep in strong})[-60:],
+        strength_accumulated=round(sum(float(ep.get("strength") or 0) for ep in remaining),3))
+    state["last_consolidated_at"] = max([float(state.get("last_consolidated_at") or 0)] +
+        [float(ep.get("consolidated_at") or 0) for ep in episodes])
+    _save_fixation_state(uid,state,char_id=char_id)
+    return state
+
+
+def _enqueue_identity_if_due(uid: str, char_id: str, state: dict) -> None:
+    if _should_consolidate(state):
+        from core.post_process import slow_queue
+        slow_queue.enqueue("consolidate_to_identity",{"uid":uid,"char_id":char_id,
+            "scope":MemoryScope.reality_scope(uid,char_id).to_payload()})
 
 
 def _should_consolidate(state: dict) -> bool:
@@ -904,6 +928,8 @@ def capture_turn(
     media_of_event_id: str = "",
     event_context=None,
     observer_started_at: float | None = None,
+    occurred_at: float | None = None,
+    require_evidence: bool = False,
 ) -> str:
     """
     生成 turn_id，写 short_term + event_log。
@@ -932,7 +958,7 @@ def capture_turn(
     _voice_low = _voice and bool(audit_extras.get("asr_low_confidence"))
     _voice_kw = {"input_modality": "voice", "asr_low_confidence": _voice_low} if _voice else {}
 
-    ts = time.time()
+    ts = time.time() if occurred_at is None else occurred_at
     turn_id = turn_id or f"{uid}_{int(ts * 1000)}"
 
     if event_context is not None:
@@ -983,6 +1009,23 @@ def capture_turn(
     from core.reality_output_scrubber import scrub_reality_output_text as _scrub
     _scrubbed_reply = _scrub(reply)
 
+    # Admit recovery before the first projection write. This bounded execution
+    # snapshot is removed on completion and is never a chat retrieval source.
+    from core.post_process import slow_queue, memory_outbox
+    _repair_id = slow_queue.enqueue("capture_turn_retry", {
+        "uid": uid, "char_id": char_id, "scope": MemoryScope.reality_scope(uid, char_id).to_payload(),
+        "turn_id": turn_id, "user_content": user_msg, "reply": reply,
+        "emotion": emotion, "trigger_name": trigger_name, "source": source,
+        "event_channel": event_channel, "event_source": event_source,
+        "visible_reply": visible_reply, "raw_user_text": raw_user_text,
+        "media_refs": media_refs, "audit_extras": {
+            key: value for key, value in (audit_extras or {}).items()
+            if key in _TRIGGER_AUDIT_EXTRA_FIELDS or key in {"input_modality", "asr_low_confidence"}
+        },
+        "event_context": event_context.to_payload() if event_context is not None else None,
+        "envelope_source": envelope.source.value, "occurred_at": ts,
+    })
+
     if trigger_name:
         # P0 trigger boundary: non-conversational triggers must NOT enter short_term.
         # Conversational triggers (those that speak to the user and expect a reply)
@@ -993,7 +1036,7 @@ def capture_turn(
             **_forward_audit_extras(audit_extras),
         )
         writes = [
-            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id, source=source)
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id, source=source, occurred_at=ts)
             if _scrubbed_reply is not None else True,
         ]
         if (trigger_name in CONVERSATIONAL_TRIGGERS or trigger_name.startswith("activity_comment:")) and _scrubbed_reply is not None:
@@ -1005,8 +1048,8 @@ def capture_turn(
             short_term.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, **_voice_kw),
             short_term.append(uid, "assistant", _scrubbed_reply, turn_id=turn_id, char_id=char_id)
             if _scrubbed_reply is not None else True,
-            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, source=source, **_voice_kw),
-            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id, source=source)
+            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, source=source, occurred_at=ts, **_voice_kw),
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id, source=source, occurred_at=ts)
             if _scrubbed_reply is not None else True,
         ]
 
@@ -1015,7 +1058,7 @@ def capture_turn(
         _event_topics = set(get_tags(user_msg))
     except Exception:
         _event_topics = set()
-    _append_event_ledger(
+    _ledger_result = _append_event_ledger(
         uid=uid,
         char_id=char_id,
         turn_id=turn_id,
@@ -1044,6 +1087,13 @@ def capture_turn(
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
+    memory_outbox.record_turn_stage(uid,char_id,turn_id,"critical_written")
+    evidence_complete = (
+        (not _ledger_result.get("attempted") and not _ledger_result.get("error_code"))
+        or _ledger_result.get("disposition") == "committed"
+    )
+    if require_evidence and not evidence_complete:
+        raise RuntimeError("capture_turn evidence projection incomplete")
 
     # Explicit owner corrections become versioned profile facts without waiting
     # for the periodic summarizer. Never consume assistant/media/isolated text.
@@ -1067,6 +1117,9 @@ def capture_turn(
         record("chat_round", uid=uid, char_id=char_id,
                event_id=f"round:{uid}:{char_id}:{turn_id}", ts=ts)
 
+    if evidence_complete and _repair_id:
+        memory_outbox.record_turn_stage(uid,char_id,turn_id,"evidence_projected" if _ledger_result.get("disposition")=="committed" else "evidence_not_required")
+        memory_outbox.finish(_repair_id, succeeded=True)
     return turn_id
 
 
@@ -1109,19 +1162,25 @@ async def summarize_to_midterm(
         existing = _mt.load(uid, char_id=char_id)
         if any(e.get("source_turn_id") == turn_id for e in existing):
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
+            mid = next(e for e in existing if e.get("source_turn_id") == turn_id)
+            if mid.get("mid_id"):
+                _complete_summary_followups(uid,char_id,mid["mid_id"],emotion,force_reflect)
             return None
 
     summary = await llm_client.summarize_turn(
         user_msg, reply, tags=tags, is_trigger_turn=bool(trigger_name), char_id=char_id,
     )
     if not summary:
-        return None
+        raise RuntimeError("summary_synthesis_empty")
 
     mid_id = f"mt_{uid}_{int(time.time() * 1000)}"
     async with locks.uid_lock(uid):
         existing = _mt.load(uid, char_id=char_id)
         if any(e.get("source_turn_id") == turn_id for e in existing):
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
+            mid = next(e for e in existing if e.get("source_turn_id") == turn_id)
+            if mid.get("mid_id"):
+                _complete_summary_followups(uid,char_id,mid["mid_id"],emotion,force_reflect)
             return None
         append_kwargs = {"char_id": char_id}
         if source_refs:
@@ -1148,6 +1207,8 @@ async def summarize_to_midterm(
             occurred_at=_parse_turn_ms(turn_id),
             **append_kwargs,
         )
+        if not any(e.get("mid_id")==mid_id for e in _mt.load(uid,char_id=char_id)):
+            raise RuntimeError("summary_commit_incomplete")
         from core.memory.provenance_log import append as _prov_append
         _prov_append(
             uid, char_id,
@@ -1163,17 +1224,21 @@ async def summarize_to_midterm(
         "mid_id": mid_id, "turn_id": turn_id, "duration_ms": duration_ms,
     }, "ok")
 
+    async with locks.uid_lock(uid):
+        _complete_summary_followups(uid,char_id,mid_id,emotion,force_reflect)
+    return mid_id
+
+
+def _complete_summary_followups(uid: str, char_id: str, mid_id: str, emotion: str, force_reflect: bool) -> None:
+    """Called under uid_lock, including summary replay after its canonical write."""
+    from core.post_process import slow_queue
     # 情绪段落缓冲（M2）：sad/angry 轮不再逐轮 reflect，而是并入 open_emotional_run，
     # 段落收尾时整段入队一次。happy / force_reflect 保持 eager。
     eager = bool(force_reflect)
-    closed_runs: list[list[str]] = []
     if not force_reflect:
-        async with locks.uid_lock(uid):
-            closed_runs, _in_run = _advance_emotional_run(uid, char_id, mid_id, emotion, time.time())
+        _closed_runs, _in_run = _advance_emotional_run(uid, char_id, mid_id, emotion, time.time())
         if emotion == "happy" and not _in_run:
             eager = True
-    for run_mids in closed_runs:
-        _enqueue_emotional_run(uid, char_id, run_mids)
     if eager:
         slow_queue.enqueue("reflect_to_episodic", {
             "uid": uid,
@@ -1183,9 +1248,6 @@ async def summarize_to_midterm(
             "scope": MemoryScope.reality_scope(str(uid), char_id).to_payload(),
         })
         logger.info(f"[fixation] reflect_to_episodic eager 已入队: uid={uid} emotion={emotion}")
-
-    return mid_id
-
 
 _QUOTE_PER_MSG = 120
 _QUOTE_TOTAL = 1200
@@ -1247,6 +1309,8 @@ def _advance_emotional_run(
     """
     state = _load_fixation_state(uid, char_id=char_id)
     run = state.get("open_emotional_run")
+    if isinstance(run,dict) and mid_id in (run.get("mid_ids") or []):
+        return [], True
     closed: list[list[str]] = []
     dirty = False
     hot = emotion in ("sad", "angry")
@@ -1273,6 +1337,10 @@ def _advance_emotional_run(
             run = None
 
     if dirty:
+        # Persist downstream work before clearing a closed run. A replay of
+        # the old state re-admits the same durable ID rather than losing it.
+        for mids in closed:
+            _enqueue_emotional_run(uid,char_id,mids)
         state["open_emotional_run"] = run
         _save_fixation_state(uid, state, char_id=char_id)
     return closed, in_run
@@ -1290,9 +1358,9 @@ async def close_stale_emotional_run(uid: str, char_id: str, now: float | None = 
         if now - float(run.get("last_at") or 0.0) <= _RUN_IDLE_SECONDS:
             return False
         mids = list(run["mid_ids"])
+        _enqueue_emotional_run(uid, char_id, mids)
         state["open_emotional_run"] = None
         _save_fixation_state(uid, state, char_id=char_id)
-    _enqueue_emotional_run(uid, char_id, mids)
     return True
 
 
@@ -1394,8 +1462,11 @@ async def reflect_to_episodic(
             and not e.get("promoted_to_episodic_id")
             and not e.get("is_trigger_turn")
         ]
+        from core.memory.source_policy import role_source_allowed
+        to_process = [e for e in to_process if role_source_allowed(e.get("source")) and not e.get("invalidated")]
 
         if not to_process:
+            _enqueue_identity_if_due(uid,char_id,_refresh_fixation_from_evidence(uid,char_id,_load_memories(uid,char_id=char_id)))
             _log_fixation("reflect_to_episodic", uid, {
                 "mid_ids": mid_ids, "trigger": trigger,
             }, "ok", "already promoted")
@@ -1403,12 +1474,18 @@ async def reflect_to_episodic(
 
         # 幂等：检查 episodic 里是否已有相同 source_mid_ids 的条目
         existing_eps = _load_memories(uid, char_id=char_id)
-        for ep in existing_eps:
-            if mid_ids_set & set(ep.get("source_mid_ids", [])):
-                _log_fixation("reflect_to_episodic", uid, {
-                    "mid_ids": mid_ids, "trigger": trigger,
-                }, "ok", "already reflected")
-                return None
+        covered = {mid:ep["id"] for ep in existing_eps if ep.get("id")
+            for mid in (ep.get("source_mid_ids") or []) if mid in mid_ids_set}
+        for e in to_process:
+            if e.get("mid_id") in covered:
+                _mt.mark_promoted(uid,e["mid_id"],covered[e["mid_id"]],char_id=char_id)
+        if any(e.get("mid_id") in covered and e.get("promoted_to_episodic_id") != covered[e["mid_id"]]
+               for e in _mt.load(uid,char_id=char_id)):
+            raise RuntimeError("reflection_lineage_commit_incomplete")
+        to_process = [e for e in to_process if e.get("mid_id") not in covered]
+        if not to_process:
+            _enqueue_identity_if_due(uid,char_id,_refresh_fixation_from_evidence(uid,char_id,existing_eps))
+            return None
 
         # 构造 LLM 输入
         from core.character_name_provider import get_char_name
@@ -1461,7 +1538,7 @@ async def reflect_to_episodic(
             _log_fixation("reflect_to_episodic", uid, {
                 "mid_ids": mid_ids, "trigger": trigger,
             }, "error", "LLM 解析失败")
-            return None
+            raise RuntimeError("reflection_synthesis_invalid")
 
         ep_id = f"ep_{int(time.time() * 1000)}"
         if data.get("is_closure"):
@@ -1559,6 +1636,8 @@ async def reflect_to_episodic(
             existing_eps,
         )
         if _dup_ep is not None:
+            _dup_ep["source_mid_ids"] = list(dict.fromkeys([
+                *(_dup_ep.get("source_mid_ids") or []), *episode["source_mid_ids"]]))
             _dup_ep["last_retrieved"] = time.time()
             _dup_ep["retrieval_count"] = _dup_ep.get("retrieval_count", 0) + 1
             _dup_ep["source_event_ids"] = normalize_source_event_ids([
@@ -1618,26 +1697,18 @@ async def reflect_to_episodic(
             except Exception as _vs_e:
                 logger.debug("[fixation] vector_store upsert schedule error: %s", _vs_e)
 
+        persisted = next((ep for ep in _load_memories(uid,char_id=char_id) if ep.get("id")==ep_id),None)
+        if persisted is None or not set(episode["source_mid_ids"]) <= set(persisted.get("source_mid_ids") or []):
+            raise RuntimeError("reflection_episode_commit_incomplete")
         # 回写 mid_term：标记已晋升（指向新建 ep 或合并目标的 id）
         for e in to_process:
             if e.get("mid_id"):
                 _mt.mark_promoted(uid, e["mid_id"], ep_id, char_id=char_id)
 
-        # 更新 fixation_state
-        strength = episode.get("strength", 0.0)
-        state = _load_fixation_state(uid, char_id=char_id)
-        state["episodic_since_last"] = state.get("episodic_since_last", 0) + 1
-        if strength >= _HIGH_STRENGTH_THRESHOLD:
-            state["high_strength_since_last"] = state.get("high_strength_since_last", 0) + 1
-            _day = _episode_day(episode)
-            _days = [d for d in (state.get("high_strength_days") or []) if isinstance(d, str)]
-            if _day not in _days:
-                _days.append(_day)
-            state["high_strength_days"] = _days[-60:]
-        state["strength_accumulated"] = round(
-            state.get("strength_accumulated", 0.0) + strength, 3
-        )
-        _save_fixation_state(uid, state, char_id=char_id)
+        if any(e.get("mid_id") in episode["source_mid_ids"] and e.get("promoted_to_episodic_id") != ep_id
+               for e in _mt.load(uid,char_id=char_id)):
+            raise RuntimeError("reflection_lineage_commit_incomplete")
+        state = _refresh_fixation_from_evidence(uid,char_id,_load_memories(uid,char_id=char_id))
 
     # uid_lock 释放后检查阈值，携带入队时的 char_id 快照
     if _should_consolidate(state):
@@ -1914,7 +1985,7 @@ async def _synthesize_identity(
     return result, global_facts_items
 
 
-async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
+async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAULT_CHAR_ID, episode_ids: list[str] | None = None) -> bool:
     """
     读取待固化 episodic，调 _synthesize_identity 生成新 identity，
     写入 user_identity.yaml，标记 episodic consolidated_at，重置 fixation_state。
@@ -1932,17 +2003,32 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
     # 读旧 identity、待处理 episodic、user profile（各自管理自身锁）
     old_identity = await _ui.load(uid, char_id=char_id)
     new_episodes = load_unconsolidated(uid, char_id=char_id)
+    from core.memory.source_policy import role_source_allowed
+    new_episodes = [ep for ep in new_episodes if role_source_allowed(ep.get("source")) and not ep.get("invalidated")]
+    if episode_ids is not None:
+        new_episodes = [ep for ep in new_episodes if ep.get("id") in episode_ids]
     user_profile_data = _up.load(uid, char_id=char_id)
+    from core.memory import user_facts as _uf
+    user_facts_snapshot = _uf.load_user_facts(uid,char_id=char_id)
 
     if not new_episodes:
+        if episode_ids is not None:
+            async with locks.uid_lock(uid):
+                _refresh_fixation_from_evidence(uid,char_id,_load_memories(uid,char_id=char_id))
         _log_fixation("consolidate_to_identity", uid, {}, "ok", "no unconsolidated episodes")
         return True
+
+    from core.post_process import memory_outbox
+    recovery_key = memory_outbox.put("consolidate_to_identity", {
+        "uid":uid,"char_id":char_id,"scope":MemoryScope.reality_scope(uid,char_id).to_payload(),
+        "episode_ids":sorted(episode_ids if episode_ids is not None else [str(ep["id"]) for ep in new_episodes if ep.get("id")])})
+    plan = memory_outbox.payload_for(recovery_key).get("identity_plan")
 
     # identity-1: counter_evidence_count 半衰期衰减，衰减后的版本参与 LLM 合成判断（Brief 47）
     decayed_identity, decay_events = _decay_counter_evidence(old_identity, time.time())
 
     # LLM 合成（锁外）
-    _synth = await _synthesize_identity(
+    _synth = (plan["new_identity"], plan["global_facts_items"]) if plan else await _synthesize_identity(
         uid,
         decayed_identity,
         new_episodes,
@@ -1957,6 +2043,14 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         raise RuntimeError(f"consolidate_to_identity LLM 合成失败: uid={uid}")
 
     new_identity, global_facts_items = _synth
+    if plan:
+        decayed_identity, decay_events = plan["decayed_identity"], plan["decay_events"]
+    else:
+        plan = {"old_identity":old_identity,"new_identity":new_identity,
+            "decayed_identity":decayed_identity,"decay_events":decay_events,
+            "global_facts_items":global_facts_items,"profile":user_profile_data,
+            "user_facts":user_facts_snapshot}
+        memory_outbox.checkpoint(recovery_key,"identity_plan",plan)
 
     _trigger_signal = "; ".join(
         (ep.get("narrative_summary") or ep.get("summary") or "")[:40]
@@ -1966,7 +2060,12 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
     # 非空 → 写 identity；空 dict 但有衰减 → 仍写回衰减结果；都没有 → 跳过写入，仍标记 episodes
     if new_identity or decay_events:
         to_save = {**decayed_identity, **new_identity}
-        ok = await _ui.save(uid, to_save, char_id=char_id)
+        if old_identity != _ui.normalize_identity(to_save):
+            if old_identity != plan["old_identity"]:
+                raise RuntimeError("identity_changed_during_recovery")
+            ok = await _ui.save(uid, to_save, char_id=char_id, expected_current=old_identity)
+        else:
+            ok = True
         if not ok:
             _log_fixation("consolidate_to_identity", uid, {}, "error", "identity 写入失败")
             raise RuntimeError(f"consolidate_to_identity identity 写入失败: uid={uid}")
@@ -1974,7 +2073,7 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         # Provenance: record each dimension whose text changed
         from core.memory.provenance_log import append as _prov_append
         for _key, _new_dim in new_identity.items():
-            _old_dim = old_identity.get(_key) or {}
+            _old_dim = plan["old_identity"].get(_key) or {}
             _old_text = _old_dim.get("text", "")
             _new_text = _new_dim.get("text", "")
             if _new_text != _old_text:
@@ -2001,9 +2100,10 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
     # global_facts 分流（Brief 89）：与 identity 主产物是否变更无关，独立落盘；
     # 内部完全防御，坏/空段零动作，不影响上面已完成的主产物写入
     if global_facts_items:
-        from core.memory import user_facts as _uf
-        _uf.apply_global_facts_patch(
-            uid, char_id, global_facts_items, trigger_signal=_trigger_signal,
+        if _up.load(uid,char_id=char_id) != plan["profile"]:
+            raise RuntimeError("profile_changed_during_recovery")
+        _uf.apply_global_facts_patch_checked(
+            uid, char_id, global_facts_items, expected_current=plan["user_facts"],trigger_signal=_trigger_signal,
         )
 
     # 标记 episodes + 重置 fixation_state（uid_lock 内原子操作）
@@ -2016,14 +2116,11 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
             if ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None:
                 ep["consolidated_at"] = now
         _save_memories(uid, all_episodes, char_id=char_id)
+        persisted = _load_memories(uid, char_id=char_id)
+        if any(ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None for ep in persisted):
+            raise RuntimeError("identity_evidence_commit_incomplete")
 
-        state = _load_fixation_state(uid, char_id=char_id)
-        state["episodic_since_last"] = 0
-        state["high_strength_since_last"] = 0
-        state["high_strength_days"] = []
-        state["strength_accumulated"] = 0.0
-        state["last_consolidated_at"] = now
-        _save_fixation_state(uid, state, char_id=char_id)
+        _refresh_fixation_from_evidence(uid,char_id,persisted)
 
     ep_count = len(snapshot_ids)
     duration_ms = int((time.time() - _ts_start) * 1000)
@@ -2032,6 +2129,7 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         "duration_ms": duration_ms,
     }, "ok")
     logger.info(f"[fixation] consolidate_to_identity 完成: uid={uid} ep_count={ep_count}")
+    memory_outbox.finish(recovery_key,succeeded=True)
     return True
 
 
@@ -2131,9 +2229,10 @@ async def handler_capture_turn_retry(payload: dict) -> None:
     scope = _get_scope_from_payload(payload, "handler_capture_turn_retry")
     uid = scope.uid
     char_id = scope.character_id
-    # retry 只有在原调用拥有写入权限时才会入队，固定用 INGEST 源恢复写入
+    # Only authorized captures are admitted; keep the original source. Legacy
+    # DLQ payloads without a source retain their INGEST compatibility behavior.
     _env = WriteEnvelope(
-        source=SourceType.INGEST,
+        source=SourceType(payload.get("envelope_source") or SourceType.INGEST.value),
         can_write_memory=True,
         can_affect_mood=False,
     )
@@ -2148,6 +2247,9 @@ async def handler_capture_turn_retry(payload: dict) -> None:
             "envelope": _env,
             "char_id": char_id,
         }
+        if payload.get("occurred_at") is not None:
+            capture_kwargs["occurred_at"] = payload["occurred_at"]
+            capture_kwargs["require_evidence"] = True
         if event_context is not None:
             capture_kwargs["event_context"] = event_context
         if payload.get("audit_extras"):
@@ -2178,4 +2280,5 @@ async def handler_reflect_to_episodic(payload: dict) -> None:
 async def handler_consolidate_to_identity(payload: dict) -> None:
     from core import llm_client
     scope = _get_scope_from_payload(payload, "handler_consolidate_to_identity")
-    await consolidate_to_identity(uid=scope.uid, llm_client=llm_client, char_id=scope.character_id)
+    await consolidate_to_identity(uid=scope.uid, llm_client=llm_client, char_id=scope.character_id,
+        **({"episode_ids":payload["episode_ids"]} if "episode_ids" in payload else {}))

@@ -1,4 +1,33 @@
+## 第一轮：手机环境与 Autonomy（current / observe）
+
+R4：`/mobile/ack` 的chat scope、ack_seq、累计删除和请求/成功响应字段保持不变；
+回执/队列持久化失败明确503、detail=mobile_ack_persistence_unavailable，保留队列重试ACK。
+原客户端持久inbox→ACK→精确本地确认链继续有效，无需新增手机或桌面wire字段。
+后端 `/observability/autonomy-deliveries` 增加acknowledgement_channels，mobile为
+durable_client_inbox，desktop为not_available；receipt保留transport_id及每通道reason_code。
+服务器接受、客户端持久收件和用户已读分开；后两者不能从桌面WS写入成功推断。
+
+新增 GET/PATCH /sensor/ambient/policy：mobile profile，同token Reality session，
+header X-Presence-Session；GET state.read+chat，PATCH persona+sensor.write+chat。
+PATCH 仅接收 enabled/light/motion/usage 布尔值，未知字段422，保存失败503；
+GET返回 char_id/configured（含服务端revision）/effective/reason_codes/source_status，
+foreground_only=true、ttl_seconds=120。角色切换后不得用旧设置写新角色。
+管理面复用 /admin/autonomy/config（admin写）及 /observability/phone-ambient（state.read），
+诊断只显示来源/去抖/新鲜度/抑制码和哈希设备会话，不显示包名、令牌或会话原文。
+手机设置可编辑、能力页只读，后台尽力清空观测，网络失败由120秒TTL兜底；
+不新增后台采样。桌面无需新增消费者或协议字段；原手机poll/ACK和桌面WS不变。
+合成与管理面浏览器 verified；真机、模型实际发言、生产端到端 not verified。
+
 ## 330 自动记账（current / observe）
+
+第一轮原生 Gemini（current / observe）：后端独立文本 preset，不扩展桌面/手机消息协议；
+双端继续选择既有 routing profile，预设配置由后端管理面持有。admin-only `/llm-params`
+增加 frequency_penalty_supported（原生 Gemini=false），不授权客户端读取密钥。
+官方模型冒烟未执行（无可用官方凭据），联合 CI 与生产仍 not_verified。
+
+第一轮主动投递回执（observe）：后端新增只读 `/observability/autonomy-deliveries`
+（state.read，当前 owner/char，无正文）。accepted 为通道接受，客户端送达/ACK 接线仍 open，
+不改变 desktop WS / mobile poll ACK 字段，也不重发已消费候选。
 
 current：手机独立通知监听/finance Channel/SQLite队列与Flutter确认页消费专用finance_ingest scope（标准mobile profile含此scope）。`/finance/capabilities`、`/finance/candidates/sync`、列表/详情由后端固定owner，用户账本不带char_id；operation_id稳定、revision冲突不自动覆盖、同一交易纠错保留ID、删除为墓碑。后端默认关，总开关与角色只读开关在管理面热更新，`/observability/finance`只读计数。手机origin+owner本机收集开关不能替代后端effective，系统通知读取授权独立于POST_NOTIFICATIONS。原通知全文不上传，库存/记忆/LifeRecords/chat/mobile-poll/ACK不变。桌面无原生消费者，使用后端管理页。
 

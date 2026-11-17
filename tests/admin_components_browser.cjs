@@ -52,6 +52,10 @@ const root=path.resolve(__dirname,'../admin/static');
     fs.mkdirSync(path.resolve(__dirname,'../.tmp/ar03'),{recursive:true});
     fs.writeFileSync(path.resolve(__dirname,'../.tmp/ar03/component-styles.json'),JSON.stringify(samples,null,2));
     await page.evaluate(()=>delete document.documentElement.dataset.adminTheme);
+    // Exercise the component's manual lifecycle with its global auto-mount
+    // adapter stopped; otherwise the observer legitimately remounts disposed
+    // controls while this deliberately connected fixture is still visible.
+    await page.evaluate(()=>AdminUI.select('legacy'));
     await page.evaluate(()=>{
       document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';
       const host=document.createElement('section');host.id='ar03-fixture';host.className='page active';

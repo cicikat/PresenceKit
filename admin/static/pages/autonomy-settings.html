@@ -57,6 +57,17 @@
     </div>
   </div>
 
+  <div class="card" id="phone-ambient-card" data-autonomy-card="phone">
+    <div class="card-header"><h3 data-i18n="phone_ambient.title">手机环境触发主动行为</h3></div>
+    <p class="autonomy-hint" data-i18n="phone_ambient.hint">默认关闭，与手机上传授权、使用情况访问权限独立。开启后只生成设备事实候选，仍受自主活动、免打扰、预算和冷却约束；关闭即恢复原行为。</p>
+    <label class="checkbox-row"><input id="autonomy-phone-enabled" type="checkbox"><span data-i18n="phone_ambient.enabled">允许手机环境生成候选</span></label>
+    <label class="checkbox-row"><input id="autonomy-phone-light" type="checkbox"><span data-i18n="phone_ambient.light">持续光照变化</span></label>
+    <label class="checkbox-row"><input id="autonomy-phone-motion" type="checkbox"><span data-i18n="phone_ambient.motion">手机朝向变化</span></label>
+    <label class="checkbox-row"><input id="autonomy-phone-usage" type="checkbox"><span data-i18n="phone_ambient.usage">匿名使用概况变化</span></label>
+    <details><summary data-i18n="phone_ambient.state">生效、去抖与抑制状态</summary><pre id="autonomy-phone-state"></pre></details>
+    <div class="modal-footer"><span class="autonomy-dirty" hidden data-i18n="autonomy.unsaved">未保存</span><button class="btn btn-primary btn-sm" data-action="saveAutonomyCard" data-action-args='["phone"]' data-i18n="common.save">保存</button></div>
+  </div>
+
   <div class="card" id="autonomy-tools-card">
     <div class="card-header"><div><h3>主动时段可用工具</h3><p class="autonomy-hint">角色主动活动只能用这里打开的工具；聊天时的工具单独配置。一键开启包含当前可用工具，可按需调整各项权限。</p></div><div class="actions"><button class="btn btn-primary btn-sm" data-action="autonomyToolsBulk" data-action-args='[true]'>一键开启全部可用</button><button class="btn btn-ghost btn-sm" data-action="autonomyToolsBulk" data-action-args='[false]'>全部关闭</button></div></div>
     <div id="autonomy-tools-list" class="tbl-wrap">Loading...</div>

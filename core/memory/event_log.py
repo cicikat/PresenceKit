@@ -293,6 +293,7 @@ def append(
     source: str = "",
     input_modality: str = "",
     asr_low_confidence: bool = False,
+    occurred_at: float | None = None,
 ) -> bool:
     """
     追加一条对话记录到当天日志和 full_log.md。
@@ -316,7 +317,7 @@ def append(
     char_name = _char_name()
     role_label = "用户" if role == "user" else char_name
 
-    now = datetime.now()
+    now = datetime.fromtimestamp(occurred_at) if occurred_at is not None else datetime.now()
     time_str = now.strftime("%H:%M")
 
     line = f"**{role_label}**：{content}\n"
@@ -349,15 +350,16 @@ def append(
     try:
         _ensure_dir(user_id, char_id=char_id)
 
-        day_path = _day_file_write(user_id, now, char_id=char_id)
-        if not _already_appended(day_path, line, turn_id):
-            with open(day_path, "a", encoding="utf-8") as f:
-                f.write(chunk)
-
-        full_path = _full_log_file_write(user_id, char_id=char_id)
-        if not _already_appended(full_path, line, turn_id):
-            with open(full_path, "a", encoding="utf-8") as f:
-                f.write(chunk)
+        from core.memory import event_log_index, event_log_writer
+        # Protect the check + append pair, including callers outside uid_lock.
+        with event_log_index.lock:
+            day_path = _day_file_write(user_id, now, char_id=char_id)
+            full_path = _full_log_file_write(user_id, char_id=char_id)
+            for path in (day_path, full_path):
+                event_log_writer.recover_file(path)
+                if not _already_appended(path, line + footer, turn_id):
+                    event_log_writer.append(path, chunk)
+                    event_log_index.appended(path, chunk)
         return True
 
     except Exception as e:
@@ -370,11 +372,10 @@ def append(
 def _already_appended(path: Path, line: str, turn_id: str | None) -> bool:
     if not turn_id or not path.exists():
         return False
-    try:
-        text = path.read_text(encoding="utf-8")
-        return line in text and f"turn_id:{turn_id}" in text
-    except Exception:
-        return False
+    from core.memory.event_log_index import contains
+    # Read failure must not be interpreted as absence: retry the projection
+    # later rather than risking another copy of an unreadable existing event.
+    return contains(path, line, turn_id)
 
 
 def get_recent_days(

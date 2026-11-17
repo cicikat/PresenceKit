@@ -119,7 +119,7 @@ but raw evidence is not written to `short_term`, `event_log`, or action trace.
 `toy_vibrate`、`toy_stop`、`toy_pattern` 与 `toy_job_status` 的实现和注册表条目保留，
 但 `hardware.intiface_opt_in` 默认为 `false`。冻结时它们不会进入普通聊天 schema、
 Tool Loop、autonomy 或 Self Capability，也不能通过直接 dispatch 执行；配置中的单工具
-开关不能绕过这个总闸。显式 opt-in 后仍保留 owner 私聊、danger-mode 和现有硬件安全门。
+开关不能绕过这个总闸。显式 opt-in 后仍保留 owner 私聊、角色授权和现有硬件安全门。
 
 ## MCP 批量授权与严格白名单（Brief 135）
 

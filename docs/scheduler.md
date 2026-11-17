@@ -1,5 +1,12 @@
 # docs/scheduler.md — 调度器设计
 
+第一轮手机环境：phone_ambient 默认关闭，经 signal_adapters → enqueue_signal
+→ runner → talk_owner → turn_sink；没有客户端直接发言路径。每种事实至少两次、跨度30秒
+建立稳态及确认边沿，置信度不低于0.7，间隔超过120秒重新建立基线；光照/姿态冷却600秒，
+匿名使用窗口3600秒。使用概况只描述滚动窗口，不代表连续使用或身体状态。
+独立授权修订、凭据、Reality session、角色及新鲜度在排队后和投递前复查。
+DND、Dream、预算、对话锁、无人接收和现行发言规则继续有效。
+
 272 A：定时提醒区分用户和角色自己；生成失败不发硬模板，见 [reminder-target.md](reminder-target.md)。
 
 273：autonomy tick 前有界扫描 QQ 空间的新说说/收到回复，仅产生候选不生成台词；复用同一 scheduler owner，无新 worker，最长 45 秒。热设置、基线与覆盖限制见 [qzone-integration.md](qzone-integration.md)。

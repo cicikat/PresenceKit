@@ -51,6 +51,9 @@ def request_metadata(client) -> dict:
     if not isinstance(protocol, str):
         protocol = 'chat_completions'
     base = getattr(client, 'base_url', '')
+    if protocol == 'gemini_generate_content':
+        from core.llm_gemini_protocol import endpoint
+        return {'api_protocol': protocol, 'request_path': urlsplit(endpoint(base, client.model, stream=getattr(client, 'force_stream', False))).path}
     if protocol == 'systemone':
         from core.decision_contract import endpoint
         return {'api_protocol': protocol, 'request_path': urlsplit(endpoint(base)).path}
