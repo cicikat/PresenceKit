@@ -140,7 +140,14 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   截图 `.tmp/round1-gemini-admin.png`（本地可重建产物）。
 - 当前配置没有官方样式 Gemini 凭据，未进行官方计费调用；不拿兼容网关配置冒充官方连接。
   此项是最初本机快照；用户随后指定服务器预设gemini-guanfang，正按该预设核对并推进真实冒烟。
-  合成/管理面 verified；真实模型、打包客户端、生产端到端 not verified；总体 partially verified。
+  合成/管理面 verified；打包客户端、生产端到端 not verified；总体 partially verified。
+  官方真实冒烟追加：复用服务器现有官方连接凭据，在隔离进程内显式选择原生
+  `/v1beta` 与 `gemini-2.5-flash`，模型目录、系统提示单轮、SSE、只读合成函数及
+  工具结果续轮五项全部通过；真实模型 verified。单轮/工具/续轮总token分别64/172/189，
+  流式返回一个正文chunk；没有执行真实工具、修改生产路由或写生产对话。
+  原连接根路径 `/v1` 的实际400为 INVALID_ARGUMENT，要求系统指令使用 `/v1beta`；
+  保留显式版本配置，不静默改写已有连接。脱敏报告由本地施工临时目录保留，
+  不包含凭据或原始模型正文。
   签名续轮追加：REST/SSE实际第二次请求回归先失败（thought标记的签名part被丢弃）；
   现原样保留不透明原生part，仅在展示/流文本中隐藏thought；未提供原生ID的functionResponse
   不伪造原生ID。Gemini/路由/工具组合133项通过，最终隐藏流文本与签名复验15项通过。

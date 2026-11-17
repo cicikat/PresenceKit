@@ -385,7 +385,9 @@ params:
 ```
 
 管理面支持创建、编辑、JSON 导入、模型目录、连接测试、保存与热重载。
-base_url 必须为显式原生 `/v1beta` 或 `/v1` 根路径；空值使用上例官方根路径，
+base_url 必须为显式原生 `/v1beta` 或 `/v1` 根路径；空值使用上例官方根路径。
+官方实测系统指令在 `/v1` 返回 INVALID_ARGUMENT，要求使用 `/v1beta`；
+需要系统提示或完整工具能力时请明确配置上例 `/v1beta`，适配器不会静默切换 API 版本。
 `/v1beta/openai` 不会被静默改写。支持 temperature/top_p/top_k/max_tokens/stop/seed，
 未知参数拒绝，OpenAI reasoning_extra_body 不适用于该协议。force_stream 可用于原生工具调用，
 完整校验 STOP 后才返回可执行函数；截断、拒答、空候选与冲突调用均失败，绝不提前执行。
