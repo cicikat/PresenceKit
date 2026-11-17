@@ -60,6 +60,29 @@ class _Channel:
         self.msg_ids.append(msg_id)
 
 
+async def test_autonomy_rechecks_policy_after_waiting_for_conversation_gate(sandbox, monkeypatch):
+    """R4/F3: revocation while a user turn holds the gate must prevent persistence and send."""
+    from core.autonomy import talk_gate, store
+    from core.conversation_gate import conversation_lock
+    from channels import registry
+    allowed = [True]
+    channel = _Channel("inbox")
+    monkeypatch.setattr(registry, "_channels", {"inbox":channel})
+    pipeline = _FakePipeline()
+    monkeypatch.setattr("core.pipeline_registry.get", lambda:pipeline)
+    monkeypatch.setattr(talk_gate, "check", lambda *a, **k:("allow","ok") if allowed[0] else ("hard","permission_revoked"))
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_send", lambda *a, **k:None)
+    async with conversation_lock("guard-owner"):
+        task = asyncio.create_task(talk_gate.send("guard-owner","fixture_character","hello",source="test",run_id="guard-run"))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert store.load("guard-owner","fixture_character")["delivery_receipts"][-1]["status"]=="attempted"
+        allowed[0] = False
+    ok, reason = await asyncio.wait_for(task,2)
+    assert not ok and reason == "permission_revoked"
+    assert channel.sent == []
+
+
 @pytest.mark.parametrize("critical,schedule", [(True, True), (True, False), (False, True), (False, False)])
 async def test_post_process_scheduled_reports_actual_background_work(sandbox, critical, schedule):
     """R5: response flag matches admitted work for both capture modes."""

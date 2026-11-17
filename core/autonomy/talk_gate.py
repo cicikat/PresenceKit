@@ -50,6 +50,7 @@ async def send(
     correlation_id: str = "",
     bypass_soft_once: bool = False,
     call_scoped: bool = False,
+    source_guard=None,
 ) -> tuple[bool, str]:
     text = str(text or "").strip()
     if not text or len(text) > 600: return False, "empty_text"
@@ -102,6 +103,11 @@ async def send(
         observe_context(stage="ingress", disposition="accepted", context=event_context)
     except Exception:
         pass
+    def recheck_delivery():
+        mode, reason = check(uid, allow_soft=True, call_char_id=char_id if call_scoped else None)
+        if mode == "hard" or mode == "soft" and not bypass_soft_once:
+            return reason
+        return source_guard() if source_guard is not None else ""
     try:
         result = await record_assistant_turn(
             pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
@@ -114,6 +120,7 @@ async def send(
             },
             event_context=event_context,
             envelope=stamp_trigger(),
+            delivery_guard=recheck_delivery,
         )
     except BaseException:
         record_delivery(uid, char_id, correlation_id, status="outcome_unknown", run_id=run_id)
@@ -122,9 +129,11 @@ async def send(
         status="accepted" if result.fanout_targets else "failed", run_id=run_id,
         turn_id=str(getattr(result, "turn_id", "") or ""),
         persisted=bool(getattr(result, "written_to_memory", False)),
+        reason_code=str(getattr(result, "suppression_reason", "") or ""),
         channels={**{name: "accepted" for name in result.fanout_targets},
                   **{name: "failed" for name in getattr(result, "fanout_failures", {})}})
-    if not result.fanout_targets: return False, "no_delivery_channel"
+    if not result.fanout_targets:
+        return False, getattr(result, "suppression_reason", "") or "no_delivery_channel"
     from core.scheduler.proactive_ledger import record_send
     record_send("autonomy", channel="autonomy", gist=text, uid=uid, char_id=char_id)
     if call_scoped:

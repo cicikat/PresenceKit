@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+import re
 from copy import deepcopy
 from threading import Lock, RLock
 
@@ -266,7 +267,7 @@ def claim_delivery_correlation(uid: str, char_id: str, correlation_id: str) -> b
 
 def record_delivery(uid: str, char_id: str, correlation_id: str, *, status: str,
                     run_id: str = "", turn_id: str = "", persisted: bool = False,
-                    channels: dict | None = None) -> bool:
+                    channels: dict | None = None, reason_code: str = "") -> bool:
     """Metadata-only attempt receipt. Channel acceptance is not client ACK.
 
     An interrupted attempt stays consumed; this function never schedules resend.
@@ -279,7 +280,8 @@ def record_delivery(uid: str, char_id: str, correlation_id: str, *, status: str,
         row = next((r for r in state["delivery_receipts"] if r["correlation_id"] == correlation_id), None)
         if row is None or row["status"] not in {"claimed", "attempted"}:
             return False
-        row.update(status=status, reason_code=status, run_id=run_id,
+        safe_reason = reason_code if re.fullmatch(r"[a-z0-9_]{1,96}", reason_code) else status
+        row.update(status=status, reason_code=safe_reason, run_id=run_id,
                    turn_id=turn_id, persisted=bool(persisted), attempted=True,
                    updated_at=time.time())
         row["channels"] = {str(name): value for name, value in (channels or {}).items()

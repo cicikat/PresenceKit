@@ -13,7 +13,7 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 from uuid import uuid4
 from functools import partial
 
@@ -47,6 +47,7 @@ class TurnResult:
     emotion: str = "neutral"
     artifacts: list[dict] = field(default_factory=list)
     msg_id: str = ""
+    suppression_reason: str = ""
 
 
 def _require_pipeline(pipeline=None):
@@ -243,6 +244,7 @@ async def record_assistant_turn(
     event_context=None,
     request_id: str = "",
     background_tasks=None,
+    delivery_guard: Callable[[], str] | None = None,
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -332,6 +334,16 @@ async def record_assistant_turn(
     post_info: dict | None = None
     post_process_scheduled = False
     async with _maybe_conversation_gate(uid, bypass_gate):
+        if delivery_guard is not None:
+            try:
+                blocked = delivery_guard()
+                if not isinstance(blocked, str):
+                    blocked = "delivery_guard_error"
+            except Exception:
+                blocked = "delivery_guard_error"
+            if blocked:
+                return TurnResult(turn_id="", written_to_memory=False,
+                    fanout_targets=[], suppression_reason=blocked)
         if await_critical_post_process:
             # Brief 37: send 前只 await 落盘（post_process_critical），不再等
             # 认知评价等 LLM 往返。post_process_slow 在下面 fanout 完成后

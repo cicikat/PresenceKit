@@ -111,6 +111,14 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - 状态：合成与浏览器 verified；Android打包 verified；真实手机、Windows安装包、
   实际 TTS 与生产端到端 not verified；总体 partially verified。
 
+## R4 追加：等待对话锁期间撤权
+
+失败先行：持有真实 conversation_lock 后发起 talk_gate.send，在等待期间改变门控，
+旧实现仍返回成功且发出消息。现在在取得锁后、关键写入和通道调用之前重新核对硬门控、
+软门控及可选来源授权；拒绝原因进入脱敏投递 receipt，不补发。
+`tests/test_turn_sink.py` 的对应回归及 autonomy/receipt/signal 组合87项通过（Python3.12）。
+该证据只覆盖合成环境，不表示客户端 ACK 或生产投递已验收。
+
 ## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；
