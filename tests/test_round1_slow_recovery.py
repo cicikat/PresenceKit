@@ -360,3 +360,53 @@ async def test_summary_io_failure_stays_pending_until_real_midterm_exists(sandbo
     assert len(mids)==1 and mids[0]["source_turn_id"]=="synthetic-turn"
     assert summary.await_count==2
     assert memory_outbox.snapshot()["counts"]=={"done":1}
+
+
+def test_dlq_payloads_count_toward_outbox_capacity(sandbox):
+    """Failed bodies cannot accumulate without bound outside the pending limit."""
+    from core.post_process import memory_outbox,slow_queue
+    from contextlib import closing
+    import time
+    # Explicit prior failed-task fixture; admission is exercised through the
+    # real queue entry, with no network/model calls or private production data.
+    with closing(memory_outbox._connect()) as db,db:
+        db.executemany("INSERT INTO tasks (id,task_type,payload,identity,status,attempts,created_at,updated_at) VALUES (?,?,'{}','fixture','dlq',3,?,?)",
+            [(f"failed-{n}","summarize_to_midterm",time.time(),time.time()) for n in range(1000)])
+    with pytest.raises(RuntimeError,match="capacity"):
+        slow_queue.enqueue("summarize_to_midterm",{"uid":"owner","char_id":"fixture_character","turn_id":"overflow"})
+
+
+async def test_turn_manifest_reports_real_projection_and_slow_task_progress(sandbox,monkeypatch):
+    """The operations API must distinguish stored evidence, index and slow work."""
+    from core.memory import fixation_pipeline as fp,vector_store as vs
+    from core.scheduler.triggers import memory_janitor
+    from core.post_process import slow_queue as sq
+    from core.write_envelope import stamp_user_chat
+    from core import llm_client
+    from unittest.mock import AsyncMock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from admin.routers import observability
+    fp.capture_turn("owner","synthetic private input","synthetic private reply",turn_id="manifest-turn",char_id="fixture_character",envelope=stamp_user_chat())
+    monkeypatch.setattr(llm_client,"summarize_turn",AsyncMock(return_value="synthetic summary"))
+    sq.enqueue("summarize_to_midterm",{"uid":"owner","char_id":"fixture_character","turn_id":"manifest-turn","user_content":"synthetic private input","reply":"synthetic private reply"})
+    app=FastAPI();app.include_router(observability.router)
+    route=next(row for row in app.routes if row.path=="/observability/memory-task-outbox")
+    app.dependency_overrides[route.dependant.dependencies[0].call]=lambda:"synthetic-observer"
+    with TestClient(app) as client:
+        response=client.get("/observability/memory-task-outbox")
+        assert response.status_code==200
+        manifest=response.json()["turn_manifest"]
+        assert manifest["accepted"]==manifest["critical_written"]==1
+        assert manifest["evidence_projected"]+manifest["evidence_not_required"]==1
+        assert manifest["index_pending"]==manifest["slow_outstanding"]==1
+        sq.register_handler("summarize_to_midterm",fp.handler_summarize_to_midterm)
+        sq.start_worker();await sq.drain();await sq.shutdown()
+        monkeypatch.setattr(vs,"_configured_dim",lambda:4)
+        monkeypatch.setattr("core.memory.embedding.embed",AsyncMock(return_value=[[.1,.2,.3,.4]]))
+        await memory_janitor._check_vector_consistency("fixture_character","owner")
+        response=client.get("/observability/memory-task-outbox")
+        manifest=response.json()["turn_manifest"]
+        assert manifest["slow_completed"]==manifest["index_ready"]==1
+        assert manifest["index_pending"]==manifest["slow_outstanding"]==0
+        assert "synthetic private" not in response.text and "manifest-turn" not in response.text

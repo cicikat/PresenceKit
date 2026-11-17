@@ -358,6 +358,8 @@ async def _repair_missing_vectors(char_id: str, uid: str, entries: list[dict]) -
     for (source, source_id), (ts, text) in selected:
         await vs.upsert(uid, char_id, source, source_id, ts, text)
     actual = {(row.get("source"), str(row.get("source_id"))) for row in vs.list_entries(uid, char_id, limit=1_000_000)} if selected else present
+    from core.post_process.memory_outbox import record_index_ready
+    record_index_ready(uid,char_id,(source_id for source,source_id in actual if source=="event_log"))
     state = _load_fixation_state(uid, char_id=char_id)
     state["janitor_vector_repair"] = {"checked_at":time.time(), "canonical_count":len(documents),
         "missing":len(missing), "attempted":len(selected), "repaired":sum(key in actual for key, _ in selected),

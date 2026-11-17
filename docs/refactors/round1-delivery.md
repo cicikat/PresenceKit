@@ -28,7 +28,7 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 ## 待完成
 
 - [x] R1：补齐热重载下的回合驻留；合成回归通过，真实模型/生产仍 not verified
-- [ ] R3：多存储补偿、关键慢任务恢复与观测
+- [x] R3：多存储补偿、关键慢任务恢复与观测的合成验证；生产仍 not verified
 - [ ] R4：主动投递状态与每通道回执
 - [ ] R5：权限文档、调度结果与固定 SHA 合同
 - [ ] F1：原生 Gemini 适配、控制面与真实服务
@@ -106,7 +106,11 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - 摘要下游追加：mid已落盘但反思尚未入队时退出的独立进程回归先失败（恢复后episode为0）。
   现重放仍补办下游，不重复调用摘要模型；mid IO失败不冒充成功，情绪段落先持久入队再清理，
   同mid重放不重复推进情绪段落。摘要/反思/情绪段落/outbox组合59项通过（Python3.12）。
-- 未完成：逐投影完整故障矩阵与恢复 manifest。
+- 恢复manifest追加：HTTP按实际进度区分接收、关键写入、证据完成/不需证据、索引及慢任务；
+  任务类型/状态分开计数，不暴露正文、路径或turnID。旧库加可选progress列。
+  失败先行确认DLQ原来不占准入容量；现pending/running/DLQ正文合计限1000，完成元数据限1000。
+  恢复/观测/索引/作用域/换行组合31项通过；详见 [故障矩阵](round1-fault-matrix.md)。
+  合成 verified，真实模型、生产进程故障与生产端到端 not verified，整体 partially verified。
   状态：partially verified；真实模型/生产端到端 not verified。
 
 ## F1：Gemini 原生文本

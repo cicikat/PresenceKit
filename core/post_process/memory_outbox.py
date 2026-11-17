@@ -9,6 +9,7 @@ from core.sandbox import get_paths
 from core.memory.scope import MemoryScope
 
 DURABLE_TYPES = frozenset({"capture_turn_retry", "summarize_to_midterm", "consolidate_to_identity", "reflect_to_episodic"})
+TURN_STAGES = ("accepted", "critical_written", "evidence_projected", "evidence_not_required", "index_ready", "slow_pending", "slow_completed")
 
 
 def _connect():
@@ -22,6 +23,8 @@ def _connect():
         status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
         created_at REAL NOT NULL, updated_at REAL NOT NULL)""")
     db.execute("CREATE INDEX IF NOT EXISTS tasks_status ON tasks(status, created_at)")
+    if "progress" not in {row[1] for row in db.execute("PRAGMA table_info(tasks)")}:
+        db.execute("ALTER TABLE tasks ADD COLUMN progress TEXT NOT NULL DEFAULT '{}'")
     return db
 
 
@@ -56,10 +59,48 @@ def put(task_type, payload):
             if existing[0] != identity:
                 raise ValueError("durable memory task identity conflict")
             return key
-        if db.execute("SELECT count(*) FROM tasks WHERE status IN ('pending','running')").fetchone()[0] >= 1000:
+        if db.execute("SELECT count(*) FROM tasks WHERE status IN ('pending','running','dlq')").fetchone()[0] >= 1000:
             raise RuntimeError("memory outbox capacity reached")
-        db.execute("INSERT INTO tasks VALUES (?, ?, ?, ?, 'pending', 0, ?, ?)", (key, task_type, encoded, identity, now, now))
+        db.execute("INSERT INTO tasks (id,task_type,payload,identity,status,attempts,created_at,updated_at,progress) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, ?)",
+            (key, task_type, encoded, identity, now, now, json.dumps({"accepted":now})))
+    if task_type == "summarize_to_midterm":
+        record_turn_stage(scope.uid,scope.character_id,payload["turn_id"],"slow_pending")
     return key
+
+
+def record_turn_stage(uid, char_id, turn_id, stage):
+    """Metadata-only projection manifest, bounded with existing capture receipts."""
+    if stage not in TURN_STAGES:
+        raise ValueError("unsupported turn recovery stage")
+    key = sha256(json.dumps(["capture_turn_retry", MemoryScope.reality_scope(uid,char_id).to_payload(),turn_id],sort_keys=True).encode()).hexdigest()
+    with closing(_connect()) as db,db:
+        row=db.execute("SELECT progress,created_at FROM tasks WHERE id=?",(key,)).fetchone()
+        if row is None:
+            return
+        progress=json.loads(row[0]);progress.setdefault("accepted",row[1]);progress.setdefault(stage,time.time())
+        db.execute("UPDATE tasks SET progress=? WHERE id=?",(json.dumps(progress),key))
+
+
+def record_index_ready(uid, char_id, turn_ids, limit=10):
+    """Bounded metadata updates, including indexes written before this sweep."""
+    if not get_paths().memory_task_outbox().exists():
+        return
+    scope = MemoryScope.reality_scope(uid,char_id).to_payload()
+    with closing(_connect()) as db,db:
+        pending = {row[0]:json.loads(row[1]) for row in db.execute(
+            "SELECT id,progress FROM tasks WHERE task_type='capture_turn_retry'") if "index_ready" not in json.loads(row[1])}
+        if not pending:
+            return
+        updated = 0
+        for turn_id in turn_ids:
+            key=sha256(json.dumps(["capture_turn_retry",scope,turn_id],sort_keys=True).encode()).hexdigest()
+            if key not in pending:
+                continue
+            progress=pending.pop(key);progress["index_ready"]=time.time()
+            db.execute("UPDATE tasks SET progress=? WHERE id=?",(json.dumps(progress),key))
+            updated += 1
+            if updated >= limit or not pending:
+                break
 
 
 def payload_for(key):
@@ -116,12 +157,25 @@ def finish(key, *, succeeded):
 def snapshot():
     path = get_paths().memory_task_outbox()
     if not path.exists():
-        return {"counts": {}, "oldest_pending_at": None, "retry_limit": 3, "capacity": 1000,
+        return {"counts": {}, "by_task_type":{},"turn_manifest":{},"oldest_pending_at": None, "retry_limit": 3, "capacity": 1000,
             "projection_repair":{"pending":0,"oldest_at":None,"startup_batch_limit":32,"capacity":1000}}
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.25)) as db:
         counts = dict(db.execute("SELECT status, count(*) FROM tasks GROUP BY status"))
         oldest = db.execute("SELECT min(created_at) FROM tasks WHERE status IN ('pending','running')").fetchone()[0]
         projections = db.execute("SELECT count(*),min(created_at) FROM event_log_intents").fetchone() if db.execute(
             "SELECT 1 FROM sqlite_master WHERE name='event_log_intents'").fetchone() else (0, None)
-    return {"counts": counts, "oldest_pending_at": oldest, "retry_limit": 3, "capacity": 1000,
+        by_type = {}
+        for task_type,status,count in db.execute("SELECT task_type,status,count(*) FROM tasks GROUP BY task_type,status"):
+            by_type.setdefault(task_type,{})[status]=count
+        manifest={stage:0 for stage in TURN_STAGES}
+        manifest.update(index_pending=0,slow_outstanding=0)
+        # Legacy recovery DBs have no manifest until their next writable open.
+        if "progress" in {row[1] for row in db.execute("PRAGMA table_info(tasks)")}:
+            for row in db.execute("SELECT progress FROM tasks WHERE task_type='capture_turn_retry'"):
+                progress=json.loads(row[0])
+                for stage in TURN_STAGES:
+                    manifest[stage]+=int(stage in progress)
+                manifest["index_pending"]+=int(("evidence_projected" in progress or "evidence_not_required" in progress) and "index_ready" not in progress)
+                manifest["slow_outstanding"]+=int("slow_pending" in progress and "slow_completed" not in progress)
+    return {"counts": counts,"by_task_type":by_type,"turn_manifest":manifest,"oldest_pending_at": oldest, "retry_limit": 3, "capacity": 1000,
         "projection_repair":{"pending":projections[0],"oldest_at":projections[1],"startup_batch_limit":32,"capacity":1000}}

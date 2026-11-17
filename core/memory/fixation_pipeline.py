@@ -1084,6 +1084,7 @@ def capture_turn(
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
+    memory_outbox.record_turn_stage(uid,char_id,turn_id,"critical_written")
     evidence_complete = (
         (not _ledger_result.get("attempted") and not _ledger_result.get("error_code"))
         or _ledger_result.get("disposition") == "committed"
@@ -1114,6 +1115,7 @@ def capture_turn(
                event_id=f"round:{uid}:{char_id}:{turn_id}", ts=ts)
 
     if evidence_complete and _repair_id:
+        memory_outbox.record_turn_stage(uid,char_id,turn_id,"evidence_projected" if _ledger_result.get("disposition")=="committed" else "evidence_not_required")
         memory_outbox.finish(_repair_id, succeeded=True)
     return turn_id
 

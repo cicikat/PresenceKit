@@ -150,7 +150,13 @@ async def _process_item(item: dict) -> None:
             if item.get("outbox_id") and not memory_outbox.attempt(item["outbox_id"]):
                 last_error = "memory task retry limit reached"
                 break
+            if item.get("outbox_id") and task_type == "summarize_to_midterm":
+                from core.memory.scope import MemoryScope
+                scope = MemoryScope.from_payload(payload["scope"]) if payload.get("scope") else MemoryScope.reality_scope(payload["uid"],payload["char_id"])
+                memory_outbox.record_turn_stage(scope.uid,scope.character_id,payload["turn_id"],"slow_pending")
             await handler(payload)
+            if item.get("outbox_id") and task_type == "summarize_to_midterm":
+                memory_outbox.record_turn_stage(scope.uid,scope.character_id,payload["turn_id"],"slow_completed")
             succeeded = True
             break
         except Exception:
