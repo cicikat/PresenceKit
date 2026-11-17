@@ -79,7 +79,13 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   user short_term 写入后强制退出与恢复、完成任务重复入队不重复执行。后续取消清理改动的定向复验见最终结果。
 - 取消清理及 ledger IO 补偿复验：`pytest -q tests/test_round1_slow_recovery.py tests/test_slow_queue.py`
   4 passed；`test_ledger_failure_is_repaired_without_duplicate_history` 同时断言 web 默认不可召回。
-- 未完成：vector 缺失补偿、reflect/identity 的持久恢复、逐投影完整故障矩阵与恢复 manifest。
+- 向量补偿追加：缺失索引的真实sqlite回归先失败，现通过既有每日janitor从canonical
+  episodic与近30天安全event_log补缺，每scope每轮上限10项，保留web等其他索引，
+  过滤web/Dream/coplay来源，修复不刷新证据时间。数据库不可用保留缺口；
+  `/fixation/status` 的 janitor_vector_repair 提供脱敏进度，不需要新增运营开关。
+  Python3.12 janitor/vector/scoped fixation组合35项通过；包含真实sqlite的失败恢复、
+  两轮有界补缺、已有web索引保留、来源隔离与跨角色空结果。
+- 未完成：reflect/identity 的持久恢复、逐投影完整故障矩阵与恢复 manifest。
   状态：partially verified；真实模型/生产端到端 not verified。
 
 ## F1：Gemini 原生文本

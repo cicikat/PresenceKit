@@ -41,6 +41,7 @@ _COUNTER_EVIDENCE_HALFLIFE_DAYS = 30  # identity-1: counter_evidence_count 半�
 
 # fixation_state 字段默认值（扩展了 4 个基本字段 + high_strength_since_last）
 _STATE_DEFAULTS: dict = {
+    "janitor_vector_repair": None,
     "last_consolidated_at": 0.0,
     "episodic_since_last": 0,
     "high_strength_since_last": 0,   # 本字段为扩展，spec JSON 不含但向后兼容

@@ -10,7 +10,11 @@ capture 在首个投影写入前保存恢复快照，完成后清除正文；失
 发生时间，恢复仅补记忆投影，绝不重跑工具或投递消息。每任务跨进程最多三次尝试，
 待处理上限1000，保留最多1000条无正文完成回执；DLQ 保留任务快照供诊断。
 其余慢任务仍为内存态。`GET /observability/memory-task-outbox`（state.read）只读状态计数、
-最早积压时间和限额。vector 缺失补偿及其余整合任务的恢复覆盖仍见第一轮交付未验收项。
+最早积压时间和限额。其余整合任务的恢复覆盖仍见第一轮交付未验收项。
+既有每日 memory_janitor 从 canonical episodic 和近30天 event_log 补回缺失向量，
+每个scope每轮最多10项，不清空其他来源；隔离来源不参与恢复。失败保留缺口待下轮，
+不把恢复当作新发生的事实。`GET /fixation/status`（memory.read）的 fixation_state 中
+janitor_vector_repair 返回检查时间、缺失/尝试/完成/剩余数量与批次上限，不暴露正文。
 
 329：动态事实时效复用 scoped profile 的 `temporal_facts`，不新建记忆库。
 真实 owner 的明确自述在 capture 后幂等追加；fetch 在原检索后按发生时间、证据权威、
