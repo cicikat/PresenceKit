@@ -23,63 +23,33 @@ class TestEventLogAppendSpeaker:
     def _make_paths(self, tmp_path):
         return tmp_path / "event_log" / "uid_test"
 
-    def test_user_append_has_speaker_field(self, tmp_path, monkeypatch):
+    def test_user_append_has_speaker_field(self, sandbox):
         """user 行写入时包含 > speaker:user。"""
         import core.memory.event_log as el
-        import core.config_loader as cl
 
-        day_file = tmp_path / "2026-06-21.md"
-        full_file = tmp_path / "full_log.md"
+        el.append("test_uid", "user", "我在下棋", turn_id="test_1000", char_id=TEST_CHAR_ID)
 
-        monkeypatch.setattr(cl, "_char_name", lambda: "叶瑄")
-        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id=TEST_CHAR_ID: day_file)
-        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id=TEST_CHAR_ID: full_file)
-        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id=TEST_CHAR_ID: None)
-        monkeypatch.setattr(el, "_already_appended", lambda path, line, turn_id: False)
-
-        el.append("test_uid", "user", "我在下棋", turn_id="test_1000")
-
-        text = day_file.read_text(encoding="utf-8")
+        text = el._full_log_file_write("test_uid", char_id=TEST_CHAR_ID).read_text(encoding="utf-8")
         assert "> speaker:user" in text, f"user 行缺少 speaker:user 元字段: {text!r}"
         assert "turn_id:test_1000" in text
 
-    def test_assistant_append_has_speaker_field(self, tmp_path, monkeypatch):
+    def test_assistant_append_has_speaker_field(self, sandbox):
         """assistant 行写入时包含 speaker:assistant。"""
         import core.memory.event_log as el
-        import core.config_loader as cl
 
-        day_file = tmp_path / "2026-06-21.md"
-        full_file = tmp_path / "full_log.md"
+        el.append("test_uid", "assistant", "下棋很有意思", emotion="happy", turn_id="test_2000", char_id=TEST_CHAR_ID)
 
-        monkeypatch.setattr(cl, "_char_name", lambda: "叶瑄")
-        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id=TEST_CHAR_ID: day_file)
-        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id=TEST_CHAR_ID: full_file)
-        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id=TEST_CHAR_ID: None)
-        monkeypatch.setattr(el, "_already_appended", lambda path, line, turn_id: False)
-
-        el.append("test_uid", "assistant", "下棋很有意思", emotion="happy", turn_id="test_2000")
-
-        text = day_file.read_text(encoding="utf-8")
+        text = el._full_log_file_write("test_uid", char_id=TEST_CHAR_ID).read_text(encoding="utf-8")
         assert "speaker:assistant" in text, f"assistant 行缺少 speaker:assistant: {text!r}"
         assert "> emotion:happy" in text
 
-    def test_user_append_always_has_speaker_even_without_turn_id(self, tmp_path, monkeypatch):
+    def test_user_append_always_has_speaker_even_without_turn_id(self, sandbox):
         """user 行即使无 turn_id 也写 > speaker:user（不再是可选）。"""
         import core.memory.event_log as el
-        import core.config_loader as cl
 
-        day_file = tmp_path / "2026-06-21.md"
-        full_file = tmp_path / "full_log.md"
+        el.append("test_uid", "user", "随便说说", char_id=TEST_CHAR_ID)  # no turn_id
 
-        monkeypatch.setattr(cl, "_char_name", lambda: "叶瑄")
-        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id=TEST_CHAR_ID: day_file)
-        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id=TEST_CHAR_ID: full_file)
-        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id=TEST_CHAR_ID: None)
-        monkeypatch.setattr(el, "_already_appended", lambda path, line, turn_id: False)
-
-        el.append("test_uid", "user", "随便说说")  # no turn_id
-
-        text = day_file.read_text(encoding="utf-8")
+        text = el._full_log_file_write("test_uid", char_id=TEST_CHAR_ID).read_text(encoding="utf-8")
         assert "> speaker:user" in text, "无 turn_id 时也应有 speaker:user"
 
 

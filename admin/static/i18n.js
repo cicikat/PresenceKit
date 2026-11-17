@@ -1,6 +1,7 @@
 // Translation data only. Load before js/i18n-runtime.js.
   window.AdminI18nMessages = {
     'zh-CN': {
+      'model.gemini_native':'gemini_generate_content（Google 原生 generateContent）',
       'autonomy.delivery.title':'主动消息投递回执',
       'autonomy.delivery.hint':'通道接受不代表客户端收到。手机 ACK 仅表示已持久收件，不代表用户已读；桌面暂无正文收件确认。未知结果不会自动重发。',
       'autonomy.delivery.time':'时间',
@@ -3779,6 +3780,7 @@
       'owner_turn.deploy.diary': 'Diary sync',
     },
     en: {
+      'model.gemini_native':'gemini_generate_content (Google native generateContent)',
       'autonomy.delivery.title':'Proactive message receipts',
       'autonomy.delivery.hint':'Channel acceptance does not confirm receipt. Mobile ACK means a durable client inbox, not that the user read it. Desktop text has no receipt ACK. Unknown outcomes are never automatically resent.',
       'autonomy.delivery.time':'Time',

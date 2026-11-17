@@ -1018,7 +1018,10 @@ def capture_turn(
         "emotion": emotion, "trigger_name": trigger_name, "source": source,
         "event_channel": event_channel, "event_source": event_source,
         "visible_reply": visible_reply, "raw_user_text": raw_user_text,
-        "media_refs": media_refs, "audit_extras": audit_extras,
+        "media_refs": media_refs, "audit_extras": {
+            key: value for key, value in (audit_extras or {}).items()
+            if key in _TRIGGER_AUDIT_EXTRA_FIELDS or key in {"input_modality", "asr_low_confidence"}
+        },
         "event_context": event_context.to_payload() if event_context is not None else None,
         "envelope_source": envelope.source.value, "occurred_at": ts,
     })

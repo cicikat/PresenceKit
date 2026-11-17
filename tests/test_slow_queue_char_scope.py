@@ -183,86 +183,32 @@ async def test_payload_char_id_is_snapshot_not_current(
 
 @pytest.mark.asyncio
 async def test_handler_summarize_to_midterm_passes_char_id(sandbox):
-    """handler_summarize_to_midterm 必须把 payload['char_id'] 传给 mid_term.append。"""
-    import core.memory.mid_term as _mt
-    import core.llm_client as _llm
+    """A completed summary must exist only in the payload's character bucket."""
+    from core.memory import mid_term
     from core.memory.fixation_pipeline import handler_summarize_to_midterm
+    with patch("core.llm_client.summarize_turn", new=AsyncMock(return_value="Scoped summary")):
+        await handler_summarize_to_midterm({"turn_id":"turn_x", "uid":"u_test",
+            "user_content":"Synthetic input", "reply":"Synthetic reply", "char_id":"character_b"})
+    assert [item["summary"] for item in mid_term.load("u_test", char_id="character_b")] == ["Scoped summary"]
+    assert mid_term.load("u_test", char_id=TEST_CHAR_ID) == []
 
-    captured: list[str] = []
-
-    def _spy_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id=TEST_CHAR_ID, occurred_at=None, **kw):
-        captured.append(char_id)
-
-    monkeypatch_mt = patch.object(_mt, "append", side_effect=_spy_append)
-    monkeypatch_load = patch.object(_mt, "load", return_value=[])
-    monkeypatch_llm = patch.object(_llm, "summarize_turn", new=AsyncMock(return_value="摘要内容"))
-
-    with monkeypatch_mt, monkeypatch_load, monkeypatch_llm:
-        await handler_summarize_to_midterm({
-            "turn_id": "turn_x",
-            "uid": "u_test",
-            "user_content": "内容",
-            "reply": "回复",
-            "char_id": "character_b",
-        })
-
-    assert captured, "mid_term.append 应该被调用"
-    assert captured[0] == "character_b", (
-        f"handler_summarize_to_midterm 应透传 char_id='character_b'，实际: {captured[0]!r}"
-    )
-
-
-# ── Test 4: handler_reflect_to_episodic 透传 char_id ─────────────────────────
 
 @pytest.mark.asyncio
 async def test_handler_reflect_to_episodic_passes_char_id(sandbox):
-    """handler_reflect_to_episodic 必须把 payload['char_id'] 传给 write_episode。"""
-    import core.memory.episodic_memory as _ep
-    import core.memory.mid_term as _mt
-    import core.llm_client as _llm
+    """Reflection stores the episode and promotion in the original character bucket."""
+    from core.memory import mid_term, episodic_memory
     from core.memory.fixation_pipeline import handler_reflect_to_episodic
-
-    captured: list[str] = []
-
-    def _spy_write_episode(user_id, episode, *, char_id=TEST_CHAR_ID):
-        captured.append(char_id)
-
-    fake_mid_entry = {
-        "mid_id": "mt_u_x_1",
-        "summary": "测试摘要",
-        "promoted_to_episodic_id": None,
-    }
-
-    llm_response = json.dumps({
-        "raw_facts": ["用户说了X"],
-        "topic_keywords": ["X"],
-        "emotion_peak": "happy",
-        "strength": 0.7,
-    })
-
-    with (
-        patch.object(_mt, "load", return_value=[fake_mid_entry]),
-        patch.object(_ep, "_load_memories", return_value=[]),
-        patch.object(_ep, "write_episode", side_effect=_spy_write_episode),
-        patch.object(_mt, "mark_promoted", return_value=None),
-        patch("core.memory.fixation_pipeline._load_fixation_state", return_value={
-            "last_consolidated_at": 0.0, "episodic_since_last": 0,
-            "high_strength_since_last": 0, "strength_accumulated": 0.0, "last_sweep_at": 0.0,
-        }),
-        patch("core.memory.fixation_pipeline._save_fixation_state", return_value=None),
-        patch("core.llm_client.chat", new=AsyncMock(return_value=llm_response)),
-    ):
-        await handler_reflect_to_episodic({
-            "uid": "u_test",
-            "mid_ids": ["mt_u_x_1"],
-            "trigger": "eager",
-            "char_id": "character_b",
-        })
-
-    assert captured, "write_episode 应该被调用"
-    assert captured[0] == "character_b", (
-        f"handler_reflect_to_episodic 应透传 char_id='character_b'，实际: {captured[0]!r}"
-    )
+    mid_term.append("u_test", "Synthetic summary", mid_id="mid_scoped", char_id="character_b")
+    response=json.dumps({"raw_facts":["Synthetic scoped fact"], "topic_keywords":["scope"],
+        "emotion_peak":"happy", "strength":0.7})
+    with patch("core.llm_client.chat", new=AsyncMock(return_value=response)):
+        await handler_reflect_to_episodic({"uid":"u_test", "mid_ids":["mid_scoped"],
+            "trigger":"eager", "char_id":"character_b"})
+    episodes=episodic_memory._load_memories("u_test", char_id="character_b")
+    assert len(episodes)==1
+    assert episodes[0]["raw_facts"] == ["Synthetic scoped fact"]
+    assert mid_term.load("u_test", char_id="character_b")[0]["promoted_to_episodic_id"] == episodes[0]["id"]
+    assert episodic_memory._load_memories("u_test", char_id=TEST_CHAR_ID) == []
 
 
 # ── Test 5: user_profile_update handler 透传 char_id ─────────────────────────
@@ -397,12 +343,14 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
     # --- handler_summarize_to_midterm ---
     st_captured: list[str] = []
 
+    original_append = _mt.append
+
     def _spy_mt_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id=TEST_CHAR_ID, occurred_at=None, **kw):
         st_captured.append(char_id)
+        return original_append(uid, summary, tags=tags, mid_id=mid_id, source_turn_id=source_turn_id, char_id=char_id, occurred_at=occurred_at, **kw)
 
     with (
         patch.object(_mt, "append", side_effect=_spy_mt_append),
-        patch.object(_mt, "load", return_value=[]),
         patch.object(_llm, "summarize_turn", new=AsyncMock(return_value="摘要")),
         caplog.at_level(logging.WARNING, logger="core.memory.fixation_pipeline"),
     ):

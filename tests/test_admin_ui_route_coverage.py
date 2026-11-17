@@ -36,6 +36,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/device-file-agent/poll"): "Desktop device file command lease polling",
     ("POST", "/device-file-agent/result"): "Desktop durable file receipt submission",
     ("POST", "/sensor/ambient"): "Device-only opt-in ambient summary ingestion",
+    ("PATCH", "/sensor/ambient/policy"): "Mobile session-scoped policy adapter; admin manages the same policy through /admin/autonomy/config",
     ("POST", "/computer-use/result"): "Desktop device action result submission",
     ("POST", "/computer-use/vision/locate"): "Desktop execution-time visual target localization",
     ("POST", "/perception/screen/poll"): "Desktop screenshot request polling; admin does not capture device screens",

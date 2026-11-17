@@ -189,5 +189,19 @@ Android锁屏回归失败先行，修复后2项通过；Flutter analyze零问题
 
 ## 删除 brief 候选（未授权，不执行）
 
+## S5：联合 CI 首轮与修复
+
+三仓固定功能SHA合同首次成功：
+[protocol-compatibility 44023630558](https://github.com/cicikat/PresenceKit/actions/runs/44023630558)，
+backend `e59e2f75ff086d072616b46996181120261bf472`、desktop
+`5efbababaf69bc032328d1e91678ba5d88f4817f`、mobile `c826abff947d99a98b1f5d250801a03c8de20e3b`。
+仅该组合的provider/consumer合同 verified；不代表生产或设备验收。
+首轮后端双版本全量发现12项接缝失败；修复未声明审计字段进入durable JSON的问题，
+补scheduler合同条目和原生协议翻译，明确手机policy接口的管理面等价入口。
+原有字段/作用域测试改用隔离canonical写入与读回，保留跨角色为空断言；
+不以虚假写入成功绕过新的提交确认。视频通话测试使用真实关联claim/receipt。
+修复组84项与13个subtest通过；恢复/投递/守卫组73项通过，Gemini管理面浏览器复验通过。
+当前PR全量需针对修复后SHA重新通过，旧失败run保留；暂不合并或部署。
+
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；
 仅清除确已退役的条目，保留现行 owner/grant/scope/device control。
