@@ -187,8 +187,6 @@ Android锁屏回归失败先行，修复后2项通过；Flutter analyze零问题
 后端HTTP/权限/观测13项通过；scheduler/admin/ambient/门控/源码守卫组合47项通过。
 合成/浏览器 verified；真实设备/真实模型/生产端到端 not verified，总体 partially verified。
 
-## 删除 brief 候选（未授权，不执行）
-
 ## S5：联合 CI 首轮与修复
 
 三仓固定功能SHA合同首次成功：
@@ -202,6 +200,15 @@ backend `e59e2f75ff086d072616b46996181120261bf472`、desktop
 不以虚假写入成功绕过新的提交确认。视频通话测试使用真实关联claim/receipt。
 修复组84项与13个subtest通过；恢复/投递/守卫组73项通过，Gemini管理面浏览器复验通过。
 当前PR全量需针对修复后SHA重新通过，旧失败run保留；暂不合并或部署。
+
+修复后双版本全量均通过；组件浏览器发现手动dispose测试的fixture仍受全局自动mount
+observer管理，发生竞态重挂。fixture先切legacy停自动适配器，再验证手动生命周期，
+保留单次动作、重复监听故障注入、draft/节点身份及键盘/焦点原断言；实际Edge复验通过。
+隔离恢复演练：仅使用公开角色卡、示例配置与一条合成durable任务，复用backup-state
+create/verify/restore，9个保护文件恢复且outbox逐字节hash一致；完整配置、鉴权、
+角色、Pipeline、状态验证ok，外发尝试0。该演练未读取生产记忆，生产停机备份仍未执行。
+
+## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；
 仅清除确已退役的条目，保留现行 owner/grant/scope/device control。
