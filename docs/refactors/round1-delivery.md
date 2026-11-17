@@ -18,6 +18,11 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - 追加跨午夜恢复：实际capture回归先失败（原日期投影不存在）；event_log现接收捕获时的
   occurred_at，恢复写回原日期和分钟，不在重启当天重复投影。相关capture/eventlog/outbox
   与字段回归60项通过（Python3.12）。
+- 半条写入失败先行：两个独立进程用例在日文件/full_log写到UTF-8字符中间后os._exit，
+  恢复文件仍不可解码。现于既有恢复SQLite暂存追加字节意图，校验位置和尾部前缀后仅补缺；
+  fsync完成再清除，外部尾部冲突不截断、不覆盖，脱敏观测保留pending。
+  启动恢复最多32个、待修复上限1000；意图不参与聊天检索，完成即清正文。
+  日志/source/capture/outbox/janitor定向68项通过（Python3.12），含两种真实进程退出恢复。
 - 状态：partially verified（合成 verified；真实模型、打包客户端、生产端到端 not verified）。
 
 ## 待完成

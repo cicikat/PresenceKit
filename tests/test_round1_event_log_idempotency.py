@@ -40,7 +40,7 @@ def test_retry_repairs_only_missing_projection(sandbox, monkeypatch, failed_file
         nonlocal failed
         path = Path(path)
         matches = (path.name == "full_log.md") == (failed_file == "full")
-        if mode == "a" and matches and not failed:
+        if mode in {"a", "ab"} and matches and not failed:
             failed = True
             raise OSError("injected append failure")
         return original(path, mode, *args, **kwargs)
@@ -85,3 +85,42 @@ def test_recovered_turn_stays_in_original_day_projection(sandbox):
         turn_id="fixture-old-turn", char_id=TEST_CHAR_ID, occurred_at=occurred.timestamp(), envelope=stamp_user_chat())
     assert original.read_text(encoding="utf-8").count("turn_id:fixture-old-turn")==2
     assert not (directory/(datetime.now().strftime("%Y-%m-%d")+".md")).exists()
+
+
+def test_conflicting_external_tail_is_preserved_and_remains_observable(sandbox, monkeypatch):
+    """Never repair over an unrelated writer's bytes after an interrupted append."""
+    from core.post_process import memory_outbox
+    full=event_log._full_log_file_write("owner",char_id=TEST_CHAR_ID)
+    original=builtins.open
+    class Interrupted:
+        def __init__(self,stream):self.stream=stream
+        def __enter__(self):return self
+        def __exit__(self,*args):return self.stream.__exit__(*args)
+        def write(self,chunk):
+            self.stream.write(chunk[:12]);self.stream.flush()
+            raise OSError("synthetic partial append")
+    def opened(path,mode="r",*args,**kwargs):
+        stream=original(path,mode,*args,**kwargs)
+        return Interrupted(stream) if mode=="ab" and Path(path)==full else stream
+    with monkeypatch.context() as fault:
+        fault.setattr(builtins,"open",opened)
+        assert not event_log.append("owner","assistant","synthetic incomplete record",turn_id="fixture-conflict",char_id=TEST_CHAR_ID)
+    with full.open("ab") as stream:stream.write(b"foreign edit")
+    before=full.read_bytes()
+    assert not event_log.append("owner","assistant","synthetic incomplete record",turn_id="fixture-conflict",char_id=TEST_CHAR_ID)
+    assert full.read_bytes()==before
+    snapshot=memory_outbox.snapshot()
+    assert snapshot["projection_repair"]["pending"]==1
+    assert "synthetic incomplete record" not in str(snapshot) and str(full) not in str(snapshot)
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from admin import auth
+    from admin.routers import observability
+    monkeypatch.setattr(auth,"resolve_token",lambda raw: auth.TokenInfo("fixture",frozenset({"state.read"}),"admin") if raw=="synthetic-observer" else None)
+    app=FastAPI();app.include_router(observability.router)
+    with TestClient(app) as client:
+        assert client.get("/observability/memory-task-outbox").status_code==401
+        response=client.get("/observability/memory-task-outbox",headers={"Authorization":"Bearer synthetic-observer"})
+        assert response.status_code==200
+        assert response.json()["projection_repair"]["pending"]==1
+        assert "synthetic incomplete record" not in response.text and str(full) not in response.text

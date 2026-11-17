@@ -82,3 +82,58 @@ async def test_ledger_failure_is_repaired_without_duplicate_history(sandbox, mon
     assert event_query.get_event(scope, "repair-ledger:user", source="web")["source"] == "web"
     assert len(short_term.load("owner", char_id="fixture_character")) == 2
     assert memory_outbox.snapshot()["counts"] == {"done": 1}
+
+
+@pytest.mark.parametrize("projection", ["day", "full"])
+def test_process_exit_mid_utf8_record_repairs_exact_projection(sandbox, tmp_path, projection):
+    """Kill after bytes reach disk, including an incomplete multibyte character.
+
+    Recovery must finish that exact intent, not append a duplicate or leave an
+    unreadable Markdown projection. All files belong to this synthetic process.
+    """
+    script = '''
+import asyncio, builtins, os, sys
+from pathlib import Path
+from core import sandbox
+from core.post_process import slow_queue as sq
+from core.memory.fixation_pipeline import capture_turn, handler_capture_turn_retry
+from core.write_envelope import stamp_user_chat
+paths=sandbox.DataPaths(mode="test",test_session_id="isolated")
+paths._base=Path(sys.argv[1]);sandbox._instance=paths
+if sys.argv[2]=="crash":
+    original=builtins.open
+    class Partial:
+        def __init__(self, stream):self.stream=stream
+        def __enter__(self):return self
+        def __exit__(self,*args):return self.stream.__exit__(*args)
+        def write(self,value):
+            raw=value.encode("utf-8") if isinstance(value,str) else value
+            cut=raw.index(bytes.fromhex("e6b189"))+1
+            target=self.stream.buffer if hasattr(self.stream,"buffer") else self.stream
+            target.write(raw[:cut]);target.flush();os.fsync(target.fileno());os._exit(23)
+    def opened(path,mode="r",*args,**kwargs):
+        stream=original(path,mode,*args,**kwargs)
+        if mode in {"a","ab"} and (Path(path).name=="full_log.md")== (sys.argv[3]=="full"):
+            return Partial(stream)
+        return stream
+    builtins.open=opened
+    capture_turn("owner","synthetic 汉字 evidence","synthetic reply",turn_id="partial-recovery",char_id="fixture_character",envelope=stamp_user_chat())
+else:
+    async def main():
+        sq.register_handler("capture_turn_retry",handler_capture_turn_retry)
+        sq.start_worker();await sq.drain();await sq.shutdown()
+    asyncio.run(main())
+'''
+    for mode in ("crash", "recover"):
+        result=subprocess.run([sys.executable,"-X","utf8","-c",script,str(tmp_path),mode,projection],
+            cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,encoding="utf-8",timeout=30)
+        assert result.returncode == (23 if mode=="crash" else 0),result.stderr
+    from core.memory import event_log, short_term
+    for path in event_log._event_log_write_dir("owner",char_id="fixture_character").glob("*.md"):
+        text=path.read_text(encoding="utf-8")
+        assert text.count("synthetic 汉字 evidence")==1
+        assert text.count("speaker:user turn_id:partial-recovery")==1
+        assert text.count("speaker:assistant turn_id:partial-recovery")==1
+    assert len(short_term.load("owner",char_id="fixture_character"))==2
+    from core.post_process import memory_outbox
+    assert memory_outbox.snapshot()["projection_repair"]["pending"]==0

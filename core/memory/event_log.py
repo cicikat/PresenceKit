@@ -350,15 +350,15 @@ def append(
     try:
         _ensure_dir(user_id, char_id=char_id)
 
-        from core.memory import event_log_index
+        from core.memory import event_log_index, event_log_writer
         # Protect the check + append pair, including callers outside uid_lock.
         with event_log_index.lock:
             day_path = _day_file_write(user_id, now, char_id=char_id)
             full_path = _full_log_file_write(user_id, char_id=char_id)
             for path in (day_path, full_path):
+                event_log_writer.recover_file(path)
                 if not _already_appended(path, line + footer, turn_id):
-                    with open(path, "a", encoding="utf-8", newline="\n") as f:
-                        f.write(chunk)
+                    event_log_writer.append(path, chunk)
                     event_log_index.appended(path, chunk)
         return True
 
