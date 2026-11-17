@@ -97,6 +97,20 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - 当前配置没有官方样式 Gemini 凭据，未进行官方计费调用；不拿兼容网关配置冒充官方连接。
   合成/管理面 verified；真实模型、打包客户端、生产端到端 not verified；总体 partially verified。
 
+## F2：双端安全 Markdown
+
+- 基线：桌面4项显示/分块断言失败，手机正文仍含 Markdown 标记且代码标签被误处理。
+- 实现：桌面 React Markdown/GFM，手机 Flutter Markdown Plus（SDK兼容版1.0.7）。
+  只改展示，结构化块保持换行；禁止 HTML 执行、自动远程图片与非 HTTP(S)/带凭据链接；
+  hl/big/sm 与代码字面量分开，流中保留安全文本，完成后解析；正文与记忆合同不变。
+- 桌面 `5efbaba`：90项聊天/协议回归、TS/Vite、真实 ChatPanel 隔离浏览器通过，
+  覆盖历史/live/stream canonical、不重复、代码/注入/图片/URL/大字；较新发送恢复浏览器通过。
+  旧脚本文字“重试”选择器与已有图标实现不符，仍失败，保留记录。
+- 手机：98项 widget/发送/历史回归、7项 Markdown/链接/日夜大字复验、Dream14项通过，
+  analyze零问题，Java21 Android dev debug APK 构建通过。实际字体离屏图已检查。
+- 状态：合成与浏览器 verified；Android打包 verified；真实手机、Windows安装包、
+  实际 TTS 与生产端到端 not verified；总体 partially verified。
+
 ## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；
