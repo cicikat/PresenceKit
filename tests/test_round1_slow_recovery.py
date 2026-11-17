@@ -137,3 +137,97 @@ else:
     assert len(short_term.load("owner",char_id="fixture_character"))==2
     from core.post_process import memory_outbox
     assert memory_outbox.snapshot()["projection_repair"]["pending"]==0
+
+
+@pytest.mark.parametrize("newer_correction", [None, "identity", "facts"])
+def test_identity_commit_recovers_after_process_exit_without_synthesizing_twice(sandbox,tmp_path,newer_correction):
+    """Saving identity then dying before marking evidence must resume one plan."""
+    script='''
+import asyncio,os,sys,json
+from pathlib import Path
+from core import sandbox
+from core.memory import fixation_pipeline as fp, user_identity as ui, episodic_memory as ep
+from core.post_process import slow_queue as sq
+paths=sandbox.DataPaths(mode="test",test_session_id="isolated");paths._base=Path(sys.argv[1]);sandbox._instance=paths
+async def synthesis(*args,**kwargs):
+    with (paths._base/"synthesis-calls.txt").open("a") as stream:stream.write("call;")
+    return {"trust_pattern":{"text":"synthetic stable pattern","confidence":.6,"evidence_count":1,"last_updated":100,"counter_evidence_count":0,"last_conflict_at":0.0}},[{"key":"preferred_language","value":"synthetic-language"}]
+fp._synthesize_identity=synthesis
+async def main():
+    if sys.argv[2]=="crash":
+        ep._save_memories("owner",[{"id":"synthetic-episode","timestamp":100,"user_said":["synthetic evidence"],"consolidated_at":None}],char_id="fixture_character")
+        original=ui.save
+        async def interrupted(*args,**kwargs):
+            assert await original(*args,**kwargs)
+            os._exit(23)
+        ui.save=interrupted
+        sq.enqueue("consolidate_to_identity",{"uid":"owner","char_id":"fixture_character"})
+    sq.register_handler("consolidate_to_identity",fp.handler_consolidate_to_identity)
+    sq.start_worker();await sq.drain();await sq.shutdown()
+asyncio.run(main())
+'''
+    for mode in ("crash","recover"):
+        result=subprocess.run([sys.executable,"-X","utf8","-c",script,str(tmp_path),mode],
+            cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,encoding="utf-8",timeout=30)
+        assert result.returncode==(23 if mode=="crash" else 0),result.stderr
+        if mode=="crash" and newer_correction:
+            import asyncio
+            from core.memory import user_identity
+            if newer_correction=="identity":
+                asyncio.run(user_identity.save("owner",{"trust_pattern":{"text":"newer explicit correction","confidence":1,"evidence_count":1,"last_updated":200}},char_id="fixture_character"))
+            else:
+                from core.memory import user_facts
+                user_facts.save_user_facts("owner",{"preferred_language":"newer explicit fact"},char_id="fixture_character")
+    from core.memory import episodic_memory
+    episodes=episodic_memory._load_memories("owner",char_id="fixture_character")
+    if newer_correction:
+        import asyncio
+        from core.memory import user_identity
+        if newer_correction=="identity":
+            identity=asyncio.run(user_identity.load("owner",char_id="fixture_character"))
+            assert identity["trust_pattern"]["text"]=="newer explicit correction"
+        else:
+            from core.memory import user_facts
+            assert user_facts.load_user_facts("owner",char_id="fixture_character")["preferred_language"]=="newer explicit fact"
+        assert episodes[0].get("consolidated_at") is None
+        from core.post_process import memory_outbox
+        assert memory_outbox.snapshot()["counts"]["dlq"]==1
+    else:
+        assert episodes[0].get("consolidated_at") is not None
+        from core.memory import user_facts
+        assert user_facts.load_user_facts("owner",char_id="fixture_character")["preferred_language"]=="synthetic-language"
+    assert (tmp_path/"synthesis-calls.txt").read_text()=="call;"
+
+
+async def test_durable_identity_task_keeps_isolated_sources_out_of_synthesis(sandbox,monkeypatch):
+    from core.memory import episodic_memory,fixation_pipeline as fp,user_identity
+    from core.post_process import slow_queue as sq,memory_outbox
+    from unittest.mock import AsyncMock
+    episodes=[{"id":f"isolated-{n}","source":source,"user_said":["synthetic isolated fact"],"consolidated_at":None}
+        for n,source in enumerate(("web","dream_echo","coplay",["user_chat","web"]))]
+    episodic_memory._save_memories("owner",episodes,char_id="fixture_character")
+    synthesis=AsyncMock(side_effect=AssertionError("isolated evidence reached synthesis"))
+    monkeypatch.setattr(fp,"_synthesize_identity",synthesis)
+    sq.enqueue("consolidate_to_identity",{"uid":"owner","char_id":"fixture_character"})
+    sq.register_handler("consolidate_to_identity",fp.handler_consolidate_to_identity)
+    sq.start_worker();await sq.drain();await sq.shutdown()
+    assert await user_identity.load("owner",char_id="fixture_character")=={}
+    assert await user_identity.load("owner",char_id="another-character")=={}
+    assert synthesis.await_count==0
+    assert memory_outbox.snapshot()["counts"]=={"done":1}
+
+
+async def test_identity_evidence_io_failure_reuses_frozen_plan(sandbox,monkeypatch):
+    from core.memory import episodic_memory as ep,fixation_pipeline as fp
+    from unittest.mock import AsyncMock
+    ep._save_memories("owner",[{"id":"synthetic-episode","consolidated_at":None}],char_id="fixture_character")
+    synth=AsyncMock(return_value=({"trust_pattern":{"text":"synthetic pattern","confidence":.6,"evidence_count":1,"last_updated":100}},[]))
+    monkeypatch.setattr(fp,"_synthesize_identity",synth)
+    with monkeypatch.context() as fault:
+        fault.setattr(ep,"safe_write_json",lambda *args,**kwargs:False)
+        with pytest.raises(RuntimeError,match="identity_evidence_commit_incomplete"):
+            await fp.consolidate_to_identity("owner",None,char_id="fixture_character")
+    assert ep._load_memories("owner",char_id="fixture_character")[0]["consolidated_at"] is None
+    assert await fp.consolidate_to_identity("owner",None,char_id="fixture_character",episode_ids=["synthetic-episode"])
+    assert ep._load_memories("owner",char_id="fixture_character")[0]["consolidated_at"] is not None
+    assert synth.await_count==1

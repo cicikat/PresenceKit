@@ -4,7 +4,7 @@
 - 单 worker，失败退避重试（0.5s × retry，最多 2 次）
 - 超限写入 DLQ：data/dead_letter_queue/{ms_ts}_{task_type}.json
   内容：{task, error(traceback 字符串), failed_at}
-- capture_turn_retry / summarize_to_midterm 持久化；其他表现性任务仍是内存队列。
+- capture_turn_retry / summarize_to_midterm / consolidate_to_identity 持久化；其余仍是内存队列。
 """
 
 import asyncio

@@ -8,7 +8,7 @@ import time
 from core.sandbox import get_paths
 from core.memory.scope import MemoryScope
 
-DURABLE_TYPES = frozenset({"capture_turn_retry", "summarize_to_midterm"})
+DURABLE_TYPES = frozenset({"capture_turn_retry", "summarize_to_midterm", "consolidate_to_identity"})
 
 
 def _connect():
@@ -30,9 +30,19 @@ def put(task_type, payload):
         raise ValueError("task is not replay safe")
     scope = (MemoryScope.from_payload(payload["scope"]) if payload.get("scope") is not None
              else MemoryScope.reality_scope(payload["uid"], payload["char_id"]))
-    if scope.domain != "reality" or not payload.get("turn_id"):
+    if scope.domain != "reality":
+        raise ValueError("durable memory task requires reality scope")
+    payload = dict(payload)
+    if task_type == "consolidate_to_identity":
+        if "episode_ids" not in payload:
+            from core.memory.episodic_memory import load_unconsolidated
+            payload["episode_ids"] = sorted(str(ep["id"]) for ep in load_unconsolidated(scope.uid, char_id=scope.character_id) if ep.get("id"))
+        unit = [task_type, sorted(payload["episode_ids"])]
+    else:
+        unit = payload.get("turn_id")
+    if scope.domain != "reality" or not unit:
         raise ValueError("durable memory task requires reality scope and turn_id")
-    key = sha256(json.dumps([task_type, scope.to_payload(), payload["turn_id"]], sort_keys=True).encode()).hexdigest()
+    key = sha256(json.dumps([task_type, scope.to_payload(), unit], sort_keys=True).encode()).hexdigest()
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     identity_fields = {field: payload.get(field) or "" for field in ("user_content", "reply", "source")}
     identity_fields.update({field: bool(payload.get(field)) for field in ("web_echo", "dream_echo", "coplay_echo")})
@@ -48,6 +58,22 @@ def put(task_type, payload):
             raise RuntimeError("memory outbox capacity reached")
         db.execute("INSERT INTO tasks VALUES (?, ?, ?, ?, 'pending', 0, ?, ?)", (key, task_type, encoded, identity, now, now))
     return key
+
+
+def payload_for(key):
+    with closing(_connect()) as db:
+        row = db.execute("SELECT payload FROM tasks WHERE id=?", (key,)).fetchone()
+        return json.loads(row[0]) if row else {}
+
+
+def checkpoint(key, field, value):
+    """Persist a derived execution plan before a canonical write, never recall it."""
+    with closing(_connect()) as db, db:
+        row = db.execute("SELECT payload,status FROM tasks WHERE id=?", (key,)).fetchone()
+        if row is None or row[1] not in {"pending", "running"}:
+            raise RuntimeError("memory recovery checkpoint unavailable")
+        payload = json.loads(row[0]); payload[field] = value
+        db.execute("UPDATE tasks SET payload=?,updated_at=? WHERE id=?", (json.dumps(payload,ensure_ascii=False),time.time(),key))
 
 
 def recover():

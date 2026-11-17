@@ -1,7 +1,8 @@
 ## 330 自动记账真机验收（observe）
 
-第一轮 R3/R4（open / observe）：capture 与单轮摘要已有持久补偿，vector 缺失补偿、
-reflect/identity 恢复及完整逐投影故障矩阵尚未完成；主动消息只有通道接受回执，
+第一轮 R3/R4（open / observe）：capture、单轮摘要、身份整合已有持久补偿，
+vector补缺和日志半条恢复已有定向证据；reflect恢复、完整逐投影故障矩阵与manifest仍待完成。
+主动消息只有通道接受回执，
 desktop/mobile 客户端确认未接线，accepted 不能视为 delivered/acknowledged。
 详见 [第一轮交付](refactors/round1-delivery.md)，不得据局部回归宣称联合交付完成。
 

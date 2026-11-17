@@ -93,7 +93,13 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   `/fixation/status` 的 janitor_vector_repair 提供脱敏进度，不需要新增运营开关。
   Python3.12 janitor/vector/scoped fixation组合35项通过；包含真实sqlite的失败恢复、
   两轮有界补缺、已有web索引保留、来源隔离与跨角色空结果。
-- 未完成：reflect/identity 的持久恢复、逐投影完整故障矩阵与恢复 manifest。
+- 身份整合追加：保存身份后强制退出的回归先失败（证据一直未标记）；现在冻结episode集合
+  并持久化派生计划，重启/证据IO失败复用原结果、不重复调用LLM。比较当前身份后再写，
+  新身份/画像冲突停止旧计划并进入DLQ，隔离来源不进入整合，完成清执行快照正文。
+  Python3.12恢复/身份/固化组合73项通过，包含不覆盖恢复期间更新和独立进程退出。
+  后续身份事实检查加入同一scope锁内比较与幂等确认，既有user_facts/身份/恢复52项通过；
+  独立进程复验3项通过（正常恢复、新身份、更新的客观事实），只合成数据，未测试生产状态。
+- 未完成：reflect 的持久恢复、逐投影完整故障矩阵与恢复 manifest。
   状态：partially verified；真实模型/生产端到端 not verified。
 
 ## F1：Gemini 原生文本

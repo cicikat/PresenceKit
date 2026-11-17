@@ -1939,7 +1939,7 @@ async def _synthesize_identity(
     return result, global_facts_items
 
 
-async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
+async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAULT_CHAR_ID, episode_ids: list[str] | None = None) -> bool:
     """
     读取待固化 episodic，调 _synthesize_identity 生成新 identity，
     写入 user_identity.yaml，标记 episodic consolidated_at，重置 fixation_state。
@@ -1957,17 +1957,29 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
     # 读旧 identity、待处理 episodic、user profile（各自管理自身锁）
     old_identity = await _ui.load(uid, char_id=char_id)
     new_episodes = load_unconsolidated(uid, char_id=char_id)
+    from core.memory.source_policy import role_source_allowed
+    new_episodes = [ep for ep in new_episodes if role_source_allowed(ep.get("source")) and not ep.get("invalidated")]
+    if episode_ids is not None:
+        new_episodes = [ep for ep in new_episodes if ep.get("id") in episode_ids]
     user_profile_data = _up.load(uid, char_id=char_id)
+    from core.memory import user_facts as _uf
+    user_facts_snapshot = _uf.load_user_facts(uid,char_id=char_id)
 
     if not new_episodes:
         _log_fixation("consolidate_to_identity", uid, {}, "ok", "no unconsolidated episodes")
         return True
 
+    from core.post_process import memory_outbox
+    recovery_key = memory_outbox.put("consolidate_to_identity", {
+        "uid":uid,"char_id":char_id,"scope":MemoryScope.reality_scope(uid,char_id).to_payload(),
+        "episode_ids":sorted(episode_ids if episode_ids is not None else [str(ep["id"]) for ep in new_episodes if ep.get("id")])})
+    plan = memory_outbox.payload_for(recovery_key).get("identity_plan")
+
     # identity-1: counter_evidence_count 半衰期衰减，衰减后的版本参与 LLM 合成判断（Brief 47）
     decayed_identity, decay_events = _decay_counter_evidence(old_identity, time.time())
 
     # LLM 合成（锁外）
-    _synth = await _synthesize_identity(
+    _synth = (plan["new_identity"], plan["global_facts_items"]) if plan else await _synthesize_identity(
         uid,
         decayed_identity,
         new_episodes,
@@ -1982,6 +1994,14 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         raise RuntimeError(f"consolidate_to_identity LLM 合成失败: uid={uid}")
 
     new_identity, global_facts_items = _synth
+    if plan:
+        decayed_identity, decay_events = plan["decayed_identity"], plan["decay_events"]
+    else:
+        plan = {"old_identity":old_identity,"new_identity":new_identity,
+            "decayed_identity":decayed_identity,"decay_events":decay_events,
+            "global_facts_items":global_facts_items,"profile":user_profile_data,
+            "user_facts":user_facts_snapshot}
+        memory_outbox.checkpoint(recovery_key,"identity_plan",plan)
 
     _trigger_signal = "; ".join(
         (ep.get("narrative_summary") or ep.get("summary") or "")[:40]
@@ -1991,7 +2011,12 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
     # 非空 → 写 identity；空 dict 但有衰减 → 仍写回衰减结果；都没有 → 跳过写入，仍标记 episodes
     if new_identity or decay_events:
         to_save = {**decayed_identity, **new_identity}
-        ok = await _ui.save(uid, to_save, char_id=char_id)
+        if old_identity != _ui.normalize_identity(to_save):
+            if old_identity != plan["old_identity"]:
+                raise RuntimeError("identity_changed_during_recovery")
+            ok = await _ui.save(uid, to_save, char_id=char_id, expected_current=old_identity)
+        else:
+            ok = True
         if not ok:
             _log_fixation("consolidate_to_identity", uid, {}, "error", "identity 写入失败")
             raise RuntimeError(f"consolidate_to_identity identity 写入失败: uid={uid}")
@@ -1999,7 +2024,7 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         # Provenance: record each dimension whose text changed
         from core.memory.provenance_log import append as _prov_append
         for _key, _new_dim in new_identity.items():
-            _old_dim = old_identity.get(_key) or {}
+            _old_dim = plan["old_identity"].get(_key) or {}
             _old_text = _old_dim.get("text", "")
             _new_text = _new_dim.get("text", "")
             if _new_text != _old_text:
@@ -2026,9 +2051,10 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
     # global_facts 分流（Brief 89）：与 identity 主产物是否变更无关，独立落盘；
     # 内部完全防御，坏/空段零动作，不影响上面已完成的主产物写入
     if global_facts_items:
-        from core.memory import user_facts as _uf
-        _uf.apply_global_facts_patch(
-            uid, char_id, global_facts_items, trigger_signal=_trigger_signal,
+        if _up.load(uid,char_id=char_id) != plan["profile"]:
+            raise RuntimeError("profile_changed_during_recovery")
+        _uf.apply_global_facts_patch_checked(
+            uid, char_id, global_facts_items, expected_current=plan["user_facts"],trigger_signal=_trigger_signal,
         )
 
     # 标记 episodes + 重置 fixation_state（uid_lock 内原子操作）
@@ -2041,6 +2067,9 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
             if ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None:
                 ep["consolidated_at"] = now
         _save_memories(uid, all_episodes, char_id=char_id)
+        persisted = _load_memories(uid, char_id=char_id)
+        if any(ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None for ep in persisted):
+            raise RuntimeError("identity_evidence_commit_incomplete")
 
         state = _load_fixation_state(uid, char_id=char_id)
         state["episodic_since_last"] = 0
@@ -2057,6 +2086,7 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         "duration_ms": duration_ms,
     }, "ok")
     logger.info(f"[fixation] consolidate_to_identity 完成: uid={uid} ep_count={ep_count}")
+    memory_outbox.finish(recovery_key,succeeded=True)
     return True
 
 
@@ -2207,4 +2237,5 @@ async def handler_reflect_to_episodic(payload: dict) -> None:
 async def handler_consolidate_to_identity(payload: dict) -> None:
     from core import llm_client
     scope = _get_scope_from_payload(payload, "handler_consolidate_to_identity")
-    await consolidate_to_identity(uid=scope.uid, llm_client=llm_client, char_id=scope.character_id)
+    await consolidate_to_identity(uid=scope.uid, llm_client=llm_client, char_id=scope.character_id,
+        **({"episode_ids":payload["episode_ids"]} if "episode_ids" in payload else {}))

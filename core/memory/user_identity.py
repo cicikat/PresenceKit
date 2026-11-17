@@ -86,7 +86,17 @@ async def load(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
     return result
 
 
-async def save(user_id: str, identity_dict: dict, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
+def normalize_identity(identity_dict: dict) -> dict:
+    """Match the public read view for optimistic write comparisons."""
+    result = {}
+    for key,value in identity_dict.items():
+        if key in _VALID_KEYS and isinstance(value,dict) and _REQUIRED_FIELDS <= value.keys():
+            result[key] = {"counter_evidence_count":0,"last_conflict_at":0.0,**value}
+    return result
+
+
+async def save(user_id: str, identity_dict: dict, *, char_id: str = DEFAULT_CHAR_ID,
+               expected_current: dict | None = None) -> bool:
     """写入用户身份文件，写入前备份现有文件为 .yaml.bak。
 
     identity_dict 中不在 IDENTITY_DIMENSIONS 的 key 记 warning 并过滤掉；
@@ -103,6 +113,13 @@ async def save(user_id: str, identity_dict: dict, *, char_id: str = DEFAULT_CHAR
         filtered[key] = value
 
     async with uid_lock(user_id):
+        if expected_current is not None:
+            try:
+                raw = yaml.safe_load(write_path.read_text(encoding="utf-8")) or {} if write_path.exists() else {}
+                if normalize_identity(raw) != expected_current:
+                    return False
+            except Exception:
+                return False
         try:
             if write_path.exists():
                 bak = write_path.parent / (write_path.name + ".bak")
