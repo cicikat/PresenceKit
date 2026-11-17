@@ -20,6 +20,8 @@ event_log追加另存同一SQLite中的临时字节意图（位置、尾部校�
 反思按mid ID集合持久去重，已存在episode时仅补齐晋升血缘；核验实际episode与mid文件后收口。
 核心合并保留source_mid_ids，计数从未固化的canonical证据重建，避免重放累加。
 模型格式失败进入有界重试/DLQ（每次最多3次解析调用，任务最多3次尝试）。其余慢任务仍为内存态。
+摘要重放遇到已有mid时仍补办下游；必须读回实际mid后才能完成任务。情绪段落关闭时
+先持久化反思任务再清缓冲，重复mid不重复增加段落或平静轮计数；空摘要进入有限重试。
 `GET /observability/memory-task-outbox`（state.read）只读状态计数、
 最早积压时间和限额。其余整合任务的恢复覆盖仍见第一轮交付未验收项。
 既有每日 memory_janitor 从 canonical episodic 和近30天 event_log 补回缺失向量，

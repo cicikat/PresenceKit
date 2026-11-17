@@ -298,3 +298,65 @@ async def test_reflection_retries_failed_projection_without_duplicate_episode(sa
     assert mt.load("owner",char_id="fixture_character")[0]["promoted_to_episodic_id"]==episodes[0]["id"]
     assert chat.await_count==(2 if projection=="episode" else 1)
     assert memory_outbox.snapshot()["counts"]=={"done":1}
+
+
+def test_summary_commit_recovers_downstream_reflection_after_process_exit(sandbox,tmp_path):
+    """A persisted midterm entry cannot make a replay skip its pending followup."""
+    script='''
+import asyncio,os,sys,json
+from pathlib import Path
+from core import sandbox,llm_client
+from core.memory import fixation_pipeline as fp,mid_term as mt,embedding
+from core.post_process import slow_queue as sq
+paths=sandbox.DataPaths(mode="test",test_session_id="isolated");paths._base=Path(sys.argv[1]);sandbox._instance=paths
+async def summarize(*args,**kwargs):
+    with (paths._base/"summary-calls.txt").open("a") as stream:stream.write("call;")
+    return "synthetic summary"
+async def chat(*args,**kwargs):
+    return json.dumps({"raw_facts":["synthetic fact"],"topic_keywords":["fixture"],"emotion_peak":"gentle","strength":.5,"narrative_summary":"synthetic reflection"})
+async def offline(*args,**kwargs):raise embedding.EmbeddingUnavailable("synthetic offline")
+llm_client.summarize_turn=summarize;llm_client.chat=chat;embedding.embed=offline
+async def main():
+    if sys.argv[2]=="crash":
+        original=mt.append
+        def interrupted(*args,**kwargs):original(*args,**kwargs);os._exit(23)
+        mt.append=interrupted
+        sq.enqueue("summarize_to_midterm",{"uid":"owner","char_id":"fixture_character","turn_id":"synthetic-turn","user_content":"synthetic input","reply":"synthetic reply","force_reflect":True})
+    sq.register_handler("summarize_to_midterm",fp.handler_summarize_to_midterm)
+    sq.register_handler("reflect_to_episodic",fp.handler_reflect_to_episodic)
+    sq.start_worker();await sq.drain();await sq.shutdown()
+asyncio.run(main())
+'''
+    for mode in ("crash","recover"):
+        result=subprocess.run([sys.executable,"-X","utf8","-c",script,str(tmp_path),mode],
+            cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,encoding="utf-8",timeout=30)
+        assert result.returncode==(23 if mode=="crash" else 0),result.stderr
+    from core.memory import episodic_memory as ep,mid_term as mt
+    episodes=ep._load_memories("owner",char_id="fixture_character")
+    assert len(episodes)==1
+    mids=mt.load("owner",char_id="fixture_character")
+    assert len(mids)==1 and mids[0]["promoted_to_episodic_id"]==episodes[0]["id"]
+    assert (tmp_path/"summary-calls.txt").read_text()=="call;"
+
+
+async def test_summary_io_failure_stays_pending_until_real_midterm_exists(sandbox,monkeypatch):
+    from core import llm_client
+    from core.memory import mid_term as mt,fixation_pipeline as fp
+    from core.post_process import slow_queue as sq,memory_outbox
+    from unittest.mock import AsyncMock
+    summary=AsyncMock(return_value="synthetic summary")
+    monkeypatch.setattr(llm_client,"summarize_turn",summary)
+    original=mt.safe_write_json
+    failed=False
+    def fail_once(*args,**kwargs):
+        nonlocal failed
+        if not failed:failed=True;return False
+        return original(*args,**kwargs)
+    monkeypatch.setattr(mt,"safe_write_json",fail_once)
+    sq.enqueue("summarize_to_midterm",{"uid":"owner","char_id":"fixture_character","turn_id":"synthetic-turn","user_content":"input","reply":"reply"})
+    sq.register_handler("summarize_to_midterm",fp.handler_summarize_to_midterm)
+    sq.start_worker();await sq.drain();await sq.shutdown()
+    mids=mt.load("owner",char_id="fixture_character")
+    assert len(mids)==1 and mids[0]["source_turn_id"]=="synthetic-turn"
+    assert summary.await_count==2
+    assert memory_outbox.snapshot()["counts"]=={"done":1}

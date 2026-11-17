@@ -1157,19 +1157,25 @@ async def summarize_to_midterm(
         existing = _mt.load(uid, char_id=char_id)
         if any(e.get("source_turn_id") == turn_id for e in existing):
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
+            mid = next(e for e in existing if e.get("source_turn_id") == turn_id)
+            if mid.get("mid_id"):
+                _complete_summary_followups(uid,char_id,mid["mid_id"],emotion,force_reflect)
             return None
 
     summary = await llm_client.summarize_turn(
         user_msg, reply, tags=tags, is_trigger_turn=bool(trigger_name), char_id=char_id,
     )
     if not summary:
-        return None
+        raise RuntimeError("summary_synthesis_empty")
 
     mid_id = f"mt_{uid}_{int(time.time() * 1000)}"
     async with locks.uid_lock(uid):
         existing = _mt.load(uid, char_id=char_id)
         if any(e.get("source_turn_id") == turn_id for e in existing):
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
+            mid = next(e for e in existing if e.get("source_turn_id") == turn_id)
+            if mid.get("mid_id"):
+                _complete_summary_followups(uid,char_id,mid["mid_id"],emotion,force_reflect)
             return None
         append_kwargs = {"char_id": char_id}
         if source_refs:
@@ -1196,6 +1202,8 @@ async def summarize_to_midterm(
             occurred_at=_parse_turn_ms(turn_id),
             **append_kwargs,
         )
+        if not any(e.get("mid_id")==mid_id for e in _mt.load(uid,char_id=char_id)):
+            raise RuntimeError("summary_commit_incomplete")
         from core.memory.provenance_log import append as _prov_append
         _prov_append(
             uid, char_id,
@@ -1211,17 +1219,21 @@ async def summarize_to_midterm(
         "mid_id": mid_id, "turn_id": turn_id, "duration_ms": duration_ms,
     }, "ok")
 
+    async with locks.uid_lock(uid):
+        _complete_summary_followups(uid,char_id,mid_id,emotion,force_reflect)
+    return mid_id
+
+
+def _complete_summary_followups(uid: str, char_id: str, mid_id: str, emotion: str, force_reflect: bool) -> None:
+    """Called under uid_lock, including summary replay after its canonical write."""
+    from core.post_process import slow_queue
     # 情绪段落缓冲（M2）：sad/angry 轮不再逐轮 reflect，而是并入 open_emotional_run，
     # 段落收尾时整段入队一次。happy / force_reflect 保持 eager。
     eager = bool(force_reflect)
-    closed_runs: list[list[str]] = []
     if not force_reflect:
-        async with locks.uid_lock(uid):
-            closed_runs, _in_run = _advance_emotional_run(uid, char_id, mid_id, emotion, time.time())
+        _closed_runs, _in_run = _advance_emotional_run(uid, char_id, mid_id, emotion, time.time())
         if emotion == "happy" and not _in_run:
             eager = True
-    for run_mids in closed_runs:
-        _enqueue_emotional_run(uid, char_id, run_mids)
     if eager:
         slow_queue.enqueue("reflect_to_episodic", {
             "uid": uid,
@@ -1231,9 +1243,6 @@ async def summarize_to_midterm(
             "scope": MemoryScope.reality_scope(str(uid), char_id).to_payload(),
         })
         logger.info(f"[fixation] reflect_to_episodic eager 已入队: uid={uid} emotion={emotion}")
-
-    return mid_id
-
 
 _QUOTE_PER_MSG = 120
 _QUOTE_TOTAL = 1200
@@ -1295,6 +1304,8 @@ def _advance_emotional_run(
     """
     state = _load_fixation_state(uid, char_id=char_id)
     run = state.get("open_emotional_run")
+    if isinstance(run,dict) and mid_id in (run.get("mid_ids") or []):
+        return [], True
     closed: list[list[str]] = []
     dirty = False
     hot = emotion in ("sad", "angry")
@@ -1321,6 +1332,10 @@ def _advance_emotional_run(
             run = None
 
     if dirty:
+        # Persist downstream work before clearing a closed run. A replay of
+        # the old state re-admits the same durable ID rather than losing it.
+        for mids in closed:
+            _enqueue_emotional_run(uid,char_id,mids)
         state["open_emotional_run"] = run
         _save_fixation_state(uid, state, char_id=char_id)
     return closed, in_run
@@ -1338,9 +1353,9 @@ async def close_stale_emotional_run(uid: str, char_id: str, now: float | None = 
         if now - float(run.get("last_at") or 0.0) <= _RUN_IDLE_SECONDS:
             return False
         mids = list(run["mid_ids"])
+        _enqueue_emotional_run(uid, char_id, mids)
         state["open_emotional_run"] = None
         _save_fixation_state(uid, state, char_id=char_id)
-    _enqueue_emotional_run(uid, char_id, mids)
     return True
 
 
