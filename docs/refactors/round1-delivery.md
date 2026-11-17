@@ -119,6 +119,19 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 `tests/test_turn_sink.py` 的对应回归及 autonomy/receipt/signal 组合87项通过（Python3.12）。
 该证据只覆盖合成环境，不表示客户端 ACK 或生产投递已验收。
 
+## F3：手机环境事实候选
+
+基线：手机上传已有，独立policy HTTP入口不存在（11项业务断言404），无稳态候选链路。
+修复：默认关闭的角色授权，三项分开、原子保存与配置修订；稳定边沿、TTL、置信度和
+独立冷却；消费前/投递前核对凭据、会话、角色及授权。重启不恢复旧观测。
+候选只描述设备光照/朝向/匿名窗口，不推断人体/睡眠；保持原有门控和静默候选默认。
+新增手机设置与管理面、只读脱敏观测；后台尽力清除事实，离线由TTL兜底。
+管理面实际静态资产与控件浏览器通过（tests/round1_phone_ambient_browser.cjs），
+截图 .tmp/round1-phone-ambient-admin.png；手机控制器/设置4项、原权限/生命周期14项通过。
+Android锁屏回归失败先行，修复后2项通过；Flutter analyze零问题。
+后端HTTP/权限/观测13项通过；scheduler/admin/ambient/门控/源码守卫组合47项通过。
+合成/浏览器 verified；真实设备/真实模型/生产端到端 not verified，总体 partially verified。
+
 ## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；

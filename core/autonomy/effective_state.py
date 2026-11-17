@@ -34,6 +34,7 @@ _SCHEDULER_SOURCE_PATHS: dict[str, tuple[str, ...]] = {
 }
 
 _AUTONOMY_SOURCE_PATHS: dict[str, tuple[str, ...]] = {
+    "phone_ambient": ("phone_ambient", "enabled"),
     "interval": ("interval", "enabled"),
     "schedule": ("schedule", "enabled"),
     "overflow_autonomy": ("overflow", "enabled"),

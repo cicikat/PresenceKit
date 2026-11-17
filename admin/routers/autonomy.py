@@ -167,7 +167,21 @@ async def patch_config(body: dict, auth=Depends(require_scopes("admin"))):
         raise HTTPException(status_code=422, detail="overflow.threshold 需在 (0, 10] 内")
     if cfg["max_write_tools"] > cfg["max_tools"]:
         raise HTTPException(status_code=422, detail="max_write_tools 不能超过 max_tools")
-    store.replace_config(uid, char_id, cfg); return cfg
+    if "phone_ambient" in body:
+        from core.perception.phone_ambient import merge_policy
+        try:
+            cfg["phone_ambient"] = merge_policy(cfg.get("phone_ambient", {}), body["phone_ambient"])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+    if not store.replace_config(uid, char_id, cfg):
+        raise HTTPException(503, "autonomy_config_unavailable")
+    return cfg
+
+
+@router.get("/observability/phone-ambient", summary="手机环境候选与去抖状态（脱敏）")
+async def phone_ambient_observability(auth=Depends(require_scopes("state.read"))):
+    from core.perception.phone_ambient import observability
+    return observability(*_scope())
 
 
 class IntentCancel(BaseModel):

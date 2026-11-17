@@ -1,6 +1,13 @@
 // Translation data only. Load before js/i18n-runtime.js.
   window.AdminI18nMessages = {
     'zh-CN': {
+      'phone_ambient.title':'手机环境触发主动行为',
+      'phone_ambient.hint':'默认关闭，与手机上传授权、使用情况访问权限独立。开启后只生成设备事实候选，仍受自主活动、免打扰、预算和冷却约束；关闭即恢复原行为。',
+      'phone_ambient.enabled':'允许手机环境生成候选',
+      'phone_ambient.light':'持续光照变化',
+      'phone_ambient.motion':'手机朝向变化',
+      'phone_ambient.usage':'匿名使用概况变化',
+      'phone_ambient.state':'生效、去抖与抑制状态',
       'routing.affective_hint': '—— 发送后评价真实对话的混合情绪与认知重评；爱意探针也复用此路由，支持闭合决策模型。',
       'ig.reference': '角色形象参考图',
       'ig.referenceHint': '生成自己的形象时，角色应勾选参考图。只有勾选时才会把图片交给选中的生图连接。',
@@ -3755,6 +3762,13 @@
       'owner_turn.deploy.diary': 'Diary sync',
     },
     en: {
+      'phone_ambient.title':'Phone ambient activity',
+      'phone_ambient.hint':'Off by default and separate from upload consent and Usage Access. Produces device-fact candidates only; autonomy, DND, budgets and cooldown still apply. Turn off to restore existing behavior.',
+      'phone_ambient.enabled':'Allow phone environment candidates',
+      'phone_ambient.light':'Sustained light changes',
+      'phone_ambient.motion':'Phone orientation changes',
+      'phone_ambient.usage':'Anonymous usage summaries',
+      'phone_ambient.state':'Effective, debounce and suppression state',
       'routing.affective_hint': '— Evaluate mixed emotions and cognitive reappraisal after sending. The affection probe shares this route, including closed-decision models.',
       'ig.reference': 'Character image reference',
       'ig.referenceHint': 'The character should select the reference when generating its own appearance. The image is sent to the selected image connection only when selected.',

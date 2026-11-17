@@ -24,6 +24,20 @@ ROUTINE_TRIGGER_NAMES = frozenset({
 })
 
 
+def enqueue_phone_ambient_signal(uid: str, char_id: str, evidence: dict) -> bool:
+    """Device facts only; all visible behavior remains owned by autonomy."""
+    from core.autonomy import store
+    now = time.time()
+    signal = ProactiveSignal(source="phone_ambient",
+        reason="The device reported a sustained change. Orientation is phone posture only; light is a sensor reading; usage is an anonymous window aggregate. Do not infer the owner's body posture, sleep or location.",
+        evidence=[evidence], created_at=now, expires_at=evidence["expires_at"],
+        confidence=evidence["confidence"], priority=.2, action_mode=ActionMode.REFLECT.value,
+        suggested_action="silent")
+    queued, _ = store.enqueue_signal(uid, char_id, signal,
+        dedupe_key=f"phone_ambient:{evidence['device_session']}:{evidence['kind']}:{evidence['observed_at']}")
+    return queued
+
+
 # Trigger names that historically carried an assistant prompt.  They remain
 # useful as observability labels, but their only runtime product is a bounded
 # fact consumed by the autonomy runner.

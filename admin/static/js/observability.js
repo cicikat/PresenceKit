@@ -530,6 +530,7 @@ function _autonomyCardBody(card) {
     };
   }
   if (card === 'overflow') return {overflow: {enabled: chk('autonomy-overflow-enabled'), threshold: num('autonomy-overflow-threshold')}};
+  if (card === 'phone') return {phone_ambient: {enabled:chk('autonomy-phone-enabled'),light:chk('autonomy-phone-light'),motion:chk('autonomy-phone-motion'),usage:chk('autonomy-phone-usage')}};
   if (card === 'interval') return {interval: {enabled: chk('autonomy-interval-enabled'), seconds: num('autonomy-interval')}};
   const weekdays = document.getElementById('autonomy-schedule-weekdays').value.split(',').map(x => x.trim()).filter(Boolean).map(Number);
   const start = document.getElementById('autonomy-window-start').value;
@@ -2095,6 +2096,13 @@ async function loadAutonomySettings() {
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
     document.getElementById('autonomy-intents').checked = !!config.character_intents_enabled;
+    const phone = config.phone_ambient || {};
+    document.getElementById('autonomy-phone-enabled').checked = phone.enabled === true;
+    for (const kind of ['light','motion','usage']) document.getElementById('autonomy-phone-'+kind).checked = phone[kind] !== false;
+    api('GET','/observability/phone-ambient').then(data=>{
+      const node=document.getElementById('autonomy-phone-state');
+      if(node)node.textContent=JSON.stringify(data,null,2);
+    }).catch(()=>{const node=document.getElementById('autonomy-phone-state');if(node)node.textContent=t('common.load_failed','读取失败');});
     void loadCharacterIntentionStatus();
     document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
     document.getElementById('autonomy-min-interval').value = config.min_interval_seconds || 0;

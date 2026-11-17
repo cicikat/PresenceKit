@@ -1,3 +1,14 @@
+## 第一轮：手机环境主动行为（current / observe）
+
+Autonomy 设置页「手机环境触发主动行为」独立于手机上传和系统 Usage Access；
+默认 enabled=false，light/motion/usage 分项默认 true。关闭恢复原行为。
+管理面 PATCH /admin/autonomy/config 的 phone_ambient，手机 GET/PATCH
+/sensor/ambient/policy 使用同凭据 Reality session。手机读需 state.read+chat，
+写需 persona+sensor.write+chat；管理面写需 admin。保存为角色 scoped 原子配置，
+返回 configured/effective/reason_codes，观测 /observability/phone-ambient（state.read）。
+effective 表示授权及可用事实，不保证开口；仍经去抖、冷却、Autonomy 和 talk gate。
+真实设备/生产端到端待验收。完整合同见 three-repo-interface-catalog.md。
+
 ## 330 自动记账
 
 第一轮 Gemini 原生文本：模型预设显式选择 gemini_generate_content/provider_kind=gemini，

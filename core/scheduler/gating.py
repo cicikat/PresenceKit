@@ -93,6 +93,7 @@ RETIRED_TRIGGER_EXECUTORS: frozenset[str] = frozenset({
 ACTIVE_TRIGGERS: frozenset[str] = frozenset({
     "letter_writer",  # SMTP delivery has no autonomy signal consumer.
     "desktop_wake",
+    "phone_ambient",
     "dream_postcards",
     "heart_rate",
     "interval",

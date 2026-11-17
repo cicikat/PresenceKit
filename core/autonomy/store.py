@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
     "enabled": False,
     "talk_enabled": True,
     "character_intents_enabled": False,
+    "phone_ambient": {"enabled": False, "light": True, "motion": True, "usage": True, "revision": 0},
     "daily_evaluation_budget": 96,
     "min_interval_seconds": 15 * 60,
     "max_steps": 4,
@@ -81,7 +82,7 @@ def _load_unlocked(uid: str, char_id: str) -> dict:
                 if isinstance(raw.get("config"), dict):
                     merged = deepcopy(DEFAULT_CONFIG)
                     merged.update(raw["config"])
-                    for section in ("schedule", "interval", "overflow"):
+                    for section in ("schedule", "interval", "overflow", "phone_ambient"):
                         if isinstance(raw["config"].get(section), dict):
                             merged[section] = {**DEFAULT_CONFIG[section], **raw["config"][section]}
                     data["config"] = merged

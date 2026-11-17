@@ -1,3 +1,16 @@
+## 第一轮：手机环境与 Autonomy（current / observe）
+
+新增 GET/PATCH /sensor/ambient/policy：mobile profile，同token Reality session，
+header X-Presence-Session；GET state.read+chat，PATCH persona+sensor.write+chat。
+PATCH 仅接收 enabled/light/motion/usage 布尔值，未知字段422，保存失败503；
+GET返回 char_id/configured（含服务端revision）/effective/reason_codes/source_status，
+foreground_only=true、ttl_seconds=120。角色切换后不得用旧设置写新角色。
+管理面复用 /admin/autonomy/config（admin写）及 /observability/phone-ambient（state.read），
+诊断只显示来源/去抖/新鲜度/抑制码和哈希设备会话，不显示包名、令牌或会话原文。
+手机设置可编辑、能力页只读，后台尽力清空观测，网络失败由120秒TTL兜底；
+不新增后台采样。桌面无需新增消费者或协议字段；原手机poll/ACK和桌面WS不变。
+合成与管理面浏览器 verified；真机、模型实际发言、生产端到端 not verified。
+
 ## 330 自动记账（current / observe）
 
 第一轮原生 Gemini（current / observe）：后端独立文本 preset，不扩展桌面/手机消息协议；

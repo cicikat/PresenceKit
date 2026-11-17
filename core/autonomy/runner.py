@@ -737,6 +737,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run_id=run.id,
                         correlation_id=run.opportunity_id or job.id,
                         call_scoped=call_char is not None,
+                        **_phone_delivery_guard_kwargs(job),
                     )
                     run.talk_sent = ok
                     if ok:
@@ -769,6 +770,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run_id=run.id,
                         correlation_id=run.opportunity_id or job.id,
                         bypass_soft_once=True,
+                        **_phone_delivery_guard_kwargs(job),
                         call_scoped=call_char is not None,
                     )
                     run.talk_sent = ok
@@ -1152,10 +1154,28 @@ def _is_video_call_hangup(job: Job) -> bool:
                for signal in (job.opportunity or {}).get("signals") or [])
 
 
+def _phone_delivery_guard_kwargs(job: Job) -> dict:
+    signals = (job.opportunity or {}).get("signals", [])
+    if not any(item.get("source") == "phone_ambient" for item in signals):
+        return {}
+    def guard():
+        from core.perception.phone_ambient import source_active
+        from core.autonomy.effective_state import autonomy_talk_enabled
+        if not autonomy_talk_enabled(job.uid, job.char_id, store.load(job.uid, job.char_id)):
+            return "autonomy_talk_disabled"
+        if not source_active(job.uid, job.char_id, signals):
+            return "phone_ambient_revoked_or_stale"
+        return "user_active" if _user_became_active_for_job(job) else ""
+    return {"source_guard":guard}
+
+
 def _user_became_active_for_job(job: Job) -> bool:
     from core.qzone_events import source_active
     from core.mail.gmail_poll import source_active as gmail_active
     signals = (job.opportunity or {}).get("signals", [])
+    from core.perception.phone_ambient import source_active as phone_active
+    if not phone_active(job.uid, job.char_id, signals):
+        return True
     if not source_active(job.uid, job.char_id, signals) or not gmail_active(job.uid, job.char_id, signals):
         return True
     if not _is_video_call_hangup(job):
@@ -1312,7 +1332,7 @@ async def tick(uid: str, char_id: str) -> None:
         # admission but before this tick, consume it as a terminal suppression
         # instead of letting it surprise the user after a future re-enable.
         for signal in store.discard_pending_signals_by_source(
-            uid, char_id, {"desktop_wake", "qzone", "gmail_new_mail", "gmail_pending_reminder"}
+            uid, char_id, {"desktop_wake", "qzone", "gmail_new_mail", "gmail_pending_reminder", "phone_ambient"}
         ):
             store.record_signal_outcome(
                 uid,
@@ -1332,6 +1352,12 @@ async def tick(uid: str, char_id: str) -> None:
     # merged into the same durable opportunity.
     from core.mail.gmail_poll import source_active as gmail_active
     for signal in store.drain_pending_signals(uid, char_id):
+        if signal.source == "phone_ambient":
+            from core.perception.phone_ambient import source_active as phone_active
+            if not phone_active(uid, char_id, [signal.to_dict()]):
+                store.record_signal_outcome(uid, char_id, signal,
+                    disposition=Disposition.EXPIRED.value, event_status="phone_ambient_revoked_or_stale")
+                continue
         if signal.source in {"gmail_new_mail", "gmail_pending_reminder"} and not gmail_active(uid, char_id, [signal.to_dict()]):
             store.record_signal_outcome(uid, char_id, signal,
                 disposition=Disposition.EXPIRED.value, event_status="gmail_source_disabled")

@@ -80,7 +80,7 @@ _sources = {
 _devices = OrderedDict()
 
 
-def update(uid: str, char_id: str, device: Device, credential_hash: str, session_expires: float, body: AmbientUpdate) -> None:
+def update(uid: str, char_id: str, device: Device, credential_hash: str, session_expires: float, body: AmbientUpdate, *, session_id: str = "", token_label: str = "") -> None:
     now = time.time()
     fields = body.model_dump(exclude_none=True, exclude={"allow_light_candidate"})
     if not fields or fields.keys() - _sources[device].keys():
@@ -105,6 +105,12 @@ def update(uid: str, char_id: str, device: Device, credential_hash: str, session
                 "consented" if fact["status"] == "available" else "unavailable"
             ),
         }
+        if device == "phone":
+            from core.perception.phone_ambient import observe
+            try:
+                observe(uid, char_id, credential_hash, session_id, token_label, name, facts[name])
+            except Exception:
+                logger.debug("Phone ambient candidate unavailable", exc_info=True)
         if (
             device == "desktop" and name == "light" and body.allow_light_candidate
             and old and old["expires_at"] > now and old["status"] == "available"
@@ -124,14 +130,16 @@ def update(uid: str, char_id: str, device: Device, credential_hash: str, session
         _devices.popitem(last=False)
 
 
-def snapshot(uid: str, char_id: str, device: Device) -> dict:
+def snapshot(uid: str, char_id: str, device: Device, *, credential_hash: str | None = None) -> dict:
     now = time.time()
     result = {"version": "ambient-state.v1", "device": device}
     candidates = {}
-    for (owner, character, kind, credential_hash), (facts, _) in reversed(_devices.items()):
+    for (owner, character, kind, stored_hash), (facts, _) in reversed(_devices.items()):
         if (owner, character, kind) != (uid, char_id, device):
             continue
-        credential = find_by_hash(credential_hash)
+        if credential_hash is not None and stored_hash != credential_hash:
+            continue
+        credential = find_by_hash(stored_hash)
         expected_profile = "desktop" if device == "desktop" else "mobile"
         if credential is None or credential.profiles != {expected_profile}:
             continue
@@ -142,7 +150,7 @@ def snapshot(uid: str, char_id: str, device: Device) -> dict:
             ) > (
                 candidate["expires_at"] > now, candidate["received_at"]
             ):
-                candidates[name] = {**fact, "device_id": sha256(credential_hash.encode()).hexdigest()[:16]}
+                candidates[name] = {**fact, "device_id": sha256(stored_hash.encode()).hexdigest()[:16]}
     for name in _sources[device]:
         fact = candidates.get(name)
         if fact is None:
