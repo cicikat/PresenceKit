@@ -1,6 +1,47 @@
 # 第一轮可靠性与功能联合交付
 
-状态：施工中；合成验证与真实服务、打包、生产验收分别记录。
+状态：partially verified；代码已合并并部署，首次真实日常对话验收待用户确认。
+以下各节保留施工时序，最终证据以本段汇总为准。
+
+## 联合交付最终证据（2026-11-17）
+
+功能源码完整SHA：Backend `b3047d57eec37a7aee0a6782e6020b1aa29da7b8`；
+Desktop `2b2f213a85ec1cd4aa27f758a557e303de821c59`；
+Mobile `abb8d504bee304957d865cc6de2c2cecb9c67715`。
+PR [27](https://github.com/cicikat/PresenceKit/pull/27)、
+[12](https://github.com/cicikat/PresenceKit-desktop/pull/12)、
+[20](https://github.com/cicikat/PresenceKit-mobile/pull/20)均已合并，合并树等于测试PR树。
+最终三SHA合同 [44026649087](https://github.com/cicikat/PresenceKit/actions/runs/44026649087)成功。
+后端main [44026569013](https://github.com/cicikat/PresenceKit/actions/runs/44026569013)：
+Python3.10/3.12各8666 passed、71分类skip、13 subtests；smoke、浏览器、离线评估通过。
+桌面main [44026570873](https://github.com/cicikat/PresenceKit-desktop/actions/runs/44026570873)
+前端/Windows/macOS Rust通过；手机main [44026570863](https://github.com/cicikat/PresenceKit-mobile/actions/runs/44026570863)
+479项Flutter通过，[Android模拟器](https://github.com/cicikat/PresenceKit-mobile/actions/runs/44026570859)通过。
+
+| 项目 | 基线→修复、提交 | 验证及剩余边界 |
+|---|---|---|
+| R1 | 回合热重载换路由→冻结路由/连接租约；6941537 | 合成verified；生产真实故障接管未注入 |
+| R2 | 重复正文误判、半UTF8写入→事件指纹、字节补缺；30ae13e/d62a2ff/a1c6126 | 独立进程恢复verified；不对真实历史注入故障 |
+| R3 | 内存队列/多投影丢失→有界outbox、身份/反思/索引补偿；6e6ded2/8d4e8c2/840feba/323e5fc/672a9e1 | 合成/备份恢复verified；长期生产恢复observe |
+| R4 | claim冒充投递→每通道回执、ACK与发送前撤权；7f29a46/7da9031/2294f2a/48cb13c | 合成verified；桌面仍无正文ACK，不重发未知结果 |
+| R5 | 调度返回/权限文档/未验证matrix→真实调度标志、现行权限、固定SHA CI；07b544e/40ff194 | 合成及最终SHA合同verified |
+| F1 | 无原生文本→显式Gemini协议和签名续轮；ca00883/7607cfb | 本机及已部署服务器官方API单轮/流式/合成函数/续轮均verified；生产路由未改变 |
+| F2 | 双端无完整Markdown→仅显示层安全解析；桌面5efbaba、手机d8d25cb | 实际Windows WebView历史+IPC/WS收尾verified，恰好两张表且图片请求0；Android实际气泡日夜模式verified |
+| F3 | 手机事实无候选→独立授权/稳态/TTL/发送前来源检查；2035225、手机60f84c2/f4092dc | 真机light/motion可用，Usage无授权正确拒绝；连续3次upright只产生1个候选，撤销后effective全false；未启动真实角色发言 |
+
+先备份并restore演练、后端上线、再升级手机。现有inventory快照create/verify/coverage通过：
+5281文件约800MB；停服到恢复29.29秒。独立恢复目录完整hash/config/auth/character/pipeline/state
+校验ok，外发尝试0。部署43个程序文件、保留4个现有overlay，切换6.32秒；独立复核hash全符、
+私有配置不变、服务active，新观测接口200、无凭据401，五类启动异常计数均0。
+不对生产记忆故障注入，不自动重放消息。回滚步骤见 [上线回滚手册](round1-rollout-and-rollback.md)。
+
+Android prod正式签名包1.3.0+88已安装，证书与历史公开APK一致，原数据保留；
+APK SHA256 `91a99da395fc5dd89c03f9c78e3240fc1555ed1ff10eedca2467332d0d6c762a`。
+独立round1test应用完成真机验收后已恢复采样开关并移除，正式环境phone ambient授权保持关闭。
+Windows采用合并SHA的干净源码，未复制私人模型/场景；原工作区大资产曾导致超大Rust元数据，
+清洁发行构建已通过。完整NSIS运行时打包收尾结果另记交付receipt，不把无运行时的初始包当正式产物。
+整体仍partially verified：首次真实日常对话、真实TTS及生产主动消息端到端尚未确认。
+
 审计基线：backend `69769380c262ec3c4e3f1fad5cedb3eda4054e3e`；
 desktop `c69b522b1f198e183723c178ee3858a17e5489e0`；
 mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
