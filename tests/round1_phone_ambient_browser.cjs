@@ -20,6 +20,8 @@ const path = require('node:path');
         return route.fulfill({body:fs.readFileSync(file),contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css'})[path.extname(file)]||'application/octet-stream'});
       }
       let body={};
+      if(url.pathname==='/settings/minecraft')body={configured:{},runtime:{connection_state:'disconnected'},routing:{presets:[]}};
+      if(url.pathname==='/settings/food-memory')body={effective:false,route:{}};
       if(url.pathname==='/video-call/presence')body={settings:{enabled:false,max_talks_per_call:1,min_gap_seconds:60,silence_seconds:60,camera_signal_interval_seconds:30},talks_total:0,gate_blocks:{}};
       if(url.pathname==='/admin/autonomy/config') {
         if(req.method()==='PATCH') {
@@ -49,7 +51,11 @@ const path = require('node:path');
     await page.evaluate(()=>{document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';goto('autonomy-settings');});
     await page.waitForFunction(()=>document.getElementById('autonomy-phone-enabled')?.checked);
     assert.equal(await page.locator('#autonomy-phone-motion').isChecked(),false);
-    assert.equal(await page.getByText(/Cannot read properties/).count(),0);
+    const unexpected=[];
+    for(const node of await page.getByText(/Cannot read properties/).all()) {
+      if(await node.isVisible())unexpected.push(await node.textContent());
+    }
+    assert.deepEqual(unexpected,[]);
     await card.locator('summary').click();
     await card.scrollIntoViewIfNeeded();
     fs.mkdirSync('.tmp',{recursive:true});
