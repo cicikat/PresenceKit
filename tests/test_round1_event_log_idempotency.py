@@ -68,3 +68,20 @@ def test_same_reply_on_different_days(sandbox, monkeypatch):
         now += timedelta(days=1)
     text = event_log._full_log_file_write("owner", char_id=TEST_CHAR_ID).read_text(encoding="utf-8")
     assert text.count("speaker:assistant") == 2
+
+
+def test_recovered_turn_stays_in_original_day_projection(sandbox):
+    """A replay after midnight must not become a new event in today's file."""
+    from core.memory.fixation_pipeline import capture_turn
+    from core.write_envelope import stamp_user_chat
+    occurred = (datetime.now() - timedelta(days=2)).replace(hour=23, minute=59)
+    capture_turn("owner", "synthetic earlier message", "synthetic earlier reply",
+        turn_id="fixture-old-turn", char_id=TEST_CHAR_ID, occurred_at=occurred.timestamp(), envelope=stamp_user_chat())
+    directory=event_log._event_log_write_dir("owner",char_id=TEST_CHAR_ID)
+    original=directory / (occurred.strftime("%Y-%m-%d")+".md")
+    assert original.exists()
+    assert "## 23:59" in original.read_text(encoding="utf-8")
+    capture_turn("owner", "synthetic earlier message", "synthetic earlier reply",
+        turn_id="fixture-old-turn", char_id=TEST_CHAR_ID, occurred_at=occurred.timestamp(), envelope=stamp_user_chat())
+    assert original.read_text(encoding="utf-8").count("turn_id:fixture-old-turn")==2
+    assert not (directory/(datetime.now().strftime("%Y-%m-%d")+".md")).exists()

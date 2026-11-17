@@ -15,6 +15,9 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - 验证：Python 3.12.13，`pytest -q tests/test_round1_event_log_idempotency.py
   tests/test_event_log_source_tag.py tests/test_event_log_union.py tests/test_p1_memory_fields.py`：33 passed。
 - 范围：后端记忆投影内部修复，客户端字段和设置不变；真实进程强杀的半条写入留待 R3 联合验收。
+- 追加跨午夜恢复：实际capture回归先失败（原日期投影不存在）；event_log现接收捕获时的
+  occurred_at，恢复写回原日期和分钟，不在重启当天重复投影。相关capture/eventlog/outbox
+  与字段回归60项通过（Python3.12）。
 - 状态：partially verified（合成 verified；真实模型、打包客户端、生产端到端 not verified）。
 
 ## 待完成

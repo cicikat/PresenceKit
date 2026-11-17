@@ -293,6 +293,7 @@ def append(
     source: str = "",
     input_modality: str = "",
     asr_low_confidence: bool = False,
+    occurred_at: float | None = None,
 ) -> bool:
     """
     追加一条对话记录到当天日志和 full_log.md。
@@ -316,7 +317,7 @@ def append(
     char_name = _char_name()
     role_label = "用户" if role == "user" else char_name
 
-    now = datetime.now()
+    now = datetime.fromtimestamp(occurred_at) if occurred_at is not None else datetime.now()
     time_str = now.strftime("%H:%M")
 
     line = f"**{role_label}**：{content}\n"

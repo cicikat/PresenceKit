@@ -1010,7 +1010,7 @@ def capture_turn(
             **_forward_audit_extras(audit_extras),
         )
         writes = [
-            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id, source=source)
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id, source=source, occurred_at=ts)
             if _scrubbed_reply is not None else True,
         ]
         if (trigger_name in CONVERSATIONAL_TRIGGERS or trigger_name.startswith("activity_comment:")) and _scrubbed_reply is not None:
@@ -1022,8 +1022,8 @@ def capture_turn(
             short_term.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, **_voice_kw),
             short_term.append(uid, "assistant", _scrubbed_reply, turn_id=turn_id, char_id=char_id)
             if _scrubbed_reply is not None else True,
-            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, source=source, **_voice_kw),
-            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id, source=source)
+            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, source=source, occurred_at=ts, **_voice_kw),
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id, source=source, occurred_at=ts)
             if _scrubbed_reply is not None else True,
         ]
 
