@@ -35,7 +35,13 @@ def test_scheduler_persistence_rebinds_after_import(monkeypatch, tmp_path):
     """A module imported before sandbox installation cannot write through its old root."""
     import core.sandbox as sandbox_mod
 
-    actual_data = Path("data").resolve()
+    # The fallback cwd is a private synthetic installation. A repository-wide
+    # scan races other xdist workers' legitimate test_sandbox writes and would
+    # also read private developer state during a local run.
+    actual_data = tmp_path / "unbound-cwd" / "data"
+    actual_data.mkdir(parents=True)
+    (actual_data / "sentinel.json").write_text('{"synthetic":true}', encoding="utf-8")
+    monkeypatch.chdir(actual_data.parent)
     actual_before = _manifest(actual_data)
     preimport_root = tmp_path / "preimport-production"
     sandbox_root = tmp_path / "sandbox-one"

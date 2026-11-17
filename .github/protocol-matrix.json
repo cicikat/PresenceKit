@@ -1,34 +1,61 @@
 {
   "matrix_version": "1",
   "fixture_version": "v1",
-  "captured_at": "2026-11-12",
-  "compatibility_window": "unverified planning snapshot captured on the date above",
-  "classification": "not_verified",
+  "captured_at": "2026-11-17",
+  "compatibility_window": "contract verified only for the three exact feature SHAs below; other combinations and physical-device delivery remain not_verified",
+  "classification": "compatible",
   "repositories": {
     "backend": {
       "repository": "cicikat/PresenceKit",
-      "sha": "3d46def48abbc05a527d382ad1eced6cb0a9bd90",
+      "sha": "1f0deb0bb1e18eed5fa35e38e2d9870c5a1e7f6d",
       "runner": "ubuntu-latest"
     },
     "desktop": {
       "repository": "cicikat/PresenceKit-desktop",
-      "sha": "a2704db03da745d1124b8f8df4cfb540e99526b2",
+      "sha": "5efbababaf69bc032328d1e91678ba5d88f4817f",
       "runner": "ubuntu-latest"
     },
     "mobile": {
       "repository": "cicikat/PresenceKit-mobile",
-      "sha": "0f2a7ee60e5f8fbcffea52ada8c45817db24050d",
+      "sha": "f4092dc2f2b6e62df4b5a9f232e90a92077a20d2",
       "runner": "ubuntu-latest"
     }
   },
   "suites": [
-    {"name": "backend protocol provider", "level": "contract", "command": "pytest -n auto -q tests/test_protocol_fixtures.py tests/test_activity_contract.py"},
-    {"name": "desktop protocol consumer", "level": "contract", "command": "npm test -- --run tests/protocol-fixtures.test.ts"},
-    {"name": "mobile protocol consumer", "level": "contract", "command": "flutter test test/protocol_fixtures_test.dart"}
+    {
+      "name": "backend protocol provider",
+      "level": "contract",
+      "command": "pytest -n auto -q tests/test_protocol_fixtures.py tests/test_activity_contract.py"
+    },
+    {
+      "name": "desktop protocol consumer",
+      "level": "contract",
+      "command": "npm test -- --run tests/protocol-fixtures.test.ts"
+    },
+    {
+      "name": "mobile protocol consumer",
+      "level": "contract",
+      "command": "flutter test test/protocol_fixtures_test.dart"
+    }
   ],
   "evidence": {
-    "artifact_id": "",
-    "run_url": "",
-    "recorded_results": "not_verified"
+    "requested_shas": {
+      "backend": "1f0deb0bb1e18eed5fa35e38e2d9870c5a1e7f6d",
+      "desktop": "5efbababaf69bc032328d1e91678ba5d88f4817f",
+      "mobile": "f4092dc2f2b6e62df4b5a9f232e90a92077a20d2"
+    },
+    "shas": {
+      "backend": "1f0deb0bb1e18eed5fa35e38e2d9870c5a1e7f6d",
+      "desktop": "5efbababaf69bc032328d1e91678ba5d88f4817f",
+      "mobile": "f4092dc2f2b6e62df4b5a9f232e90a92077a20d2"
+    },
+    "results": {
+      "backend": "success",
+      "desktop": "success",
+      "mobile": "success"
+    },
+    "recorded_results": "compatible",
+    "run_url": "https://github.com/cicikat/PresenceKit/actions/runs/44025411821",
+    "artifact_id": "14302379411"
   }
 }

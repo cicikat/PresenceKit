@@ -207,6 +207,13 @@ observer管理，发生竞态重挂。fixture先切legacy停自动适配器，�
 隔离恢复演练：仅使用公开角色卡、示例配置与一条合成durable任务，复用backup-state
 create/verify/restore，9个保护文件恢复且outbox逐字节hash一致；完整配置、鉴权、
 角色、Pipeline、状态验证ok，外发尝试0。该演练未读取生产记忆，生产停机备份仍未执行。
+最终功能组合合同再次成功：
+[44025411821](https://github.com/cicikat/PresenceKit/actions/runs/44025411821)，
+三端完整SHA见 [上线回滚手册](round1-rollout-and-rollback.md)；下载CI产物中的
+protocol.json后才将matrix该组合标为compatible。设备/生产仍不在该结论内。
+后端另一轮3.12全量发现旧scheduler隔离测试扫描仓库共享test_sandbox与并行worker竞争；
+改为独立cwd、合成data哨兵与完整hash比较，继续检查旧root不写、换sandbox不串桶。
+这也避免本机运行时读取真实data。定向测试及matrix守卫3项通过，最终head须重跑CI。
 
 ## 删除 brief 候选（未授权，不执行）
 
