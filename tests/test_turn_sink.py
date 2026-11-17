@@ -144,6 +144,39 @@ async def test_stale_desktop_activity_is_not_a_live_proactive_receiver(sandbox,m
     assert store.load("guard-owner","fixture_character")["delivery_receipts"]==[]
 
 
+async def test_running_autonomy_job_observes_talk_revocation_while_waiting(sandbox,monkeypatch):
+    """The real runner must refresh its talk grant, not retain its initial config."""
+    from core.autonomy import runner,store,talk_gate
+    from core.autonomy.models import Job,Run
+    from core.conversation_gate import conversation_lock
+    from channels import registry
+    from types import SimpleNamespace
+    uid,char_id="running-job-owner","fixture_character"
+    state=store.load(uid,char_id);state["config"]["enabled"]=True;store.save(uid,char_id,state)
+    channel=_Channel("inbox")
+    monkeypatch.setattr(registry,"_channels",{"inbox":channel})
+    monkeypatch.setattr("core.pipeline_registry.get",lambda:_FakePipeline())
+    monkeypatch.setattr(runner,"_runtime_tools",lambda *a:([],{}))
+    monkeypatch.setattr(runner,"_user_became_active_for_job",lambda job:False)
+    monkeypatch.setattr(talk_gate,"check",lambda *a,**k:("allow","ok"))
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_send",lambda *a,**k:None)
+    async def chat_turn(*args,**kwargs):
+        return SimpleNamespace(tool_calls=[{"id":"synthetic-talk","name":"talk_owner","arguments":{"text":"synthetic current fact","reason":"synthetic observation"}}],continuation_items=[],assistant_message={})
+    monkeypatch.setattr("core.llm_client.chat_turn",chat_turn)
+    job=Job(uid=uid,char_id=char_id,source="autonomy")
+    async with conversation_lock(uid):
+        task=asyncio.create_task(runner._run_locked(job,state,Run(uid=uid,char_id=char_id,source="autonomy",job_id=job.id)))
+        for _ in range(100):
+            if store.load(uid,char_id)["delivery_receipts"]:break
+            await asyncio.sleep(.01)
+        assert store.load(uid,char_id)["delivery_receipts"][-1]["status"]=="attempted"
+        fresh=store.load(uid,char_id);fresh["config"]["talk_enabled"]=False;store.save(uid,char_id,fresh)
+    result=await asyncio.wait_for(task,3)
+    assert result.talk_sent is False
+    assert channel.sent==[]
+    assert store.load(uid,char_id)["delivery_receipts"][-1]["reason_code"]=="autonomy_talk_disabled"
+
+
 @pytest.mark.parametrize("critical,schedule", [(True, True), (True, False), (False, True), (False, False)])
 async def test_post_process_scheduled_reports_actual_background_work(sandbox, critical, schedule):
     """R5: response flag matches admitted work for both capture modes."""

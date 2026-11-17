@@ -82,6 +82,8 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   `.tmp/round1-autonomy-deliveries-admin.png`，无真实消息正文或凭据。
   桌面历史fallback活跃但WS断开时不再误准入；实际capture不得调用的回归先失败，修复后
   投递/ACK/手机事实/晚间门控93项通过。无新桌面wire协议或手机操作权限。
+  普通自主job的发言开关也改为发送前重读；真实runner等待对话锁期间撤销talk_enabled的
+  回归先复现talk_sent=true，修复后与turn sink/信号/手机事实组合56项通过。
 - 状态：partially verified；合成/独立进程 verified，真实客户端与生产端到端 not verified。
 
 ## R3：关键记忆恢复（部分）

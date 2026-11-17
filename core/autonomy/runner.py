@@ -737,7 +737,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run_id=run.id,
                         correlation_id=run.opportunity_id or job.id,
                         call_scoped=call_char is not None,
-                        **_phone_delivery_guard_kwargs(job),
+                        **_delivery_guard_kwargs(job),
                     )
                     run.talk_sent = ok
                     if ok:
@@ -770,7 +770,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run_id=run.id,
                         correlation_id=run.opportunity_id or job.id,
                         bypass_soft_once=True,
-                        **_phone_delivery_guard_kwargs(job),
+                        **_delivery_guard_kwargs(job),
                         call_scoped=call_char is not None,
                     )
                     run.talk_sent = ok
@@ -1154,10 +1154,8 @@ def _is_video_call_hangup(job: Job) -> bool:
                for signal in (job.opportunity or {}).get("signals") or [])
 
 
-def _phone_delivery_guard_kwargs(job: Job) -> dict:
+def _delivery_guard_kwargs(job: Job) -> dict:
     signals = (job.opportunity or {}).get("signals", [])
-    if not any(item.get("source") == "phone_ambient" for item in signals):
-        return {}
     def guard():
         from core.perception.phone_ambient import source_active
         from core.autonomy.effective_state import autonomy_talk_enabled
@@ -1165,6 +1163,8 @@ def _phone_delivery_guard_kwargs(job: Job) -> dict:
             return "autonomy_talk_disabled"
         if not source_active(job.uid, job.char_id, signals):
             return "phone_ambient_revoked_or_stale"
+        if _camera_signal_closed(job):
+            return "camera_signal_closed"
         return "user_active" if _user_became_active_for_job(job) else ""
     return {"source_guard":guard}
 
