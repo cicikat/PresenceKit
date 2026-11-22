@@ -385,6 +385,7 @@ def get_recent_days(
     char_id: str = DEFAULT_CHAR_ID,
     since_ts: float | None = None,
     until_ts: float | None = None,
+    include_legacy: bool = True,
 ) -> str:
     """
     读取最近 N 天的日志原文，拼接成一个字符串返回。
@@ -397,6 +398,7 @@ def get_recent_days(
         days    - 往前读几天（含今天），默认 3；since_ts/until_ts 非 None 时忽略此参数
         since_ts / until_ts - Brief 48：非 None 时按这个日期范围（半开区间，本地时区）
           只扫范围内的日文件，不再看 days 参数——查询侧时间意图场景下顺带省 IO。
+        include_legacy - 只读对账可传 False，仅扫描新桶并跳过历史归属冻结。
 
     返回：
         拼接后的日志文本，空则返回空字符串
@@ -405,7 +407,7 @@ def get_recent_days(
     uid = safe_user_id(user_id)
     scope = MemoryScope.reality_scope(uid, char_id)
     new_dir = resolve_path(scope, "event_log")
-    old_dir = _legacy_read_dir_if_eligible(uid, char_id)
+    old_dir = _legacy_read_dir_if_eligible(uid, char_id) if include_legacy else None
 
     today = datetime.now()
 

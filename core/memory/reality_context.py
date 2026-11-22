@@ -171,10 +171,11 @@ async def fetch_reality_context(
             until_ts=_until_ts,
         )
     from core.memory.mood_state import get_current as _get_mood
+    recall_emotion = _get_mood(char_id=char_id)
     episodic_result = format_for_prompt(
         episodic_memories,
         char_name=scoped_character.name,
-        current_emotion=_get_mood(char_id=char_id),
+        current_emotion=recall_emotion,
         user_pronoun=_user_pronoun,
     )
 
@@ -201,11 +202,10 @@ async def fetch_reality_context(
             char_id=char_id,
             return_trace=True,
         )
-    from core.memory.mood_state import get_current as _get_mood2
     episodic_fallback_result = format_for_prompt(
         episodic_fallback,
         char_name=scoped_character.name,
-        current_emotion=_get_mood2(char_id=char_id),
+        current_emotion=recall_emotion,
         user_pronoun=_user_pronoun,
     ) if episodic_fallback else ""
 
@@ -265,17 +265,19 @@ async def fetch_reality_context(
 
             _kept_ep, _removed_ep = _split_overlap(episodic_memories)
             _kept_fb, _removed_fb = _split_overlap(episodic_fallback)
+            if (_removed_ep and _kept_ep) or (_removed_fb and _kept_fb):
+                recall_emotion = _get_mood(char_id=char_id)
             if _removed_ep:
                 episodic_memories = _kept_ep
                 episodic_result = format_for_prompt(
                     episodic_memories, char_name=scoped_character.name,
-                    current_emotion=_get_mood(char_id=char_id), user_pronoun=_user_pronoun,
+                    current_emotion=recall_emotion, user_pronoun=_user_pronoun,
                 ) if episodic_memories else ""
             if _removed_fb:
                 episodic_fallback = _kept_fb
                 episodic_fallback_result = format_for_prompt(
                     episodic_fallback, char_name=scoped_character.name,
-                    current_emotion=_get_mood2(char_id=char_id), user_pronoun=_user_pronoun,
+                    current_emotion=recall_emotion, user_pronoun=_user_pronoun,
                 ) if episodic_fallback else ""
             _removed_ev: list = []
             _ev_fallback = False
