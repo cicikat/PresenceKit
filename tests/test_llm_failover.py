@@ -207,6 +207,102 @@ class TestClassifyException:
         assert reason == "upstream_unavailable"
 
 
+def _gateway_rejection(status, code, message="Gateway rejected the request"):
+    from openai import APIStatusError
+
+    response = httpx.Response(status, request=httpx.Request("POST", "https://gateway.invalid/v1/chat/completions"))
+    return APIStatusError(message, response=response, body={"code": code})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_gateway_quota_rejection_uses_fallback_before_and_after_breaker(monkeypatch, streaming):
+    from core import llm_failover as fo
+
+    primary, fallback = _mc("primary"), _mc("fallback")
+    seen, rows = [], []
+    clock = SimpleNamespace(monotonic=lambda: now, perf_counter=fo.time.perf_counter)
+    now = 100.0
+
+    async def create(mc, messages, **kwargs):
+        seen.append(mc.name)
+        if mc is primary:
+            raise _gateway_rejection(403, "local:insufficient_quota")
+        return _ok("backup reply")
+
+    async def stream(mc, messages, **kwargs):
+        yield (await create(mc, messages, **kwargs)).assistant_text
+
+    monkeypatch.setattr(fo, "time", clock)
+    monkeypatch.setattr("core.llm_protocol.create", create)
+    monkeypatch.setattr("core.llm_protocol.stream_text", stream)
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (fallback, ""))
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: rows.append(row))
+    call = dict(call_category="chat", primary_mc=primary, caller="test",
+                prepare=lambda mc: PreparedAttempt(messages=[{"role": "user", "content": "hello"}]))
+
+    async def reply():
+        if streaming:
+            return "".join([piece async for piece in execute_stream(**call)])
+        result = await execute_create(**call)
+        return result.value.assistant_text if result.ok else None
+
+    for _ in range(4):
+        assert await reply() == "backup reply"
+    assert seen == ["primary", "fallback"] * 3 + ["fallback"]
+    assert rows[-1]["switch_reason"] == "breaker_open"
+
+    now += 61
+    assert await reply() == "backup reply"
+    assert seen[-2:] == ["primary", "fallback"]
+    assert rows[-2]["error_category"] == "upstream_quota_exhausted"
+    assert rows[-2]["logical_call_id"] == rows[-1]["logical_call_id"]
+    assert rows[-1]["switch_reason"] == "upstream_quota_exhausted"
+    assert rows[-1]["ok"] and rows[-1]["logical_final"]
+
+
+@pytest.mark.parametrize("status,code,message", [
+    (401, "local:insufficient_quota", "Authentication denied"),
+    (403, "permission_denied", "local:insufficient_quota"),
+    (403, "permission_denied", "rate limit or timeout text from upstream"),
+])
+def test_gateway_quota_policy_requires_structured_403_code(status, code, message):
+    assert classify_exception(_gateway_rejection(status, code, message)) == ("upstream_auth_failed", "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fallback_available", [False, True])
+async def test_quota_terminal_failure_remains_safe_if_no_fallback_succeeds(monkeypatch, fallback_available):
+    from core import llm_failover as fo
+
+    primary = _mc("primary")
+    fallback = _mc("fallback") if fallback_available else None
+    seen, rows = [], []
+
+    async def create(mc, messages, **kwargs):
+        seen.append(mc.name)
+        if mc is primary:
+            raise _gateway_rejection(403, "local:insufficient_quota", "synthetic private provider message")
+        raise _gateway_rejection(503, "model_unavailable")
+
+    monkeypatch.setattr("core.llm_protocol.create", create)
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (fallback, "not_configured"))
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: rows.append(row))
+    outcome = await execute_create(
+        call_category="chat", primary_mc=primary, caller="test",
+        prepare=lambda mc: PreparedAttempt(messages=[{"role": "user", "content": "hello"}]),
+    )
+    assert not outcome.ok
+    assert isinstance(outcome.error, fo.UpstreamQuotaExhausted)
+    assert str(outcome.error) == "upstream_quota_exhausted"
+    assert seen == (["primary", "fallback"] if fallback_available else ["primary"])
+    assert rows[-1]["logical_final"] and not rows[-1]["ok"]
+    if fallback_available:
+        assert rows[-1]["error_category"] == "upstream_unavailable"
+    else:
+        assert rows[-1]["skip_reason"] == "not_configured"
+
+
 @pytest.mark.asyncio
 async def test_primary_success_does_not_call_fallback(monkeypatch):
     from core import llm_failover as fo

@@ -4,6 +4,11 @@
 备用接管后在同一 turn 驻留；热重载只影响新回合，已租用连接池在最后一个回合结束后关闭。
 工具回执不重跑，协议不兼容的历史仍按现有守卫拒绝。
 
+OpenAI 兼容网关返回 HTTP 403 且结构化错误码为 `local:insufficient_quota` 时，
+调用台账记录 `upstream_quota_exhausted`。当前调用可按已配置的主备路由换一次备用，
+仍受总时间预算、流式已输出及协议兼容守卫约束。连续额度拒绝纳入既有熔断，
+冷却后探测主连接仍按同一规则处理。普通 401/403 认证或权限拒绝维持现有策略。
+
 275：`minecraft_reaction` 是同角色的快速动作判断路由，可分配小模型 JSON 或 Jev 原生 systemone 预设（263 A）；原生 choice 的 confidence 低于 0.65 回到本地规则；未分配沿用 sensor_judge → intent → chat。每次3秒总预算、零SDK重试，主模型仍负责角色表达；不是第二人格。模型路由页和 Minecraft 共玩页编辑同一生效 routing profile，后者显式显示角色覆盖及来源。修改模型配置撤销旧共玩授权，不让迟到判断继续动作。见 [Minecraft Activity](minecraft-activity.md)。
 
 `food_extract` 是饮食证据抽取的独立路由，管理面可配置小模型，遵循既有 fallback。发送后执行，20秒总限与零 SDK 重试；见 [food-memory.md](food-memory.md)。

@@ -197,6 +197,10 @@ transport `msg_id` 也用于同一 assistant turn 的 WS `channel_message.msg_id
 
 `GET /desktop/chat/requests/{request_id}` 使用同一 chat scope，返回 `request_id` 与 `status`。状态包括 `running`、`completed`、`failed`、`not_executed`、`interrupted_unknown`、`unknown`。已完成回执带 `turn_id`、可用时带 `msg_id`，历史可读时返回 `result`。持久回执复用现有 owner-turn 观测，不保存请求或回复正文。进程退出后未终结的回执保留未知状态。找不到记录、旧后端没有查询接口、传输失败都只能继续对账。
 
+模型额度拒绝且无可用回复时，`POST /desktop/chat` 返回 503，`detail` 为
+`upstream_quota_exhausted`。对应 `failed` 回执可带同值的 `error_code`，
+供桌面保留草稿并显示明确的手动重发提示。过程不会自动重放。
+
 HTTP 回复、`tool_activity`、`message_stream_start` 和 canonical `channel_message` 携带同一 `request_id`。同轮流式增量和结束帧通过既有 `msg_id` 关联。工具状态独立于整轮状态。确认前置拒绝时使用 `not_executed` 与 `X-Presence-Chat-Rejected: 1`，桌面可使用新 ID 发送。无请求头的客户端沿用旧协议。手机消费端无需升级。
 
 ### 工单 307 · 连接所有权与正文恢复
