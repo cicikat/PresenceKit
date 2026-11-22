@@ -1,6 +1,6 @@
 # PresenceKit P2 启动基线
 
-2026-11-22。已整理 P2-0 的现状调用图、迁移候选和生产脱敏基线。第一轮启动闸门仍待关闭，P2-1 至 P2-4 待施工。
+2026-11-22。本文保留 P2-0 的现状调用图、迁移候选、生产脱敏基线及当时的验收限制。施工后的边界、回滚与验收结果见 [P2 交付记录](round2-p2-delivery.md)。
 
 本地审计组合为后端 `7e7af8eef34a9adfdd280755409f9a7e4aec7015`、桌面 `c04db24e07d3038e12320baa64572c6e674cac37`、手机 `abb8d504bee304957d865cc6de2c2cecb9c67715`。本地共享协议 fixture 和后端活动合同通过，分别为后端 111、桌面 4、手机 5 项。随后的 P1 最终合并组合已通过 [固定三仓 SHA 合同 CI](https://github.com/cicikat/PresenceKit/actions/runs/44975034833)。恢复演练仍归属 [第一轮合并组合](round1-delivery.md)。
 
