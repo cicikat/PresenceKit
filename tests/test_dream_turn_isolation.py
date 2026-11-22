@@ -189,11 +189,11 @@ def test_reality_hard_reject_when_dream_active(sandbox, active_dream):
     import core.dream.dream_state as ds
     importlib.reload(ds)
 
-    from admin.routers.chat import _check_reality_not_in_dream
+    from admin.reality_admission import require_reality_turn
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc_info:
-        _check_reality_not_in_dream(_UID)
+        require_reality_turn(_UID)
 
     assert exc_info.value.status_code == 409
 
@@ -203,11 +203,11 @@ def test_reality_hard_reject_when_dream_closing(sandbox):
     from core.dream.dream_state import write_state, DreamStatus
     write_state(_UID, {"user_id": _UID, "status": DreamStatus.DREAM_CLOSING.value})
 
-    from admin.routers.chat import _check_reality_not_in_dream
+    from admin.reality_admission import require_reality_turn
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc_info:
-        _check_reality_not_in_dream(_UID)
+        require_reality_turn(_UID)
 
     assert exc_info.value.status_code == 409
 
@@ -217,9 +217,9 @@ def test_reality_allowed_when_not_in_dream(sandbox):
     from core.dream.dream_state import write_state, DreamStatus
     write_state(_UID, {"user_id": _UID, "status": DreamStatus.REALITY_CHAT.value})
 
-    from admin.routers.chat import _check_reality_not_in_dream
+    from admin.reality_admission import require_reality_turn
     # Should not raise
-    _check_reality_not_in_dream(_UID)
+    require_reality_turn(_UID)
 
 
 def test_reality_allowed_when_afterglow(sandbox):
@@ -227,8 +227,8 @@ def test_reality_allowed_when_afterglow(sandbox):
     from core.dream.dream_state import write_state, DreamStatus
     write_state(_UID, {"user_id": _UID, "status": DreamStatus.REALITY_AFTERGLOW.value})
 
-    from admin.routers.chat import _check_reality_not_in_dream
-    _check_reality_not_in_dream(_UID)
+    from admin.reality_admission import require_reality_turn
+    require_reality_turn(_UID)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

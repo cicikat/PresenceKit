@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from admin.auth import require_scopes
 from core.config_loader import get_config
 from core.memory import health_state
-from admin.routers.users import _resolve_char_id
+from admin import profile_scope
 
 router = APIRouter()
 
@@ -33,13 +33,13 @@ def _response(uid: str, char_id: str) -> dict:
 
 @router.get("/period", summary="Get the current period reminder input")
 async def get_period_date(char_id: str | None = None, auth=Depends(require_scopes("state.read"))):
-    return _response(_owner_id(), _resolve_char_id(char_id))
+    return _response(_owner_id(), profile_scope.resolve_profile_character_id(char_id))
 
 
 @router.put("/period", summary="Set the current period reminder input")
 async def put_period_date(body: PeriodDateBody, char_id: str | None = None, auth=Depends(require_scopes("sensor.write"))):
     uid = _owner_id()
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     try:
         health_state.set_period_date(uid, body.last_period_date, char_id=char_id)
     except ValueError as exc:
@@ -50,6 +50,6 @@ async def put_period_date(body: PeriodDateBody, char_id: str | None = None, auth
 @router.delete("/period", summary="Clear the current period reminder input")
 async def delete_period_date(char_id: str | None = None, auth=Depends(require_scopes("sensor.write"))):
     uid = _owner_id()
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     health_state.clear_period_date(uid, char_id=char_id)
     return _response(uid, char_id)

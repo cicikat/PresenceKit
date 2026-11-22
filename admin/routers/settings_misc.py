@@ -157,8 +157,8 @@ async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_sco
 
 
 def _current_tts_character_id() -> str:
-    from admin.routers.character import _active_character_id
-    return _active_character_id() or DEFAULT_CHAR_ID
+    from core import character_context
+    return character_context.configured_character_id() or DEFAULT_CHAR_ID
 
 
 def _tts_resource_options(char_id: str) -> dict:
@@ -677,35 +677,35 @@ class MailSettingsUpdate(BaseModel):
 
 
 def _mail_view(cfg: dict) -> dict:
-    from admin.routers.settings_llm import _looks_placeholder, _mask_key
+    from admin.secret_display import looks_placeholder, mask_key
 
     target = cfg.get("mail", {})
     backend = target.get("backend", "smtp")
     password = str(target.get("smtp_password") or "")
     required_filled = not any(
-        _looks_placeholder(target.get(k, ""))
+        looks_placeholder(target.get(k, ""))
         for k in ("smtp_host", "smtp_user", "smtp_password", "to_addr")
     )
     configured = required_filled
     if backend == "gmail_api":
         from core.mail import gmail
 
-        from admin.routers.character import _active_character_id
+        from core import character_context
 
-        configured = bool(not _looks_placeholder(target.get("to_addr", ""))
-                          and gmail.allowed(gmail.owner(), _active_character_id(), gmail.SEND))
+        configured = bool(not looks_placeholder(target.get("to_addr", ""))
+                          and gmail.allowed(gmail.owner(), character_context.configured_character_id(), gmail.SEND))
     return {
         "enabled":         bool(target.get("enabled", False)),
         "connection_mode": target.get("connection_mode", "auto"),
-        "smtp_host":       "" if _looks_placeholder(target.get("smtp_host", "")) else target.get("smtp_host", ""),
+        "smtp_host":       "" if looks_placeholder(target.get("smtp_host", "")) else target.get("smtp_host", ""),
         "smtp_port":       int(target.get("smtp_port", 587) or 587),
-        "proxy_url":       "" if _looks_placeholder(target.get("proxy_url", "")) else target.get("proxy_url", ""),
-        "smtp_user":       "" if _looks_placeholder(target.get("smtp_user", "")) else target.get("smtp_user", ""),
-        "smtp_password_masked": _mask_key(password) if password and not _looks_placeholder(password) else "",
-        "smtp_password_set":    bool(password) and not _looks_placeholder(password),
-        "from_addr":       "" if _looks_placeholder(target.get("from_addr", "")) else target.get("from_addr", ""),
+        "proxy_url":       "" if looks_placeholder(target.get("proxy_url", "")) else target.get("proxy_url", ""),
+        "smtp_user":       "" if looks_placeholder(target.get("smtp_user", "")) else target.get("smtp_user", ""),
+        "smtp_password_masked": mask_key(password) if password and not looks_placeholder(password) else "",
+        "smtp_password_set":    bool(password) and not looks_placeholder(password),
+        "from_addr":       "" if looks_placeholder(target.get("from_addr", "")) else target.get("from_addr", ""),
         "from_name":       target.get("from_name", ""),
-        "to_addr":         "" if _looks_placeholder(target.get("to_addr", "")) else target.get("to_addr", ""),
+        "to_addr":         "" if looks_placeholder(target.get("to_addr", "")) else target.get("to_addr", ""),
         "subject_prefix":  target.get("subject_prefix", ""),
         "backend":         backend,
         "configured":      configured,

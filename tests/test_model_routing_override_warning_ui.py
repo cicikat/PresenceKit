@@ -16,7 +16,7 @@ def _pinned_default() -> dict:
 def test_active_character_override_keeps_default_profile_distinct_from_inherit(monkeypatch):
     import admin.routers.settings_llm as settings_llm
 
-    monkeypatch.setattr(settings_llm, "_active_character_id_for_routing_warning", lambda: "active-card")
+    monkeypatch.setattr('core.character_context.routing_character_id', lambda: "active-card")
     monkeypatch.setattr("core.character_loader.load", lambda _char_id: SimpleNamespace(name="Active card"))
     monkeypatch.setattr("core.model_registry.resolve_routing_info", lambda _char_id: _pinned_default())
 
@@ -30,7 +30,7 @@ def test_active_character_override_keeps_default_profile_distinct_from_inherit(m
 def test_active_character_override_omits_unset_or_invalid_bindings(monkeypatch):
     import admin.routers.settings_llm as settings_llm
 
-    monkeypatch.setattr(settings_llm, "_active_character_id_for_routing_warning", lambda: "active-card")
+    monkeypatch.setattr('core.character_context.routing_character_id', lambda: "active-card")
     monkeypatch.setattr("core.character_loader.load", lambda _char_id: SimpleNamespace(name="Active card"))
 
     monkeypatch.setattr(

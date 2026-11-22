@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 # 打破第四面墙的提示——追加到 Author's Note 层
 
 
-from core.owner_chat.service import run_owner_chat_turn
+from core.owner_chat import service as owner_chat_service
+from admin import session_requests, reality_admission
 
 
 
@@ -46,34 +47,8 @@ async def frontend_chat(body: dict, auth=Depends(require_scopes("chat"))):
     )
 
 
-_DREAM_GUARD_UNCERTAIN_MSG = (
-    "梦境状态暂时无法确认，为避免串写现实记忆，已暂停这次现实对话。"
-)
 
 
-def _check_reality_not_in_dream(uid: str) -> None:
-    """
-    Safety net: hard reject reality turns when dream is active or unconfirmable.
-
-    Fail-closed: if the dream state file exists but cannot be read or parsed,
-    the reality turn is rejected rather than allowed through.
-    FileNotFoundError is treated as inactive (normal startup / no dream session).
-    """
-    try:
-        from core.dream.dream_state import get_reality_guard_status, DreamGuardStatus
-        guard = get_reality_guard_status(uid)
-    except Exception:
-        logger.error("[dream_guard] guard check failed uid=%s — fail closed", uid, exc_info=True)
-        raise HTTPException(status_code=409, detail=_DREAM_GUARD_UNCERTAIN_MSG)
-
-    if guard == DreamGuardStatus.BLOCK_ACTIVE:
-        raise HTTPException(
-            status_code=409,
-            detail="还在梦里，先醒过来（dream active — reality turn rejected）",
-        )
-    if guard == DreamGuardStatus.BLOCK_UNCERTAIN:
-        logger.error("[dream_guard] reality turn rejected — unconfirmable dream state uid=%s", uid)
-        raise HTTPException(status_code=409, detail=_DREAM_GUARD_UNCERTAIN_MSG)
 
 
 def _artifact_record_or_404(artifact_id: str):
@@ -97,41 +72,10 @@ def _artifact_record_or_404(artifact_id: str):
     return record
 
 
-def _owner_media_scope() -> tuple[str, str]:
-    from core.config_loader import get_config as _cfg
-    from core.data_paths import DEFAULT_CHAR_ID
-    from core import pipeline_registry
-
-    uid = str(_cfg().get("scheduler", {}).get("owner_id", "")).strip()
-    if not uid:
-        raise HTTPException(status_code=500, detail="owner_id not configured")
-    char_id = getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
-    return uid, char_id
 
 
-def _session_grant(session_id: str | None, token_label: str):
-    # Direct unit calls see FastAPI's Header descriptor instead of an injected
-    # value; only an actual non-empty string is a session handle.
-    if not isinstance(session_id, str) or not session_id:
-        return None
-    from core.session_scope import SessionScopeError, resolve_session
-
-    try:
-        return resolve_session(session_id, token_label=token_label)
-    except SessionScopeError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.code) from None
 
 
-async def _run_session_request(*, grant, request_id, payload, executor):
-    from core.session_scope import SessionScopeError, execute_request
-
-    try:
-        _rid, result = await execute_request(
-            grant=grant, request_id=request_id, payload=payload, executor=executor,
-        )
-        return result
-    except SessionScopeError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.code) from None
 
 
 @router.post("/v1/sessions", status_code=201, summary="签发固定 Reality 会话 scope")
@@ -159,9 +103,9 @@ async def download_chat_media(
 ):
     from core.chat_media import ChatMediaError, resolve_chat_media
 
-    grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     uid, char_id = (
-        (grant.owner_id, grant.char_id) if grant is not None else _owner_media_scope()
+        (grant.owner_id, grant.char_id) if grant is not None else session_requests.owner_media_scope()
     )
     try:
         record = resolve_chat_media(sha256, uid=uid, char_id=char_id)
@@ -264,7 +208,7 @@ def _desktop_request_key(request_id: str, owner_id: str, *, admitting: bool = Fa
 
 def _check_desktop_chat_preflight(owner_id: str, request_id: str) -> None:
     try:
-        _check_reality_not_in_dream(owner_id)
+        reality_admission.require_reality_turn(owner_id)
     except HTTPException as exc:
         if request_id:
             exc.headers = {**(exc.headers or {}), "X-Presence-Chat-Rejected": "1"}
@@ -293,7 +237,7 @@ async def desktop_chat_request(request_id: str, response: Response, _auth=Depend
     from core.llm_failover import UpstreamQuotaExhausted
     from core.owner_turn_service import project_receipted_reply, read_owner_turn_receipt
 
-    owner_id, _ = _owner_media_scope()
+    owner_id, _ = session_requests.owner_media_scope()
     key = _desktop_request_key(request_id, owner_id)
     row = await read_owner_turn_receipt(_auth.label, key)
     response.headers["Cache-Control"] = "no-store"
@@ -328,7 +272,7 @@ async def desktop_chat(
     if not message:
         raise HTTPException(status_code=422, detail="message 不能为空")
     reply_to = body.get("reply_to")
-    grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     rid = desktop_request_id if isinstance(desktop_request_id, str) else ""
     if rid and (grant is not None or "request_id" in body):
         raise HTTPException(422, "conflicting_chat_request_identity")
@@ -338,7 +282,7 @@ async def desktop_chat(
     from core.config_loader import get_config as _cfg
     _uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
     if not rid:
-        _check_reality_not_in_dream(_uid)
+        reality_admission.require_reality_turn(_uid)
 
     video_observation_id = body.get("video_observation_id")
     if video_observation_id is not None and (not isinstance(video_observation_id, str) or len(video_observation_id) > 128):
@@ -353,7 +297,7 @@ async def desktop_chat(
             full_message = message
             if video_observation_id:
                 from core.video_call import consume
-                char_id = grant.char_id if grant else _owner_media_scope()[1]
+                char_id = grant.char_id if grant else session_requests.owner_media_scope()[1]
                 consumed = consume(
                     video_observation_id, uid=_uid, char_id=char_id,
                     token_label=getattr(_auth, "label", "legacy-admin"),
@@ -366,9 +310,9 @@ async def desktop_chat(
                     full_message, context, reply_to=reply_to,
                     trusted_user_text=message, audit_extras=voice_extras,
                     request_id=rid,
-                    executor=run_owner_chat_turn,
+                executor=owner_chat_service.run_owner_chat_turn,
                 )
-            return await run_owner_chat_turn(
+            return await owner_chat_service.run_owner_chat_turn(
                 full_message, context.provenance_channel, reply_to=reply_to,
                 trusted_user_text=message, audit_extras=voice_extras,
                 frozen_scope=grant.memory_scope, request_id=str(body.get("request_id") or ""),
@@ -380,7 +324,7 @@ async def desktop_chat(
                 payload={"kind": "desktop_chat", "body": body},
             )
         elif grant is not None:
-            result = await _run_session_request(
+            result = await session_requests.run_session_request(
                 grant=grant,
                 request_id=body.get("request_id"),
                 payload={"kind": "desktop_chat", "message": message, "reply_to": reply_to,
@@ -443,7 +387,7 @@ async def upload_ingest(
     """
     multipart 上传 + 可选用户附言 + channel 标记。
     """
-    grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     if request_id and grant is None:
         raise HTTPException(status_code=422, detail="session_scope_required")
 
@@ -455,7 +399,7 @@ async def upload_ingest(
         return await _ingest_chat_upload(upload_files, message, channel, grant, request_id)
     if channel != "desktop" or grant is not None or request_id:
         raise HTTPException(422, "conflicting_chat_request_identity")
-    owner_id, _ = _owner_media_scope()
+    owner_id, _ = session_requests.owner_media_scope()
     if len(upload_files) > 10:
         raise HTTPException(413, "too_many_chat_attachments")
     # The detached turn owns its snapshot; FastAPI may close request-scoped
@@ -490,14 +434,14 @@ async def _ingest_chat_upload(upload_files, message, channel, grant, request_id)
 
     async def _turn(text, *, trusted, refs, digest_payload):
         async def _execute():
-            return await run_owner_chat_turn(
+            return await owner_chat_service.run_owner_chat_turn(
                 text, channel, trusted_user_text=trusted, media_refs=refs,
                 frozen_scope=grant.memory_scope if grant is not None else None,
                 request_id=request_id,
             )
         if grant is None:
             return await _execute()
-        return await _run_session_request(
+        return await session_requests.run_session_request(
             grant=grant, request_id=request_id,
             payload={"kind": "upload", "channel": channel, "message": message, **digest_payload},
             executor=_execute,
@@ -645,7 +589,7 @@ async def desktop_wake(
     uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
 
     body = body if isinstance(body, dict) else {}
-    grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
         raise HTTPException(status_code=422, detail="session_scope_required")
     request_id = str(body.get("request_id") or "")

@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
 from admin.auth import require_scopes
-from admin.routers.screen_observation import identity
+from admin.device_identity import require_device_identity
 from core.agent_runtime import device_file_agent as service
 
 router = APIRouter()
@@ -29,13 +29,13 @@ def _reply(value):
 
 @router.post("/device-file-agent/poll")
 async def poll(request: Request, auth=Depends(_desktop)):
-    producer = identity(request, auth, "desktop")
+    producer = require_device_identity(request, auth, "desktop")
     return _reply(service.poll(producer, await _body(request, service.Poll)))
 
 
 @router.post("/device-file-agent/result")
 async def result(request: Request, auth=Depends(_desktop)):
-    producer = identity(request, auth, "desktop")
+    producer = require_device_identity(request, auth, "desktop")
     if not service.accept(producer, await _body(request, service.Result)):
         raise HTTPException(409, "stale_device_file_receipt")
     return _reply({"accepted": True})

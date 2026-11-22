@@ -37,11 +37,11 @@ async def register_push_device(
     auth=Depends(require_scopes("chat")),
 ):
     from pydantic import ValidationError
-    from admin.routers.chat import _session_grant
+    from admin.session_requests import session_grant
     from core import mobile_push_devices
 
     credential = _push_credential(request, auth)
-    grant = _session_grant(session_id, auth.label)
+    grant = session_grant(session_id, auth.label)
     if grant is None:
         raise HTTPException(422, "session_scope_required")
     if not mobile_push_devices.configured():
@@ -141,9 +141,9 @@ async def mobile_final_history(
     x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
     auth=Depends(require_scopes("memory.read")),
 ):
-    from admin.routers.chat import _session_grant
+    from admin.session_requests import session_grant
     from core.mobile_realtime import history
-    grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+    grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
     if grant is None:
         raise HTTPException(422, "session_scope_required")
     return history(grant.memory_scope, before=before, limit=limit)
@@ -174,16 +174,19 @@ async def mobile_chat(
         raise HTTPException(status_code=422, detail="message 不能为空")
     reply_to = body.get("reply_to")
 
-    from admin.routers.chat import _check_reality_not_in_dream, run_owner_chat_turn
+    from admin.reality_admission import require_reality_turn
+
+    from core.owner_chat.service import run_owner_chat_turn
     from core.audio_perception import current_voice_extras
     from core.owner_turn_service import legacy_mobile_context, run_legacy_owner_turn
     from core.config_loader import get_config
 
     uid = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
-    _check_reality_not_in_dream(uid)
+    require_reality_turn(uid)
     context = legacy_mobile_context(getattr(_auth, "label", "legacy-admin"))
-    from admin.routers.chat import _run_session_request, _session_grant
-    grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    from admin.session_requests import run_session_request
+    from admin.session_requests import session_grant
+    grant = session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
         raise HTTPException(status_code=422, detail="session_scope_required")
 
@@ -204,7 +207,7 @@ async def mobile_chat(
         )
 
     result = (
-        await _run_session_request(
+        await run_session_request(
             grant=grant, request_id=body.get("request_id"),
             payload={"kind": "mobile_chat", "message": message, "reply_to": reply_to},
             executor=_execute,

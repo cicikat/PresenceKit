@@ -65,7 +65,7 @@ async def test_config_save_preserves_other_settings_and_applies_runtime(tmp_path
         "effective_state": "missing_connection_or_owner_binding", "connected": False,
         "proactive_effective": False, "counters": {}, "last_error": "", "queue_depth": 0,
     }})()
-    monkeypatch.setattr(wechat, "get_service", lambda: runtime)
+    monkeypatch.setattr("core.wechat_service._service", runtime)
     settings = WechatSettings(enabled=True, account_id="fixture_account", owner_sender_id="fixture_owner")
     result = await wechat.put_settings(settings, auth=object())
     assert result["enabled"] is True and result["reload_status"] == "reloaded"

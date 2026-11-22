@@ -2,7 +2,8 @@ import asyncio
 from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel
-from core.activity import continuity, records, store, transcript, activity_summary
+from admin import activity_dialogue as continuity
+from core.activity import records, store, transcript, activity_summary
 
 
 class Body(BaseModel):

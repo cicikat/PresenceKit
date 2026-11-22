@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.owner_chat import service as owner_chat_service
 from admin.routers.chat import router
 from admin.auth import verify_token
 
@@ -31,7 +32,7 @@ def _patch_secret(monkeypatch):
 def _patch_internals(monkeypatch):
     """Block real LLM / channel calls so tests are unit-scoped."""
     import admin.routers.chat as chat_mod
-    monkeypatch.setattr(chat_mod, "run_owner_chat_turn", AsyncMock(return_value={"reply": "ok"}))
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', AsyncMock(return_value={"reply": "ok"}))
 
     try:
         import channels.registry as reg
@@ -78,9 +79,9 @@ def test_desktop_wake_no_token_rejected(client_no_token):
 
 def test_desktop_wake_no_token_does_not_trigger_llm(client_no_token):
     import admin.routers.chat as chat_mod
-    chat_mod.run_owner_chat_turn.reset_mock()
+    owner_chat_service.run_owner_chat_turn.reset_mock()
     client_no_token.post("/desktop/wake", json={})
-    chat_mod.run_owner_chat_turn.assert_not_called()
+    owner_chat_service.run_owner_chat_turn.assert_not_called()
 
 
 def test_desktop_wake_valid_token_passes_auth(client_authed):

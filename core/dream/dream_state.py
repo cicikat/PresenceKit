@@ -50,7 +50,7 @@ class DreamMode(str, Enum):
     rpg = "rpg"
 
 
-_VALID_DREAM_MODES: frozenset[str] = frozenset(m.value for m in DreamMode)
+VALID_DREAM_MODES: frozenset[str] = frozenset(m.value for m in DreamMode)
 
 
 def default_state(user_id: str | int) -> dict[str, Any]:

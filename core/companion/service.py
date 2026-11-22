@@ -247,7 +247,7 @@ async def handle_event(
                 elif _is_proactive_disabled(context.char_id):
                     status, reply = CompanionStatus.MUTED, None
                 else:
-                    from admin.routers.chat import run_owner_chat_turn
+                    from core.owner_chat.service import run_owner_chat_turn
                     from core.turn_sink import TurnSource
                     from core.write_envelope import WriteEnvelope
 
@@ -281,7 +281,7 @@ async def handle_event(
             if not _guard_allows(context.uid):
                 status, reply = CompanionStatus.DEFERRED, None
             else:
-                from admin.routers.chat import run_owner_chat_turn
+                from core.owner_chat.service import run_owner_chat_turn
                 from core.turn_sink import TurnSource
                 from core.write_envelope import stamp_user_chat
 

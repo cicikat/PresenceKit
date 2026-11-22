@@ -3,7 +3,7 @@ tests/test_dream_guard_fail_closed.py — P2.4: Dream guard fail-closed semantic
 
 Coverage:
   Unit   (U1-U6): get_reality_guard_status() contract — ALLOW / BLOCK_ACTIVE / BLOCK_UNCERTAIN
-  Desktop (D1-D5): _check_reality_not_in_dream() fail-closed HTTP behaviour
+  Desktop (D1-D5): require_reality_turn() fail-closed HTTP behaviour
   Mobile  (M1):   mobile path uses the same guard function (fail-closed)
   Wake    (W1-W2): /desktop/wake Path B blocked under DREAM_ACTIVE and corrupt state
   Log     (L1):   corrupt file produces logger.error on core.dream.dream_state
@@ -106,9 +106,9 @@ def test_desktop_guard_dream_active_raises_409(sandbox):
     from core.dream.dream_state import DreamStatus
     _write_dream_state(sandbox, _OWNER_ID, DreamStatus.DREAM_ACTIVE.value)
 
-    from admin.routers.chat import _check_reality_not_in_dream
+    from admin.reality_admission import require_reality_turn
     with pytest.raises(HTTPException) as exc:
-        _check_reality_not_in_dream(_OWNER_ID)
+        require_reality_turn(_OWNER_ID)
     assert exc.value.status_code == 409
     assert "梦里" in exc.value.detail or "dream active" in exc.value.detail
 
@@ -121,9 +121,9 @@ def test_desktop_guard_dream_closing_raises_409(sandbox):
     from core.dream.dream_state import DreamStatus
     _write_dream_state(sandbox, _OWNER_ID, DreamStatus.DREAM_CLOSING.value)
 
-    from admin.routers.chat import _check_reality_not_in_dream
+    from admin.reality_admission import require_reality_turn
     with pytest.raises(HTTPException) as exc:
-        _check_reality_not_in_dream(_OWNER_ID)
+        require_reality_turn(_OWNER_ID)
     assert exc.value.status_code == 409
 
 
@@ -135,8 +135,8 @@ def test_desktop_guard_reality_chat_allows(sandbox):
     from core.dream.dream_state import DreamStatus
     _write_dream_state(sandbox, _OWNER_ID, DreamStatus.REALITY_CHAT.value)
 
-    from admin.routers.chat import _check_reality_not_in_dream
-    _check_reality_not_in_dream(_OWNER_ID)  # must not raise
+    from admin.reality_admission import require_reality_turn
+    require_reality_turn(_OWNER_ID)  # must not raise
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -144,8 +144,8 @@ def test_desktop_guard_reality_chat_allows(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_desktop_guard_missing_state_allows(sandbox):
-    from admin.routers.chat import _check_reality_not_in_dream
-    _check_reality_not_in_dream(_OWNER_ID)  # must not raise
+    from admin.reality_admission import require_reality_turn
+    require_reality_turn(_OWNER_ID)  # must not raise
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -155,9 +155,9 @@ def test_desktop_guard_missing_state_allows(sandbox):
 def test_desktop_guard_corrupt_state_fail_closed(sandbox):
     _write_corrupt_dream_state(sandbox, _OWNER_ID)
 
-    from admin.routers.chat import _check_reality_not_in_dream
+    from admin.reality_admission import require_reality_turn
     with pytest.raises(HTTPException) as exc:
-        _check_reality_not_in_dream(_OWNER_ID)
+        require_reality_turn(_OWNER_ID)
     assert exc.value.status_code == 409
     assert "梦境状态" in exc.value.detail
 
@@ -169,9 +169,9 @@ def test_desktop_guard_corrupt_state_fail_closed(sandbox):
 def test_mobile_guard_corrupt_state_fail_closed(sandbox):
     _write_corrupt_dream_state(sandbox, _OWNER_ID)
 
-    from admin.routers.chat import _check_reality_not_in_dream
+    from admin.reality_admission import require_reality_turn
     with pytest.raises(HTTPException) as exc:
-        _check_reality_not_in_dream(_OWNER_ID)
+        require_reality_turn(_OWNER_ID)
     assert exc.value.status_code == 409
     assert "梦境状态" in exc.value.detail
 

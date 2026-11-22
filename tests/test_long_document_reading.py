@@ -199,7 +199,7 @@ def test_http_upload_keeps_trusted_caption_separate_and_offers_full_document_ref
         captured.append((text, channel, kwargs))
         return {"reply": "ok", "turn_id": "fixture-turn", "msg_id": "fixture-turn"}
 
-    monkeypatch.setattr(chat_router, "run_owner_chat_turn", chat)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', chat)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "reader"}})
     monkeypatch.setattr(pipeline_registry, "get", lambda: SimpleNamespace(_active_character_id="char-test"))
     client = _client(monkeypatch)

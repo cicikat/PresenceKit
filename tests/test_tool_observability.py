@@ -27,7 +27,7 @@ async def test_tool_trace_route_returns_safe_summary_and_category_counts(monkeyp
     from admin.routers import observability
     import core.memory.action_trace as action_trace
 
-    monkeypatch.setattr("admin.routers.provenance._resolve_char_id", lambda _: "default")
+    monkeypatch.setattr("admin.observation_scope.resolve_observation_character_id", lambda _: "default")
     monkeypatch.setattr(
         action_trace,
         "query",

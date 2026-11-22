@@ -1,3 +1,4 @@
+from admin.session_requests import owner_media_scope
 import asyncio
 import time
 from uuid import uuid4
@@ -40,7 +41,7 @@ async def test_disconnect_recovery_and_duplicate_post_keep_one_effect(app, monke
     finished = asyncio.Event()
     effects = []
     rid = request_id()
-    owner, _ = chat._owner_media_scope()
+    owner, _ = owner_media_scope()
 
     async def execute(message, channel, *, request_id, **kwargs):
         effects.append((message, channel, request_id))
@@ -52,7 +53,7 @@ async def test_disconnect_recovery_and_duplicate_post_keep_one_effect(app, monke
         return {"reply": "Fixture canonical reply.", "msg_id": "wire-1", "turn_id": "canonical-1",
                 "char_id": TEST_CHAR_ID}
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', execute)
     path = f"/desktop/chat/requests/{rid}"
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         waiter = asyncio.create_task(client.post("/desktop/chat", headers=headers(rid),
@@ -90,7 +91,7 @@ async def test_final_reply_failure_does_not_replay_executed_tool(app, monkeypatc
         effects.append(message)
         raise HTTPException(502, "fixture_final_generation_failed")
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', execute)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         path = f"/desktop/chat/requests/{rid}"
         assert (await client.get(path, headers=headers(rid))).json()["status"] == "unknown"
@@ -112,7 +113,7 @@ async def test_quota_failure_exposes_safe_reason_and_preserves_receipt(app, monk
         effects.append(message)
         raise UpstreamQuotaExhausted()
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', execute)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         args = {"headers": headers(rid), "json": {"message": "virtual send"}}
         response = await client.post("/desktop/chat", **args)
@@ -138,8 +139,8 @@ async def test_only_a_persisted_preflight_rejection_authorizes_new_request(app, 
         calls.append(message)
         return {"reply": "ok", "turn_id": "confirmed"}
 
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", preflight)
-    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', preflight)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', execute)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         args = {"headers": headers(rid), "json": {"message": "virtual send"}}
         rejected = await client.post("/desktop/chat", **args)
@@ -167,7 +168,7 @@ async def test_receipt_write_failure_after_reply_keeps_execution_unknown(app, mo
         return {"reply": "Delivered.", "turn_id": "already-delivered"}
 
     monkeypatch.setattr(owner_turn_receipts, "safe_write_json", fail_completion)
-    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', execute)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         args = {"headers": headers(rid), "json": {"message": "virtual write"}}
@@ -194,7 +195,7 @@ async def test_upload_reserves_before_ingesting_file(app, monkeypatch):
 
     monkeypatch.setattr(media_processor, "ingest_file_bytes", ingest)
     monkeypatch.setattr(media_processor, "document_upload_context", lambda *a, **kw: "fixture document")
-    monkeypatch.setattr(chat, "run_owner_chat_turn", turn)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', turn)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         args = {"headers": headers(rid), "files": {"file": ("fixture.txt", b"public fixture")}}
         assert (await client.post("/upload/ingest", **args)).status_code == 200
@@ -207,7 +208,7 @@ async def test_legacy_text_ingress_still_works_without_receipt_header(app, monke
         assert "request_id" not in kwargs
         return {"reply": message, "turn_id": "legacy-turn"}
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', execute)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/desktop/chat", headers={"Authorization": "Bearer fixture-desktop"},
                                      json={"message": "Legacy fixture"})

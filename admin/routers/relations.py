@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.sandbox import get_paths
-from admin.routers.users import _resolve_char_id
+from admin import profile_scope
 
 router = APIRouter()
 
@@ -148,8 +148,8 @@ async def get_relation(user_id: str, char_id: str | None = None, auth=Depends(re
     merged: 经 default / 内置默认合并后的实际生效配置。
     """
     from core import user_relation
-    raw = _read_relations(_resolve_char_id(char_id)).get(str(user_id))
-    merged = user_relation.get_relation(user_id, char_id=_resolve_char_id(char_id))
+    raw = _read_relations(profile_scope.resolve_profile_character_id(char_id)).get(str(user_id))
+    merged = user_relation.get_relation(user_id, char_id=profile_scope.resolve_profile_character_id(char_id))
     return {"user_id": user_id, "raw": raw, "merged": merged}
 
 
@@ -160,7 +160,7 @@ async def update_relation(user_id: str, body: RelationUpdate, char_id: str | Non
     只传入需要修改的字段即可，未传入字段保持原值。
     permissions 字段也是合并更新，不整体覆盖。
     """
-    relations = _read_relations(_resolve_char_id(char_id))
+    relations = _read_relations(profile_scope.resolve_profile_character_id(char_id))
     uid = str(user_id)
     existing = dict(relations.get(uid, {}))
 
@@ -175,7 +175,7 @@ async def update_relation(user_id: str, body: RelationUpdate, char_id: str | Non
 
     existing.update(update_data)
     relations[uid] = existing
-    _write_relations(relations, _resolve_char_id(char_id))
+    _write_relations(relations, profile_scope.resolve_profile_character_id(char_id))
     _hot_reload()
     return {"message": f"用户 {uid} 关系配置已更新", "relation": relations[uid]}
 
@@ -183,11 +183,11 @@ async def update_relation(user_id: str, body: RelationUpdate, char_id: str | Non
 @router.delete("/{user_id}", summary="删除用户关系配置")
 async def delete_relation(user_id: str, char_id: str | None = None, auth=Depends(require_scopes("admin"))):
     """从 relations.yaml 删除指定用户条目并热重载（不影响 default）"""
-    relations = _read_relations(_resolve_char_id(char_id))
+    relations = _read_relations(profile_scope.resolve_profile_character_id(char_id))
     uid = str(user_id)
     if uid not in relations:
         raise HTTPException(status_code=404, detail=f"用户 {uid} 没有关系配置")
     del relations[uid]
-    _write_relations(relations, _resolve_char_id(char_id))
+    _write_relations(relations, profile_scope.resolve_profile_character_id(char_id))
     _hot_reload()
     return {"message": f"用户 {uid} 关系配置已删除"}

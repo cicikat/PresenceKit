@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Literal
 
-from core.activity.continuity import reality_dialogue
+from admin.activity_dialogue import reality_dialogue
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -93,7 +93,11 @@ async def observation(session_id: str | None = Query(default=None, pattern=r"^[a
     runtime = service()
     if session_id:
         from core.activity import store
-        uid, char_id = runtime.principal()
+        from core.character_context import ActiveCharacterError
+        try:
+            uid, char_id = runtime.principal()
+        except ActiveCharacterError as exc:
+            raise HTTPException(exc.status_code, detail=exc.detail) from None
         saved = store.load_session(char_id, uid, "minecraft", session_id)
         if not saved:
             raise HTTPException(404, detail="session_not_found")

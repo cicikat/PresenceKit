@@ -64,12 +64,12 @@ class MinecraftService:
         return hashlib.sha256(json.dumps(self.config().get("model_presets", {}), sort_keys=True, default=str).encode()).hexdigest()
 
     def _principal(self) -> tuple[str, str]:
-        from admin.routers._common import active_char_id
+        from core.character_context import active_character_id
         cfg = self.config()
         uid = str(cfg.get("scheduler", {}).get("owner_id") or cfg.get("default_user_id") or "owner")
         if get_reality_guard_status(uid) != DreamGuardStatus.ALLOW:
             raise MinecraftError("reality_unavailable")
-        return uid, active_char_id()
+        return uid, active_character_id()
 
     @staticmethod
     def digest(cfg) -> str:

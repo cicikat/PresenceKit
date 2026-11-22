@@ -181,7 +181,7 @@ def test_admin_food_records_are_read_only(sandbox, monkeypatch):
     from fastapi.testclient import TestClient
     from admin import auth
     from admin.routers import food_memory as routes
-    monkeypatch.setattr(routes, 'scope', lambda char_id: ('fixture-owner', char_id))
+    monkeypatch.setattr('admin.food_requests.food_owner_scope', lambda char_id: ('fixture-owner', char_id))
     monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
     app = FastAPI()
     app.include_router(routes.router)

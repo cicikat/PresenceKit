@@ -235,3 +235,19 @@ def install_service(handler) -> WechatService:
 
 def get_service() -> WechatService | None:
     return _service
+
+
+def operational_state(*, enabled=None):
+    service = get_service()
+    if service:
+        return service.snapshot()
+    if enabled is None:
+        try:
+            enabled = load_settings().enabled
+        except (ValueError, TypeError):
+            return {"effective_state": "invalid_configuration", "connected": False,
+                    "runtime_started": False, "proactive_effective": False,
+                    "last_error": "invalid_configuration", "counters": {}, "queue_depth": 0}
+    return {"effective_state": "runtime_not_started" if enabled else "disabled",
+            "runtime_started": False, "connected": False, "proactive_effective": False,
+            "last_error": "", "counters": {}, "queue_depth": 0}

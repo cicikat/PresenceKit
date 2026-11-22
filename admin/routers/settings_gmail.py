@@ -9,7 +9,7 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, SecretStr
 
 from admin.auth import require_scopes, resolve_token
-from admin.routers.character import _active_character_id
+from core import character_context
 from core.mail import gmail, gmail_pending
 
 admin = require_scopes("admin")
@@ -99,7 +99,7 @@ async def validate_oauth_config(body: OAuthConfig, response: Response, auth=Depe
 
 
 def _principal() -> tuple[str, str]:
-    return gmail.owner(), _active_character_id()
+    return gmail.owner(), character_context.configured_character_id()
 
 
 def _admin_valid(token: str) -> bool:

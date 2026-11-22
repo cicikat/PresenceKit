@@ -16,27 +16,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from admin.auth import require_scopes
+from admin import observation_scope
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _resolve_char_id(requested: str) -> str:
-    if requested:
-        return requested
-    try:
-        import json
-        from core.sandbox import get_paths
-        p = get_paths().active_prompt_assets()
-        data = json.loads(p.read_text(encoding="utf-8"))
-        char_id = (data.get("active_character") or "").strip()
-        if not char_id:
-            raise HTTPException(status_code=503, detail="active_character 未配置")
-        return char_id
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"读取 active_character 失败: {exc}") from exc
 
 
 @router.get(
@@ -63,7 +48,7 @@ async def get_provenance(
     if limit < 1 or limit > 500:
         raise HTTPException(status_code=422, detail="limit 须在 1-500 之间")
 
-    resolved_char_id = _resolve_char_id(char_id)
+    resolved_char_id = observation_scope.resolve_observation_character_id(char_id)
     scope_yexuan_self = scope == "yexuan_self"
 
     from core.memory.provenance_log import query

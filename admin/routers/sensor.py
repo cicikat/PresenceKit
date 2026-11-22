@@ -38,13 +38,13 @@ async def receive_ambient(
     session_id: str = Header(alias="X-Presence-Session"),
     auth=Depends(require_scopes("sensor.write", "chat")),
 ):
-    from admin.routers.chat import _session_grant
+    from admin.session_requests import session_grant
     from admin.token_registry import hash_token
 
     device = {"desktop": "desktop", "mobile": "phone"}.get(auth.profile)
     if device is None:
         raise HTTPException(403, "ambient_device_profile_required")
-    grant = _session_grant(session_id, auth.label)
+    grant = session_grant(session_id, auth.label)
     if grant is None:
         raise HTTPException(422, "session_scope_required")
     credential = request.headers["Authorization"].split(None, 1)[1]
@@ -64,16 +64,16 @@ async def get_ambient_snapshot(
     device: ambient_state.Device = "desktop",
     auth=Depends(require_scopes("state.read")),
 ):
-    from admin.routers.chat import _owner_media_scope
+    from admin.session_requests import owner_media_scope
 
-    return ambient_state.snapshot(*_owner_media_scope(), device)
+    return ambient_state.snapshot(*owner_media_scope(), device)
 
 
 def _phone_policy_scope(auth, session_id):
-    from admin.routers.chat import _session_grant
+    from admin.session_requests import session_grant
     if auth.profile != "mobile":
         raise HTTPException(403, "mobile_profile_required")
-    grant = _session_grant(session_id, auth.label)
+    grant = session_grant(session_id, auth.label)
     if grant is None:
         raise HTTPException(422, "session_scope_required")
     return grant.owner_id, grant.char_id

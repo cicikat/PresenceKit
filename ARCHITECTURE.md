@@ -22,7 +22,7 @@ AR-02（327）依赖方向：`core/tool_dispatcher.py` 只提供稳定向外 API
 register_tools，MCP 在同一对象增删。exposure 与 execution 共享 policy 的主体授权，
 execution 组合 validation / invoker / outcome，域 adapter 绑定可信参数。
 `core/owner_chat/service → prepare / generation / delivery → Pipeline / turn_sink`
-不回调 HTTP Router；Router 同对象导出公开聊天入口。
+不回调 HTTP Router；聊天调用者直接依赖 `core.owner_chat.service`。
 `admin/routers/dream.py → dream_* → dream_common / core.dream`，
 WAKE/resume 状态转换归 `core/dream/session_control.py`，素材校验/写入归
 scenario_authoring / world_authoring。无反向 Facade、第二套状态或消息写入。
@@ -33,8 +33,11 @@ scenario_authoring / world_authoring。无反向 Facade、第二套状态或消�
 2026-11-22 T0 对三仓 main 的迁移遗留核实与目标所有者见
 [迁移切断清单](docs/refactors/migration-cutover-inventory.md)。现有 AR-02 已清零边界
 继续零容忍；全仓新增的 Core→Router、Router 私有依赖和 Scheduler 通用状态入口
-由同一测试文件及独立 architecture CI job 保护。尚存债务按文件/函数/目标/次数冻结，
-由 T1/T2 迁移时逐项联删；T0 不代表 Pipeline、Session、资产或记忆切换已经完成。
+由同一测试文件及独立 architecture CI job 保护。T1 已清零 Core→Router 和 Router 私有依赖，
+45 条债务联删后禁止恢复；剩余 26 条 Scheduler 债务仍按文件/函数/目标/次数冻结，待 T2。
+HTTP 准入/异常映射归明确职责的 admin 支持模块，角色选择与热重载、会话、Dream 和状态查询
+归 Core 所有者；详见 [T1 迁移与验证](docs/refactors/migration-cutover-t1.md)。
+本单不代表 Pipeline、Session、资产或记忆切换已经完成。
 
 工单 268 增加个人微信文本私聊 reference transport：第三方 REST/WS 仅在
 `integrations/wechat/` 解码，经 `integrations/wechat_transport.py` 规范合同、

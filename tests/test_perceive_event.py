@@ -1,3 +1,4 @@
+from core.owner_chat.service import run_owner_chat_turn
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_perceive_event.py — core/perceive_event.py gate and wake-event coverage
@@ -396,7 +397,7 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     import core.write_envelope as _we
     monkeypatch.setattr(_we, "stamp_user_chat", lambda: _we.WriteEnvelope())
 
-    result = await _chat.run_owner_chat_turn("你好", "desktop")
+    result = await run_owner_chat_turn("你好", "desktop")
 
     assert isinstance(result, dict), "run_owner_chat_turn must return a dict"
     assert "reply" in result

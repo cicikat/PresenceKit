@@ -247,7 +247,7 @@ async def test_admin_pronoun_round_trip_and_validation(monkeypatch):
     facts = {}
     monkeypatch.setattr(user_facts, "load_user_facts", lambda uid, **kwargs: facts.copy())
     monkeypatch.setattr(user_facts, "save_user_facts", lambda uid, value, **kwargs: facts.update(value) or True)
-    monkeypatch.setattr(users, "_resolve_char_id", lambda value: TEST_CHAR_ID)
+    monkeypatch.setattr('admin.profile_scope.resolve_profile_character_id', lambda value: TEST_CHAR_ID)
     assert (await users.get_user_pronoun("fixture", auth=None))["pronoun"] == "她"
     for pronoun in ("他", "祂", "TA", "它", "她"):
         await users.set_user_pronoun("fixture", users._PronounBody(pronoun=pronoun), auth=None)

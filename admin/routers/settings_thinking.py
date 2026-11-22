@@ -35,8 +35,8 @@ _DEFAULTS = {
 def _live_char_id() -> str | None:
     """Active character for live monologue routing, not the profile being edited."""
     try:
-        from admin.routers.settings_llm import _active_character_id_for_routing_warning
-        return _active_character_id_for_routing_warning()
+        from core import character_context
+        return character_context.routing_character_id()
     except Exception:
         return None
 

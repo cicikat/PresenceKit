@@ -13,10 +13,11 @@ router = APIRouter()
 
 
 def _camera_scope(session_header: str | None, auth) -> tuple[str, str, str]:
-    from admin.routers.chat import _owner_media_scope, _session_grant
+    from admin.session_requests import owner_media_scope
+    from admin.session_requests import session_grant
     label = getattr(auth, "label", "legacy-admin")
-    grant = _session_grant(session_header, label)
-    uid, char_id = (grant.owner_id, grant.char_id) if grant else _owner_media_scope()
+    grant = session_grant(session_header, label)
+    uid, char_id = (grant.owner_id, grant.char_id) if grant else owner_media_scope()
     return uid, char_id, label
 
 

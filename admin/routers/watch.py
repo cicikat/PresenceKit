@@ -141,13 +141,13 @@ async def get_hds_local_status(auth=Depends(require_scopes("state.read"))):
 
 def _character_read_stats(owner_id: str) -> dict:
     """Bounded read-hit counts for ``read_hds_heart_rate``, no arguments or results."""
-    from admin.routers.provenance import _resolve_char_id
+    from admin import observation_scope
     from core.tool_audit import query
 
     if not owner_id:
         return {"last_24h": 0, "last_7d": 0, "latest_time": None}
     try:
-        char_id = _resolve_char_id("")
+        char_id = observation_scope.resolve_observation_character_id("")
         recent = query(owner_id, char_id, time_range="7d", tool="read_hds_heart_rate", limit=100)
     except Exception:
         return {"last_24h": 0, "last_7d": 0, "latest_time": None}

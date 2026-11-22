@@ -25,7 +25,6 @@ POST   /model-presets/presets/{name}/test     — 连通性测试：发一条 1 
 
 import json
 import logging
-from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -39,6 +38,8 @@ router = APIRouter()
 from admin.routers.image_generation_controls import router as image_controls_router
 router.include_router(image_controls_router)
 from core.config_loader import get_config_path
+from core import character_context
+from admin.secret_display import looks_placeholder, mask_key
 CONFIG_FILE = get_config_path()
 logger = logging.getLogger(__name__)
 
@@ -192,13 +193,6 @@ async def update_llm_debug_requests(body: LlmDebugRequestsUpdate, _auth=Depends(
 # 只读写 model_presets 主聊天 preset。扁平 llm: 合成已退出（Brief 93 §1 收口）。
 # ---------------------------------------------------------------------------
 
-def _looks_placeholder(value) -> bool:
-    """config.example.yaml 里的占位符统一 YOUR_ / YOUR- 前缀（见 PLACEHOLDER_ADMIN_SECRET 同一约定）。"""
-    v = str(value or "").strip()
-    if not v:
-        return True
-    upper = v.upper()
-    return upper.startswith("YOUR_") or upper.startswith("YOUR-")
 
 
 def _resolve_base_chat_preset_name(cfg: dict) -> Optional[str]:
@@ -222,14 +216,14 @@ def _base_model_view(cfg: dict) -> dict:
     base_url = target.get("base_url", "")
     api_key  = target.get("api_key", "")
     model    = target.get("model", "")
-    configured = not (_looks_placeholder(base_url) or _looks_placeholder(api_key) or _looks_placeholder(model))
+    configured = not (looks_placeholder(base_url) or looks_placeholder(api_key) or looks_placeholder(model))
     return {
         "mode": "preset" if preset_name else "missing",
         "preset_name": preset_name,
-        "base_url": "" if _looks_placeholder(base_url) else base_url,
-        "model": "" if _looks_placeholder(model) else model,
-        "api_key_masked": _mask_key(api_key) if api_key and not _looks_placeholder(api_key) else "",
-        "api_key_set": bool(api_key) and not _looks_placeholder(api_key),
+        "base_url": "" if looks_placeholder(base_url) else base_url,
+        "model": "" if looks_placeholder(model) else model,
+        "api_key_masked": mask_key(api_key) if api_key and not looks_placeholder(api_key) else "",
+        "api_key_set": bool(api_key) and not looks_placeholder(api_key),
         "configured": configured,
     }
 
@@ -320,11 +314,11 @@ def _embedding_view(cfg: dict) -> dict:
     from core.memory.embedding import connection_configured
     configured = target.get("provider_kind") == "openai_compat" and connection_configured(target) and bool(dim)
     return {
-        "base_url": "" if _looks_placeholder(base_url) else base_url,
-        "model": "" if _looks_placeholder(model) else model,
+        "base_url": "" if looks_placeholder(base_url) else base_url,
+        "model": "" if looks_placeholder(model) else model,
         "dim": dim,
-        "api_key_masked": _mask_key(api_key) if api_key and not _looks_placeholder(api_key) else "",
-        "api_key_set": bool(api_key) and not _looks_placeholder(api_key),
+        "api_key_masked": mask_key(api_key) if api_key and not looks_placeholder(api_key) else "",
+        "api_key_set": bool(api_key) and not looks_placeholder(api_key),
         "configured": configured,
     }
 
@@ -375,7 +369,7 @@ async def update_embedding_settings(body: EmbeddingSettingsUpdate, auth=Depends(
 
 @router.get("/settings/setup-status", summary="配置中心整体状态（首启自动跳转 + 缺项横幅判定）")
 async def get_setup_status(auth=Depends(require_scopes("admin"))):
-    from admin.routers.scheduler import owner_status
+    from core.owner_config import owner_status
 
     cfg = get_config()
     base = _base_model_view(cfg)
@@ -866,10 +860,6 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
 # /model-presets — Phase 3 endpoints
 # ---------------------------------------------------------------------------
 
-def _mask_key(key: str) -> str:
-    if not key or len(key) <= 8:
-        return "***"
-    return key[:4] + "***" + key[-4:]
 
 
 def _mask_presets(presets: dict) -> dict:
@@ -879,28 +869,11 @@ def _mask_presets(presets: dict) -> dict:
         entry.setdefault("stream_compatibility", "strict")
         entry.setdefault("protocol_recovery", "off")
         if "api_key" in entry:
-            entry["api_key"] = _mask_key(entry["api_key"])
+            entry["api_key"] = mask_key(entry["api_key"])
         masked[name] = entry
     return masked
 
 
-def _active_character_id_for_routing_warning() -> str | None:
-    """Read the selected character without making a failed admin read fatal."""
-    try:
-        from core.sandbox import get_paths
-
-        active_id = json.loads(
-            get_paths().active_prompt_assets().read_text(encoding="utf-8")
-        ).get("active_character")
-        if isinstance(active_id, str) and active_id:
-            return active_id
-    except Exception as exc:
-        logger.debug("[model-routing] unable to read active prompt assets: %s", exc)
-
-    raw = get_config().get("character", {}).get("default")
-    if not isinstance(raw, str) or not raw:
-        return None
-    return Path(raw).stem
 
 
 def _active_character_routing_override() -> dict | None:
@@ -909,7 +882,7 @@ def _active_character_routing_override() -> dict | None:
     This is deliberately fail-soft: model routing remains readable even while an
     authored card or active prompt asset file is temporarily unavailable.
     """
-    char_id = _active_character_id_for_routing_warning()
+    char_id = character_context.routing_character_id()
     if not char_id:
         return None
 
@@ -1058,10 +1031,10 @@ def _rewrite_character_model_routing(*, old_name: str, new_name: str | None) -> 
     if rewritten:
         reload_registry()
         try:
-            from admin.routers.character import _active_character_id, _reload_character
-            active_id = _active_character_id()
+            from core import character_context, character_loader
+            active_id = character_context.configured_character_id()
             if active_id:
-                _reload_character(active_id)
+                character_loader.reload_active_character(active_id)
         except Exception as exc:
             logger.warning("[model_presets] 角色卡 model_routing 改写后热重载失败（非致命）: %s", exc)
     return rewritten

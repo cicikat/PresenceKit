@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
+import json
 from pathlib import Path
 
 from admin.token_registry import TokenRecord
@@ -67,28 +67,38 @@ def test_status_redacts_machine_secret_and_event_identity(monkeypatch):
         assert forbidden not in serialized
 
 
-def test_manual_test_wake_uses_formal_garden_ingress_without_inline_drain(monkeypatch):
+def test_manual_test_wake_uses_formal_garden_ingress_without_inline_drain(sandbox, monkeypatch):
+    from unittest.mock import AsyncMock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from admin import auth
     from admin.routers import integrations
-    from admin.routers import wake_bridge
-
-    received = {}
-
-    async def fake_submit(body):
-        received.update(body)
-        return {"status": "pending"}
+    from core.wake_bridge import WakeBridge
 
     monkeypatch.setattr(integrations, "_integration_token_configured", lambda: True)
     monkeypatch.setattr(integrations, "_active_scope", lambda: ("owner-a", "char-a"))
-    monkeypatch.setattr(wake_bridge, "submit_garden_wake", fake_submit)
-
-    assert asyncio.run(integrations.send_garden_test_wake(_auth=object())) == {"status": "pending"}
-    assert received["provider"] == "galatea_garden"
-    assert received["reason"] == "manual_test"
-    assert received["uid"] == "owner-a" and received["char_id"] == "char-a"
-    source = inspect.getsource(integrations.send_garden_test_wake)
-    assert "WakeBridge" not in source
-    assert "drain_due" not in source
-    assert "turn_sink" not in source
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner-a"}})
+    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "char-a")
+    monkeypatch.setattr(auth, "resolve_token", lambda value: auth.TokenInfo(
+        "fixture-admin", frozenset({"admin"})) if value == "fixture-t1" else None)
+    drain, generate, sink = AsyncMock(), AsyncMock(), AsyncMock()
+    monkeypatch.setattr(WakeBridge, "drain_due", drain)
+    monkeypatch.setattr("core.scheduler.execution.execute_prompt", generate)
+    monkeypatch.setattr("core.turn_sink.record_assistant_turn", sink)
+    app = FastAPI()
+    app.include_router(integrations.router)
+    with TestClient(app) as client:
+        assert client.post("/integrations/garden/test-wake").status_code == 401
+        response = client.post("/integrations/garden/test-wake", headers={"Authorization": "Bearer fixture-t1"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending" and response.json()["sent"] is False
+    state = json.loads(sandbox.wake_bridge_state("owner-a", char_id="char-a", provider="galatea_garden").read_text(encoding="utf-8"))
+    record, = state["events"].values()
+    assert record["provider"] == "galatea_garden" and record["reason"] == "manual_test"
+    assert record["status"] == "pending" and record["attempts"] == 0
+    drain.assert_not_called()
+    generate.assert_not_called()
+    sink.assert_not_called()
 
 
 def test_missing_integration_token_rejects_test_without_ingress(monkeypatch):

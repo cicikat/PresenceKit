@@ -1,7 +1,6 @@
 """Dream worlds API responsibilities; legacy names re-exported by dream.py."""
 
 from admin.routers import dream_common
-from admin.routers import dream_presets
 from core import sandbox
 
 from core.dream import world_authoring
@@ -12,6 +11,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from admin.auth import require_scopes
+from core.asset_registry import reload_registry
 
 router = APIRouter()
 logger = logging.getLogger("admin.routers.dream")
@@ -312,5 +312,5 @@ async def put_dream_preset(world: str, body: dict, _auth=Depends(require_scopes(
     p = sandbox.get_paths().dream_preset_write_path(world)
     dream_common._log_dream_write(kind="dream_preset", read_path=read_path, canonical=p)
     world_authoring.write_preset(p, str(content))
-    dream_presets._reload_dream_preset_registry()
+    reload_registry()
     return {"ok": True, "world": world, "bytes": len(content.encode("utf-8"))}

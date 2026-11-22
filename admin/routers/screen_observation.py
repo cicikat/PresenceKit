@@ -1,6 +1,5 @@
 """Device-bound polling transport for an explicitly requested fresh screenshot."""
 import base64
-import hashlib
 import io
 from typing import Literal
 
@@ -8,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from core.perception import screen_observation as service
 from admin.auth import require_scopes
+from admin.device_identity import require_device_identity
 
 router = APIRouter()
 
@@ -25,20 +25,16 @@ class Result(BaseModel):
     image_base64: str = Field(default="", max_length=4_000_000)
 
 
-def identity(request: Request, auth, device: str) -> str:
-    if auth.profile != device and "admin" not in auth.scopes:
-        raise HTTPException(403, "device profile mismatch")
-    return hashlib.sha256(request.headers.get("authorization", "").encode()).hexdigest()
 
 
 @router.post("/perception/screen/poll")
 async def poll(body: Poll, request: Request, auth=Depends(require_scopes("sensor.write"))):
-    return service.poll(body.device, identity(request, auth, body.device), body.available, body.idle_seconds)
+    return service.poll(body.device, require_device_identity(request, auth, body.device), body.available, body.idle_seconds)
 
 
 @router.post("/perception/screen/result")
 async def result(body: Result, request: Request, auth=Depends(require_scopes("sensor.write"))):
-    producer = identity(request, auth, body.device)
+    producer = require_device_identity(request, auth, body.device)
     image = None
     if body.status == "ok":
         try:

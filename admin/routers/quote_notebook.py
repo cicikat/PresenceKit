@@ -1,7 +1,7 @@
 """Owner-controlled quote notebook read-only inspection."""
 from fastapi import APIRouter,Depends,HTTPException,Query
 from admin.auth import require_scopes
-from admin.routers.food_memory import scope
+from admin import food_requests
 from core import quote_notebook as store
 
 router=APIRouter()
@@ -10,13 +10,13 @@ router=APIRouter()
 @router.get('/observability/quotes')
 async def listing(char_id:str=Query(min_length=1,max_length=100),query:str=Query('',max_length=200),
                   limit:int=Query(20,ge=1,le=50),_auth=Depends(require_scopes('memory.read'))):
-    uid,cid=scope(char_id)
+    uid,cid=food_requests.food_owner_scope(char_id)
     return store.list_quotes(uid,cid,query,limit)
 
 
 @router.get('/observability/quotes/{quote_id}')
 async def detail(quote_id:str,char_id:str=Query(min_length=1,max_length=100),_auth=Depends(require_scopes('memory.read'))):
-    uid,cid=scope(char_id)
+    uid,cid=food_requests.food_owner_scope(char_id)
     try:
         return store.read(uid,cid,quote_id)
     except ValueError as exc:

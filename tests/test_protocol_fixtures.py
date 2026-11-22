@@ -110,8 +110,8 @@ async def test_mobile_chat_provider_uses_the_canonical_fixture(monkeypatch):
         assert kwargs["reply_to"] == fixture["request"]["body"]["reply_to"]
         return dict(expected)
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", fake_owner_turn)
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda uid: None)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fake_owner_turn)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda uid: None)
     monkeypatch.setattr(
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "fixture-owner"}},
@@ -136,8 +136,8 @@ async def test_desktop_http_provider_uses_the_canonical_fixture(monkeypatch):
         assert kwargs["reply_to"] == fixture["request"]["body"]["reply_to"]
         return dict(expected)
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", fake_owner_turn)
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda uid: None)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fake_owner_turn)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda uid: None)
     monkeypatch.setattr(
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "fixture-owner"}},

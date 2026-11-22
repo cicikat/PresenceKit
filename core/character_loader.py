@@ -288,3 +288,25 @@ class CharacterLoader:
 
     def should_check_consistency(self, character: Character) -> bool:
         return should_check_consistency(character)
+
+
+def reload_active_character(char_id: str) -> None:
+    """Hot-reload character on the running pipeline.
+
+    Fail-loud on unknown id / missing file — callers should catch and surface errors.
+    Silently skips when pipeline is not yet initialized (standalone admin mode).
+    """
+    from core.pipeline_registry import get as _get_pipeline
+
+    pipeline = _get_pipeline()
+    if pipeline is None:
+        return  # admin running standalone, no pipeline yet
+
+    new_char = load(char_id)
+    pipeline.character = new_char
+    pipeline._active_character_id = char_id
+    if pipeline.lore_engine is not None:
+        pipeline.lore_engine.load()
+        if new_char.world_book:
+            pipeline.lore_engine.load_entries(new_char.world_book)
+    logger.info(f"[character] hot-reloaded {char_id!r} ({new_char.name}) on pipeline")

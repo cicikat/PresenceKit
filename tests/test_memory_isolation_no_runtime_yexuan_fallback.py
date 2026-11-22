@@ -221,21 +221,6 @@ def test_episodic_sweep_slow_queue_payload_carries_char_id():
 # ── 3a. admin/users active 缺失 / 非法 → 503/422（覆盖性回归）────────────────
 # 详细测试见 test_admin_users_profile_scope.py；此处仅做源码级检查回归。
 
-def test_admin_users_router_source_has_resolve_char_id():
-    """
-    admin/routers/users.py 应包含 _resolve_char_id 函数，
-    确认 P1-0E 的 fail-loud 逻辑未被意外移除。
-    """
-    src = _read_src("admin/routers/users.py")
-    assert "def _resolve_char_id" in src, (
-        "admin/routers/users.py 应有 _resolve_char_id 函数（fail-loud resolver）"
-    )
-    assert "status_code=503" in src, (
-        "_resolve_char_id 应在 active 缺失时抛 503"
-    )
-    assert "status_code=422" in src, (
-        "_resolve_char_id 应在 char_id 非法时抛 422"
-    )
 
 
 # ── 3b. admin/users _resolve_char_id 源文件不含 TEST_CHAR_ID 硬编码 ──────────────

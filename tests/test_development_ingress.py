@@ -49,7 +49,7 @@ def test_synthetic_turn_returns_to_developer_without_owner_context(development_c
     model_inputs = []
 
     async def model_boundary(messages, **kwargs):
-        from admin.routers.chat import run_owner_chat_turn
+        from core.owner_chat.service import run_owner_chat_turn
         from core.tool_dispatcher import execute_structured
 
         model_inputs.extend(messages)

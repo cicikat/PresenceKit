@@ -26,7 +26,7 @@ pytest -n auto -q
 | 层级 | 入口 | 主要覆盖 | 证据边界 |
 |---|---|---|---|
 | 单元 / 模块回归 | `tests/test_*.py` | memory、pipeline、prompt、scheduler、auth、channels、tools 等模块 | 不能证明真实网络、真实设备或发布包行为 |
-| 架构边界 | `tests/test_ar02_dependency_directions.py`；独立 `architecture` CI job | AR-02 零反向依赖；全仓 Core→Router、Router 私有依赖、Scheduler 活动/身份入口精确债务冻结与故障注入 | AST 静态合同；不是业务/设备验收；T1/T2 尚存债务见 [迁移清单](refactors/migration-cutover-inventory.md) |
+| 架构边界 | `tests/test_ar02_dependency_directions.py`；独立 `architecture` CI job | AR-02/T1 零反向依赖，已消除 T1 债务不可恢复；Scheduler 26 条剩余债务精确冻结及故障注入 | AST 静态合同；业务验证见 [T1 报告](refactors/migration-cutover-t1.md)，剩余 T2 见 [迁移清单](refactors/migration-cutover-inventory.md) |
 | 跨模块契约 | 相关 `test_*.py` | HTTP/WS、鉴权、写入闸门、消息收口、跨层字段契约 | 目前主要是后端内的契约；三仓 head 兼容仍需单独矩阵 |
 | Prompt / tag 评测 | `python tests/run_eval.py` | tag 激活、prompt layer 过滤和消融边界 | 规则评测，不等于真实 LLM 输出质量 |
 | 身份连续性评测 | `python tests/run_identity_eval.py` | identity cold start、连续性、演化与拒绝场景 | 离线评测，不等于长期真实用户观察 |

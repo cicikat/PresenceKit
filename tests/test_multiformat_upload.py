@@ -18,7 +18,7 @@ def test_csv_upload_reaches_turn_and_archives_full_text(sandbox, monkeypatch, ch
         captured.append((text, kwargs))
         return {'reply': 'ok', 'turn_id': 'csv-turn', 'msg_id': 'csv-turn'}
 
-    monkeypatch.setattr(router, 'run_owner_chat_turn', turn)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', turn)
     monkeypatch.setattr('core.config_loader.get_config', lambda: {'scheduler': {'owner_id': 'reader'}})
     monkeypatch.setattr('core.pipeline_registry.get', lambda: SimpleNamespace(_active_character_id='char-test'))
     client = _client(monkeypatch)

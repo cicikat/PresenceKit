@@ -1,3 +1,4 @@
+from core.owner_chat.service import run_owner_chat_turn
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """Brief 72：生成后段落硬兜底、双输出路径与热开关。"""
 
@@ -352,7 +353,7 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
     monkeypatch.setattr(desktop_ws, "push_segments", fake_push_segments)
     monkeypatch.setattr(perform_mapper, "enrich_say_segments", noop_async)
 
-    result = await chat.run_owner_chat_turn("你好", "desktop")
+    result = await run_owner_chat_turn("你好", "desktop")
 
     streamed = "".join(stream_deltas)
     assert memory_messages == [raw_reply]

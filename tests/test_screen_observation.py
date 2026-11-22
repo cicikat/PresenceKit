@@ -107,7 +107,8 @@ def test_profile_cannot_impersonate_another_device():
     from fastapi import HTTPException
     request = Request({"type": "http", "headers": [(b"authorization", b"Bearer test")]})
     with pytest.raises(HTTPException) as error:
-        api.identity(request, TokenInfo("phone", frozenset({"sensor.write"}), "mobile"), "desktop")
+        from admin.device_identity import require_device_identity
+        require_device_identity(request, TokenInfo("phone", frozenset({"sensor.write"}), "mobile"), "desktop")
     assert error.value.status_code == 403
 
 

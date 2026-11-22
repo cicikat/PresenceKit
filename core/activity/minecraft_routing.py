@@ -5,8 +5,8 @@ from core.model_registry import resolve_category_info
 
 def route_view() -> dict:
     try:
-        from admin.routers._common import active_char_id
-        char_id = active_char_id()
+        from core.character_context import active_character_id
+        char_id = active_character_id()
     except Exception:
         char_id = None
     try:

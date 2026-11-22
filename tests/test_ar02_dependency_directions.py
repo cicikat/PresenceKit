@@ -312,6 +312,14 @@ def test_migration_cutover_has_no_new_or_stale_dependency_debt():
     )
 
 
+def test_t1_http_dependency_boundaries_are_zero():
+    """T1 is retired, even while older target commits still list its debt."""
+    retired = {"core-router", "router-private"}
+    assert not [row for row in cutover_scan() if row["rule"] in retired], "T1 must remain zero"
+    ledger = json.loads(DEBT_PATH.read_text(encoding="utf-8"))
+    assert not [row for row in ledger["dependencies"] if row["rule"] in retired], "T1 debt may not be restored"
+
+
 @pytest.mark.parametrize("module,source,rule", [
     ("core.new_service", "from admin.routers.chat import run_owner_chat_turn", "core-router"),
     ("core.new_service", "def call():\n from admin.routers import chat", "core-router"),
@@ -463,6 +471,18 @@ def test_ci_entrypoints_enforce_debt_convergence(cutover_git_repository, mutatio
         assert scan.returncode == 1 and "New dependency or stale debt" in scan.stdout, scan.stdout + scan.stderr
     else:
         assert scan.returncode == 0, scan.stdout + scan.stderr
+
+
+def test_retired_t1_debt_cannot_be_restored_with_source_and_json(cutover_git_repository):
+    """An old Git baseline is not permission to revive an eliminated T1 edge."""
+    root, _, _, _ = cutover_git_repository
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--noconftest", "-c", "pytest.ini", "-q",
+         "tests/test_ar02_dependency_directions.py::test_t1_http_dependency_boundaries_are_zero"],
+        cwd=root, env=dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 1 and "T1 must remain zero" in result.stdout, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("event_name,event_ref", [

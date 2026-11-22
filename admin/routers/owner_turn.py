@@ -88,11 +88,12 @@ async def owner_turn(
 ):
     _require_owner_input(_auth)
     client_turn_id, message, reply_to, upload_ids = _request_body(body)
-    from admin.routers.chat import _check_reality_not_in_dream, run_owner_chat_turn
+    from admin.reality_admission import require_reality_turn
+    from core.owner_chat.service import run_owner_chat_turn
     from core.config_loader import get_config
 
     uid = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
-    _check_reality_not_in_dream(uid)
+    require_reality_turn(uid)
     context = owner_input_context(_auth.label, getattr(_auth, "profile", None) or "owner-input")
     try:
         status, result = await execute_idempotent_owner_turn(
