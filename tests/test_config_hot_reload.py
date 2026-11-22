@@ -78,6 +78,7 @@ def test_env_data_prefix_overrides_config_yaml(_isolated_config, monkeypatch):
     cfg = cl.get_config()
 
     assert cfg["data_prefix"] == "data/test_sandbox/session_env_test"
+    assert "data_prefix" not in cl.get_base_config()
     assert cfg_path.read_text(encoding="utf-8") == original_text, (
         "env 覆盖不应改写磁盘上的 config.yaml"
     )
@@ -105,4 +106,39 @@ def test_get_config_fail_open_when_stat_raises(_isolated_config, monkeypatch):
 
     cfg2 = cl.get_config()
     assert cfg2["scheduler"]["global_proactive_min_gap_seconds"] == 100
+
+
+def test_invalid_replacement_does_not_poison_the_previous_base_snapshot(_isolated_config):
+    cl, path = _isolated_config
+    previous = cl.get_base_config().copy()
+    cl.get_config()
+    path.write_text("[invalid-root]", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="mapping"):
+        cl.reload_config()
+
+    path.unlink()
+    assert cl.get_base_config() == previous
+    assert cl.get_config()["scheduler"] == previous["scheduler"]
+
+
+def test_reload_uses_the_revision_of_the_bytes_it_parsed(_isolated_config, monkeypatch):
+    from core import config_yaml
+
+    cl, path = _isolated_config
+    original_load = config_yaml.yaml.load
+    original_mtime = path.stat().st_mtime
+    replaced = False
+
+    def replace_after_parse(stream, **options):
+        nonlocal replaced
+        value = original_load(stream, **options)
+        if not replaced:
+            replaced = True
+            path.write_text("scheduler: {global_proactive_min_gap_seconds: 205}\n", encoding="utf-8")
+            os.utime(path, (original_mtime + 5, original_mtime + 5))
+        return value
+
+    monkeypatch.setattr(config_yaml.yaml, "load", replace_after_parse)
+    assert cl.reload_config()["scheduler"]["global_proactive_min_gap_seconds"] == 100
+    assert cl.get_config()["scheduler"]["global_proactive_min_gap_seconds"] == 205
 

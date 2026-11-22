@@ -4,9 +4,12 @@
 """
 
 import os
-import yaml
+from copy import deepcopy
 from pathlib import Path
-from core.config_yaml import load_config_yaml
+
+import yaml
+
+from core.config_yaml import ConfigMappingError, load_config_mapping
 
 _config: dict | None = None
 _base_config: dict | None = None
@@ -19,6 +22,20 @@ _DATA_PREFIX_ENV = "YEXUAN_DATA_PREFIX"
 def get_config_path() -> Path:
     """Return the base config path used by the runtime and admin writers."""
     return _CONFIG_PATH
+
+
+def _read_snapshot() -> tuple[dict, float]:
+    """Read both bytes and revision from the same open file."""
+    try:
+        with open(_CONFIG_PATH, "r", encoding="utf-8") as stream:
+            revision = os.fstat(stream.fileno()).st_mtime
+            return load_config_mapping(stream), revision
+    except FileNotFoundError:
+        raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
+    except yaml.YAMLError as exc:
+        raise RuntimeError(f"配置文件格式错误：{exc}")
+    except ConfigMappingError:
+        raise RuntimeError(f"配置文件顶层必须是 mapping：{_CONFIG_PATH.absolute()}")
 
 
 def get_config() -> dict:
@@ -52,17 +69,7 @@ def get_base_config() -> dict:
             raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
         return _base_config
     if _base_config is None or mtime != _base_config_mtime:
-        try:
-            with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-                loaded = load_config_yaml(f) or {}
-        except FileNotFoundError:
-            raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
-        except yaml.YAMLError as e:
-            raise RuntimeError(f"配置文件格式错误：{e}")
-        if not isinstance(loaded, dict):
-            raise RuntimeError(f"配置文件顶层必须是 mapping：{_CONFIG_PATH.absolute()}")
-        _base_config = loaded
-        _base_config_mtime = mtime
+        _base_config, _base_config_mtime = _read_snapshot()
     return _base_config
 
 
@@ -74,22 +81,14 @@ def reload_config() -> dict:
     自己的数据前缀，config.yaml 从此保持只读，不再被运行时脚本改写。
     """
     global _base_config, _base_config_mtime, _config, _config_mtime
-    try:
-        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-            _base_config = load_config_yaml(f) or {}
-        if not isinstance(_base_config, dict):
-            raise RuntimeError(f"配置文件顶层必须是 mapping：{_CONFIG_PATH.absolute()}")
-        _config = _base_config
-        _config_mtime = _CONFIG_PATH.stat().st_mtime
-        _base_config_mtime = _config_mtime
-    except FileNotFoundError:
-        raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
-    except yaml.YAMLError as e:
-        raise RuntimeError(f"配置文件格式错误：{e}")
+    base, revision = _read_snapshot()
+    runtime = deepcopy(base)
     env_prefix = os.environ.get(_DATA_PREFIX_ENV)
     if env_prefix:
-        _config["data_prefix"] = env_prefix
-    return _config
+        runtime["data_prefix"] = env_prefix
+    _base_config, _base_config_mtime = base, revision
+    _config, _config_mtime = runtime, revision
+    return runtime
 
 
 def _char_name() -> str:

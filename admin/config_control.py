@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from core.safe_write import safe_write_text
-from core.config_yaml import load_config_yaml, dump_config_yaml
+from core.config_yaml import ConfigMappingError, dump_config_yaml, load_config_mapping
 
 _WRITE_LOCK = threading.RLock()
 _MISSING = object()
@@ -26,14 +26,13 @@ class ConfigDocument(dict):
 
 def _load_mapping(path: Path) -> dict[str, Any]:
     try:
-        value = load_config_yaml(path.read_text(encoding="utf-8")) or {}
+        return load_config_mapping(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
+    except ConfigMappingError as exc:
+        raise HTTPException(status_code=500, detail=f"配置文件顶层必须是 mapping: {path.name}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"读取配置文件失败: {exc}") from exc
-    if not isinstance(value, dict):
-        raise HTTPException(status_code=500, detail=f"配置文件顶层必须是 mapping: {path.name}")
-    return value
 
 
 def read_config_file(path: Path) -> ConfigDocument:
