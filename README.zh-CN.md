@@ -4,7 +4,7 @@
 
 单用户 AI 陪伴**后端**。它拥有角色人格、长期记忆、情绪状态、工具执行、主动联系和梦境隔离运行时；QQ 机器人只是可选通道之一。桌面端（[PresenceKit-desktop](https://github.com/cicikat/PresenceKit-desktop)）和手机端（[PresenceKit-mobile](https://github.com/cicikat/PresenceKit-mobile)）是瘦客户端：负责界面、采集和投递，**不拥有**记忆、人格、调度或业务数据。
 
-当前产品列车是 **v1.1.0**。桌面线协议仍是冻结的 **v0.1**（`POST /desktop/chat` + `/ws/desktop`），不是新的 EventBus。精确 HTTP schema 以运行中的 `/openapi.json` 为准。专题文档在 `docs/`；根目录的 `ARCHITECTURE.md` / `DESIGN.md` / `AGENTS.md` 是开发入口，产品能力以 `docs/` 为准。
+当前公开发行版本是 **v1.3.0**。桌面线协议 **v0.1**（`POST /desktop/chat` 与 `/ws/desktop`）独立维护。精确 HTTP schema 以运行中的 `/openapi.json` 为准。产品能力以 `docs/` 下的专题文档为准，根目录的 `ARCHITECTURE.md`、`DESIGN.md` 和 `AGENTS.md` 是开发入口。
 
 ---
 
@@ -29,9 +29,9 @@ PresenceKit（本仓，后端 / 唯一业务真相源）
 
 | 仓 | 版本 | 说明 |
 |---|---|---|
-| 后端 PresenceKit | [v1.1.0](https://github.com/cicikat/PresenceKit/releases/tag/v1.1.0) | 本仓 |
-| 桌面 PresenceKit-desktop | [v1.1.0](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.1.0) | 渲染/ack 在客户端；冻结 v0.1 协议 |
-| 手机 PresenceKit-mobile | [v1.1.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.1.0) | 生活记录 UI、热力图、梦境外观等在手机端 |
+| 后端 PresenceKit | [v1.3.0](https://github.com/cicikat/PresenceKit/releases/tag/v1.3.0) | 本仓 |
+| 桌面 PresenceKit-desktop | [v1.3.0](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.3.0) | 客户端渲染与收件确认，线协议冻结在 v0.1 |
+| 手机 PresenceKit-mobile | [v1.3.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.3.0) | 生活记录、热力图和梦境界面 |
 
 跨仓契约、设置归属、open/observe 缺口见 [docs/three-repo-doc-index.md](docs/three-repo-doc-index.md) 与 [docs/three-repo-interface-catalog.md](docs/three-repo-interface-catalog.md)。功能开关、effective state、scope 以 [docs/feature-control-surface.md](docs/feature-control-surface.md) 为权威。
 
