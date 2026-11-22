@@ -166,42 +166,13 @@ def _assert_scoped_payload_has_char_id(source_path: str, handler_name: str, payl
     assert "char_id" in keys, f"{source_path}: enqueue({handler_name!r}) payload missing char_id"
 
 
-def test_pipeline_slow_queue_payloads_carry_char_id():
-    """
-    pipeline.py 的 slow_queue.enqueue 调用（capture_turn_retry /
-    summarize_to_midterm / user_profile_update）都包含 char_id 键。
-    用源码扫描确认：每个 enqueue 块内 "char_id" 出现在 "}" 之前。
-    """
-    payloads = _slow_queue_payloads("core/pipeline.py")
-    assert payloads, "pipeline.py should enqueue at least one slow task"
+def test_turn_effects_slow_queue_payloads_carry_char_id():
+    """Capture retry and deferred Reality tasks must carry their character scope."""
+    source_path = "core/post_process/turn_effects.py"
+    payloads = _slow_queue_payloads(source_path)
+    assert payloads, "turn_effects.py should enqueue at least one slow task"
     for handler_name, payload in payloads:
-        _assert_scoped_payload_has_char_id("core/pipeline.py", handler_name, payload)
-    return
-
-    src = _read_src("core/pipeline.py")
-    # 找到所有 enqueue(...) 块
-    for m in re.finditer(r'slow_queue\.enqueue\([^)]+\{', src):
-        start = m.start()
-        # 找到这个 dict 字面量的结束（向后找匹配的 }）
-        depth = 0
-        end = start
-        for i in range(start, min(start + 500, len(src))):
-            if src[i] == "{":
-                depth += 1
-            elif src[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i
-                    break
-        block = src[start:end + 1]
-        handler = re.search(r'enqueue\("([^"]+)"', block)
-        handler_name = handler.group(1) if handler else "unknown"
-        # consistency_check 不需要 char_id（回复一致性检查，非 scoped）
-        if handler_name in ("consistency_check",):
-            continue
-        assert '"char_id"' in block or "'char_id'" in block, (
-            f"pipeline.py: enqueue({handler_name!r}) payload 缺少 char_id\n{block}"
-        )
+        _assert_scoped_payload_has_char_id(source_path, handler_name, payload)
 
 
 def test_fixation_pipeline_slow_queue_payloads_carry_char_id():

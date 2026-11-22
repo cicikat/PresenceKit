@@ -23,64 +23,6 @@ class _FakePipeline:
         return "reply"
 
 
-def _install_fastapi_stub(monkeypatch):
-    class HTTPException(Exception):
-        def __init__(self, status_code=500, detail=""):
-            super().__init__(detail)
-            self.status_code = status_code
-            self.detail = detail
-
-    class APIRouter:
-        def get(self, *args, **kwargs):
-            return lambda fn: fn
-
-        def post(self, *args, **kwargs):
-            return lambda fn: fn
-
-        def put(self, *args, **kwargs):
-            return lambda fn: fn
-
-        def delete(self, *args, **kwargs):
-            return lambda fn: fn
-
-    def marker(default=None, *args, **kwargs):
-        return default
-
-    class HTTPBearer:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def __call__(self):
-            return None
-
-    class HTTPAuthorizationCredentials:
-        credentials = ""
-
-    monkeypatch.setitem(
-        sys.modules,
-        "fastapi",
-        SimpleNamespace(
-            APIRouter=APIRouter,
-            Body=marker,
-            Depends=marker,
-            File=marker,
-            Form=marker,
-            HTTPException=HTTPException,
-            Query=marker,
-            Request=object,
-            UploadFile=object,
-        ),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "fastapi.security",
-        SimpleNamespace(
-            HTTPBearer=HTTPBearer,
-            HTTPAuthorizationCredentials=HTTPAuthorizationCredentials,
-        ),
-    )
-
-
 def _install_ui_transport_stubs(monkeypatch):
     """Keep this scheduler test outside the concrete WebSocket transports."""
     import channels
@@ -112,9 +54,8 @@ def _install_ui_transport_stubs(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_owner_chat_turn_marks_user_active(monkeypatch):
-    _install_fastapi_stub(monkeypatch)
     _install_ui_transport_stubs(monkeypatch)
-    from admin.routers import chat
+    from core.owner_chat.service import run_owner_chat_turn
     from core.scheduler import loop
 
     turns = []
@@ -139,7 +80,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
     monkeypatch.setattr("channels.registry.get", lambda name: None)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
-    await chat.run_owner_chat_turn("hello", "desktop")
+    await run_owner_chat_turn("hello", "desktop")
 
     assert loop._user_active_recently()
     assert turns and turns[0]["user_text"] == "hello"
