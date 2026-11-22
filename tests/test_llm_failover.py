@@ -304,6 +304,53 @@ async def test_quota_terminal_failure_remains_safe_if_no_fallback_succeeds(monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("fallback_available", [False, True])
+async def test_quota_breaker_keeps_terminal_reason_while_primary_is_skipped(
+    monkeypatch, streaming, fallback_available,
+):
+    from core import llm_failover as fo
+
+    primary, fallback = _mc("primary"), _mc("fallback")
+    seen, rows = [], []
+
+    async def create(mc, messages, **kwargs):
+        seen.append(mc.name)
+        if mc is primary:
+            raise _gateway_rejection(403, "local:insufficient_quota")
+        raise _gateway_rejection(503, "model_unavailable")
+
+    async def stream(mc, messages, **kwargs):
+        yield (await create(mc, messages, **kwargs)).assistant_text
+
+    monkeypatch.setattr("core.llm_protocol.create", create)
+    monkeypatch.setattr("core.llm_protocol.stream_text", stream)
+    monkeypatch.setattr(fo, "resolve_fallback_client",
+                        lambda *a, **k: (fallback, "") if fallback_available else (None, "not_configured"))
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: rows.append(row))
+    options = dict(call_category="chat", primary_mc=primary, caller="test",
+                   prepare=lambda mc: PreparedAttempt(messages=[{"role": "user", "content": "hello"}]))
+
+    for _ in range(4):
+        if streaming:
+            with pytest.raises(fo.UpstreamQuotaExhausted, match="^upstream_quota_exhausted$"):
+                async for _piece in execute_stream(**options):
+                    pytest.fail("a failed route must not return text")
+        else:
+            outcome = await execute_create(**options)
+            assert not outcome.ok and isinstance(outcome.error, fo.UpstreamQuotaExhausted)
+
+    assert seen.count("primary") == 3
+    assert seen.count("fallback") == (3 if fallback_available else 0)
+    skipped = next(row for row in rows if row.get("skip_reason") == "breaker_open" and row["route_role"] == "primary")
+    assert skipped["error_category"] == "upstream_quota_exhausted"
+    assert rows[-1]["logical_call_id"] == skipped["logical_call_id"]
+    assert rows[-1]["logical_final"] and not rows[-1]["ok"]
+    if fallback_available:
+        assert rows[-1]["route_role"] == "fallback" and rows[-1]["skip_reason"] == "breaker_open"
+
+
+@pytest.mark.asyncio
 async def test_primary_success_does_not_call_fallback(monkeypatch):
     from core import llm_failover as fo
 
