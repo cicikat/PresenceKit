@@ -129,5 +129,3 @@ def reality_dialogue(kind, *, assistant_only=False):
                 inspect.Parameter("background_tasks", inspect.Parameter.KEYWORD_ONLY, annotation=BackgroundTasks)])
         return wrapped
     return decorate
-
-
