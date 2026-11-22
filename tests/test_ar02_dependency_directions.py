@@ -8,7 +8,11 @@ registration is explicit. AST walks include local imports and TYPE_CHECKING.
 import ast
 from collections import Counter
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 
 import pytest
 
@@ -175,8 +179,9 @@ def cutover_dependencies(source, module):
     """Return (rule, enclosing owner, target) per import/access, including repeats.
 
     Imports inside functions, aliases, relative imports, TYPE_CHECKING, literal
-    dynamic imports and reflective private access are checked. General dynamic
-    expressions cannot prove an architectural dependency and are not evaluated.
+    dynamic imports, sys.modules.get, builtins.__import__, simple returned-module
+    aliases, star imports and reflective private access are checked. General
+    runtime strings/control flow are not evaluated or fully data-flow analyzed.
     """
     tree = ast.parse(source)
     aliases = {}
@@ -193,7 +198,7 @@ def cutover_dependencies(source, module):
             return resolve(node.left) + resolve(node.right)
         if isinstance(node, ast.Call):
             called = resolve(node.func)
-            if called in {"getattr", "importlib.import_module", "__import__"} and node.args:
+            if called in {"getattr", "importlib.import_module", "__import__", "builtins.__import__", "sys.modules.get"} and node.args:
                 if called == "getattr" and len(node.args) > 1:
                     return resolve(node.args[0]) + "." + resolve(node.args[1])
                 return resolve(node.args[0])
@@ -208,7 +213,7 @@ def cutover_dependencies(source, module):
             parts = target.split(".")
             # _common/dream_common are HTTP helpers, not private members of a
             # different router. Importing their public functions stays legal.
-            if len(parts) >= 4 and parts[3].startswith("_") and ".".join(parts[:3]) != module and ".".join(parts[:3]) not in HTTP_HELPERS:
+            if len(parts) >= 4 and (parts[3].startswith("_") or parts[3] == "*") and ".".join(parts[:3]) != module and ".".join(parts[:3]) not in HTTP_HELPERS:
                 rows.append(("router-private", owner, kind + ":" + target))
         prefix = "core.scheduler.loop."
         if target.startswith(prefix):
@@ -229,6 +234,19 @@ def cutover_dependencies(source, module):
                 base = ".".join(module.split(".")[:-node.level] + ([node.module] if node.module else [])) if node.level else node.module or ""
                 for item in node.names:
                     bindings[item.asname or item.name] = base + "." + item.name
+            elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+                # Track simple module aliases returned by the supported lookup
+                # syntax. This does not execute code or infer arbitrary strings.
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                previous_aliases = dict(aliases)
+                aliases.update(bindings)
+                value = resolve(node.value)
+                aliases.clear()
+                aliases.update(previous_aliases)
+                if value.startswith(("admin.routers.", "core.scheduler.loop")):
+                    for target in targets:
+                        if isinstance(target, ast.Name):
+                            bindings[target.id] = value
             for child in ast.iter_child_nodes(node):
                 collect(child)
 
@@ -252,7 +270,7 @@ def cutover_dependencies(source, module):
         elif isinstance(node, ast.Attribute):
             record(resolve(node), owner, "access")
         elif isinstance(node, ast.Call):
-            if resolve(node.func) in {"getattr", "importlib.import_module", "__import__"}:
+            if resolve(node.func) in {"getattr", "importlib.import_module", "__import__", "builtins.__import__", "sys.modules.get"}:
                 record(resolve(node), owner, "dynamic")
         elif isinstance(node, ast.Subscript) and resolve(node.value) == "sys.modules":
             record(resolve(node), owner, "dynamic")
@@ -333,3 +351,146 @@ def test_cutover_repository_scan_detects_new_sites_and_repeated_debt(tmp_path):
     assert cutover_scan(tmp_path)[0]["count"] == 2
     path.unlink()
     assert cutover_scan(tmp_path) == []  # stale baseline rows must also fail equality
+
+
+@pytest.mark.parametrize("loader", [
+    "import sys\nmodule = sys.modules.get('admin.routers.chat')",
+    "import sys as system\nmodule = system.modules.get('admin.routers.chat')",
+    "from sys import modules as loaded\nmodule = loaded.get('admin.routers.chat')",
+    "import builtins\nmodule = builtins.__import__('admin.routers.chat')",
+    "import builtins as bi\nmodule = bi.__import__('admin.routers.chat')",
+    "from builtins import __import__ as load\nmodule = load('admin.routers.chat')",
+    "from importlib import import_module as load\nmodule = load('admin.routers.' + 'chat')",
+    "import sys as system\nmodule: object = system.modules.get('admin.routers.chat')",
+])
+@pytest.mark.parametrize("module,rule", [
+    ("core.cutover_probe", "core-router"),
+    ("admin.routers.cutover_probe", "router-private"),
+])
+def test_cutover_dynamic_module_aliases_cannot_hide_reverse_access(loader, module, rule):
+    source = loader + "\ngrant = module._session_grant\n"
+    assert any(row[0] == rule for row in cutover_dependencies(source, module)), source
+
+
+@pytest.mark.parametrize("module,source,rule", [
+    ("admin.routers.cutover_probe", "from admin.routers.chat import *", "router-private"),
+    ("admin.routers.cutover_probe", "from .chat import *", "router-private"),
+    ("core.cutover_probe", "from admin.routers import *", "core-router"),
+])
+def test_cutover_cross_router_star_imports_are_rejected(module, source, rule):
+    assert any(row[0] == rule for row in cutover_dependencies(source, module))
+
+
+@pytest.fixture
+def cutover_git_repository(tmp_path):
+    """A tiny real Git history; both CI entry commands run in child processes."""
+    for directory in ("tests", "scripts", "core", "docs/refactors"):
+        (tmp_path / directory).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(Path(__file__), tmp_path / "tests/test_ar02_dependency_directions.py")
+    shutil.copyfile(ROOT / "scripts/check_architecture_debt.py", tmp_path / "scripts/check_architecture_debt.py")
+    (tmp_path / "main.py").write_bytes(b"")
+    (tmp_path / "pytest.ini").write_bytes(b"[pytest]\n")
+    source = "from admin.routers.chat import run_owner_chat_turn\n"
+    (tmp_path / "core/debt.py").write_bytes((source * 2).encode())
+    ledger = {"status": "pending_independent_review",
+              "removal_task": {"core-router": "T1", "router-private": "T1", "scheduler-state": "T2", "scheduler-owner": "T2"},
+              "dependencies": [{"source": "core/debt.py", "rule": "core-router", "owner": "<module>",
+                                "target": "import:admin.routers.chat.run_owner_chat_turn", "count": 2}]}
+    ledger["dependencies"].append(dict(ledger["dependencies"][0], source="core/other_debt.py", count=1))
+    (tmp_path / "core/other_debt.py").write_bytes(source.encode())
+    path = tmp_path / "docs/refactors/migration-cutover-dependencies.json"
+    path.write_bytes(json.dumps(ledger).encode())
+    for args in [("init", "-b", "main"), ("add", "."),
+                 ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                  "-c", "commit.gpgsign=false", "-c", "core.hooksPath=.git/hooks",
+                  "commit", "-m", "Synthetic architecture baseline")]:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+    return tmp_path, path, ledger, source
+
+
+@pytest.mark.parametrize("mutation,expected_stage", [
+    ("json_only_add", "convergence"),
+    ("source_and_json_add", "convergence"),
+    ("count_increase", "convergence"),
+    ("rename_source", "convergence"),
+    ("rename_owner", "convergence"),
+    ("rename_target", "convergence"),
+    ("rename_rule", "convergence"),
+    ("remove_live_row", "scan"),
+    ("migrate_and_remove", "passed"),
+    ("reduce_count", "passed"),
+    ("unchanged", "passed"),
+])
+def test_ci_entrypoints_enforce_debt_convergence(cutover_git_repository, mutation, expected_stage):
+    root, path, ledger, source = cutover_git_repository
+    row = ledger["dependencies"][0]
+    if mutation in {"json_only_add", "source_and_json_add"}:
+        extra = dict(row, source="core/extra.py", count=1)
+        ledger["dependencies"].append(extra)
+        if mutation == "source_and_json_add":
+            (root / "core/extra.py").write_bytes(source.encode())
+    elif mutation == "count_increase":
+        ledger["dependencies"][1]["count"] = 2
+        (root / "core/other_debt.py").write_bytes((source * 2).encode())
+    elif mutation.startswith("rename_"):
+        field = mutation.removeprefix("rename_")
+        row[field] += "_moved"
+    elif mutation in {"remove_live_row", "migrate_and_remove"}:
+        ledger["dependencies"].pop(0)
+        if mutation == "migrate_and_remove":
+            (root / "core/debt.py").write_bytes(b"from core.conversation_activity import mark_user_active\n")
+    elif mutation == "reduce_count":
+        row["count"] = 1
+        (root / "core/debt.py").write_bytes(source.encode())
+    path.write_bytes(json.dumps(ledger).encode())
+    env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+    env.pop("PYTEST_ADDOPTS", None)
+    env.pop("PYTEST_PLUGINS", None)
+    convergence = subprocess.run(
+        [sys.executable, "scripts/check_architecture_debt.py", "--baseline-ref", "HEAD"],
+        cwd=root, env=env, capture_output=True, text=True, timeout=30,
+    )
+    if expected_stage == "convergence":
+        assert convergence.returncode == 1 and "debt expansion" in convergence.stderr, convergence.stdout + convergence.stderr
+        return
+    assert convergence.returncode == 0, convergence.stdout + convergence.stderr
+    scan = subprocess.run(
+        [sys.executable, "-m", "pytest", "--noconftest", "-c", "pytest.ini", "-q",
+         "tests/test_ar02_dependency_directions.py::test_migration_cutover_has_no_new_or_stale_dependency_debt"],
+        cwd=root, env=env, capture_output=True, text=True, timeout=30,
+    )
+    if expected_stage == "scan":
+        assert scan.returncode == 1 and "New dependency or stale debt" in scan.stdout, scan.stdout + scan.stderr
+    else:
+        assert scan.returncode == 0, scan.stdout + scan.stderr
+
+
+@pytest.mark.parametrize("event_name,event_ref", [
+    ("pull_request", "refs/pull/1/merge"),
+    ("push", "refs/heads/main"),
+    ("push", "refs/heads/codex/fixture"),
+])
+def test_ci_entrypoint_selects_target_not_the_expanded_head(cutover_git_repository, event_name, event_ref):
+    """Exercise --ci with real Git refs and deliberately misleading PR base SHA."""
+    root, path, ledger, source = cutover_git_repository
+    if event_ref != "refs/heads/main":
+        subprocess.run(["git", "checkout", "-b", "codex/fixture"], cwd=root, check=True, capture_output=True)
+    ledger["dependencies"][0]["count"] = 3
+    path.write_bytes(json.dumps(ledger).encode())
+    (root / "core/debt.py").write_bytes((source * 3).encode())
+    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                    "-c", "commit.gpgsign=false", "-c", "core.hooksPath=.git/hooks",
+                    "commit", "-m", "Synthetic expansion"], cwd=root, check=True, capture_output=True)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "remote", "add", "origin", str(root)], cwd=root, check=True, capture_output=True)
+    event = {"ref": event_ref, "after": head,
+             "pull_request": {"base": {"ref": "main", "sha": head}}}
+    event_file = root / "event.json"
+    event_file.write_bytes(json.dumps(event).encode())
+    result = subprocess.run(
+        [sys.executable, "scripts/check_architecture_debt.py", "--ci"], cwd=root,
+        env=dict(os.environ, GITHUB_EVENT_NAME=event_name, GITHUB_EVENT_PATH=str(event_file)),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 1 and "debt expansion" in result.stderr, result.stdout + result.stderr
