@@ -107,6 +107,7 @@ class _Breaker:
     failures: int = 0
     open_until: float = 0.0
     half_open_in_flight: bool = False
+    trip_category: str = ""
 
 
 _BREAKERS: dict[tuple[str, str], _Breaker] = {}
@@ -288,6 +289,13 @@ def breaker_permits(preset: str, call_category: str, now: float | None = None) -
     return False
 
 
+def _breaker_skip_category(preset: str, call_category: str) -> str:
+    breaker = _BREAKERS.get(_breaker_key(preset, call_category))
+    if breaker is not None and breaker.trip_category == UpstreamQuotaExhausted.code:
+        return breaker.trip_category
+    return "breaker_open"
+
+
 def breaker_record(
     preset: str,
     call_category: str,
@@ -304,12 +312,14 @@ def breaker_record(
     if ok:
         breaker.failures = 0
         breaker.open_until = 0.0
+        breaker.trip_category = ""
         return
     trip = breaker_category_for(category)
     if trip in _BREAKER_TRIP or (protocol_recovery and category == "protocol_incompatible"):
         breaker.failures += 1
         if breaker.failures >= _BREAKER_THRESHOLD:
             breaker.open_until = now + _BREAKER_COOLDOWN_S
+            breaker.trip_category = trip
 
 
 def confirm_business_success(preset: str, call_category: str) -> None:
@@ -572,15 +582,17 @@ async def execute_create(
 
         if role != "recovery" and not breaker_permits(mc.name, call_category):
             duration_ms = int((time.perf_counter() - started) * 1000)
+            category = _breaker_skip_category(mc.name, call_category)
             _row_from_mc(
                 mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
-                skip_reason="breaker_open", error_category="breaker_open",
+                skip_reason="breaker_open", error_category=category,
                 logical_final=logical_final, failover=failover,
             )
             return AttemptOutcome(
                 ok=False, mc=mc, role=role, preset=mc.name,
-                skip_reason="breaker_open", error_category="breaker_open",
+                error=UpstreamQuotaExhausted() if category == UpstreamQuotaExhausted.code else None,
+                skip_reason="breaker_open", error_category=category,
                 duration_ms=duration_ms, logical_call_id=logical_id, attempt_id=attempt_id,
             )
 
@@ -826,13 +838,14 @@ async def execute_stream(
         if _SHUTTING_DOWN:
             raise asyncio.CancelledError()
         if not breaker_permits(mc.name, call_category):
+            category = _breaker_skip_category(mc.name, call_category)
             _row_from_mc(
                 mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
-                skip_reason="breaker_open", error_category="breaker_open",
+                skip_reason="breaker_open", error_category=category,
                 logical_final=role == "fallback" or fallback_mc is None, failover=failover,
             )
-            raise FailoverSkip("breaker_open")
+            raise FailoverSkip("breaker_open", category=category)
         prepared = await _invoke_prepare(prepare, mc)
         if prepared.refuse_reason:
             _row_from_mc(
@@ -884,6 +897,7 @@ async def execute_stream(
         )
 
     switch_reason = ""
+    quota_rejected = False
     try:
         async for piece in _stream_one(
             primary_mc, role="fallback" if sticky else "primary",
@@ -916,11 +930,13 @@ async def execute_stream(
                 )
             raise err.original from None
         switch_reason = err.reason or "primary_failed"
+        quota_rejected = err.category == UpstreamQuotaExhausted.code
     except FailoverSkip as skip:
         # Only an open primary breaker may skip straight to a configured fallback.
         # Budget, cancel, and capability refusals are not transport failures.
         if skip.reason == "breaker_open" and fallback_mc is not None:
             switch_reason = skip.reason
+            quota_rejected = skip.category == UpstreamQuotaExhausted.code
         else:
             if fallback_mc is not None and skip.reason not in {"breaker_open", "cancelled"}:
                 _row_from_mc(
@@ -929,6 +945,8 @@ async def execute_stream(
                     route_role="primary", skip_reason=skip.reason or "not_eligible",
                     error_category=skip.reason or "not_eligible", logical_final=True,
                 )
+            if skip.category == UpstreamQuotaExhausted.code:
+                raise UpstreamQuotaExhausted() from None
             raise
 
     if fallback_mc is None:
@@ -940,7 +958,7 @@ async def execute_stream(
             route_role="fallback", skip_reason="budget_exhausted",
             error_category="budget_exhausted", logical_final=True, failover=True,
         )
-        if switch_reason == UpstreamQuotaExhausted.code:
+        if quota_rejected:
             raise UpstreamQuotaExhausted()
         raise FailoverSkip("budget_exhausted")
     try:
@@ -950,12 +968,12 @@ async def execute_stream(
             switch_reason=switch_reason or "primary_failed",
         ):
             yield piece
-    except FailoverSkip:
-        if switch_reason == UpstreamQuotaExhausted.code:
+    except FailoverSkip as skip:
+        if quota_rejected or skip.category == UpstreamQuotaExhausted.code:
             raise UpstreamQuotaExhausted() from None
         raise
     except StreamAttemptError as err:
-        if switch_reason == UpstreamQuotaExhausted.code:
+        if quota_rejected or err.category == UpstreamQuotaExhausted.code:
             raise UpstreamQuotaExhausted(partial_text=getattr(err.original, "partial_text", "")) from None
         raise
     if route is not None:
