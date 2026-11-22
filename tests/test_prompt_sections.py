@@ -74,6 +74,31 @@ def test_builder_pruning_ablation_and_final_budget(sandbox, monkeypatch):
     assert debug["char_estimate"] <= 28000
 
 
+def test_prompt_budget_preserves_protected_sections_and_drops_whole_priority_batch(sandbox, monkeypatch):
+    """The rendered section boundaries count against the budget and are rebuilt after dropping a group."""
+    from core.prompt_builder import build
+
+    _apply_build_stubs(monkeypatch)
+    quoted_history = "原话 {user_name} <quote>fixture</quote>"
+    messages, debug = build(**_base_build_kwargs(
+        user_facts_text="记录的事实",
+        event_search_result="较弱证据" * 8000,
+        web_recall_result="外部资料原文",
+        episodic_result="可追溯片段",
+        tool_result="本轮工具回执",
+        history=[{"role": "user", "content": quoted_history, "_layer": "9_history"}],
+    ))
+    expected = ["5.1_user_facts", "6c_episodic", "web_recall", "10_tool_result", "9_history", "12_user_message"]
+    observed = [m["_layer"] for m in messages if m.get("_layer") in expected]
+    assert list(dict.fromkeys(observed)) == expected
+    assert debug["removed_layers"] == ["6b_event_search"]
+    assert quoted_history in [m["content"] for m in messages if m["role"] == "user"]
+    assert "较弱证据" not in "\n".join(m["content"] for m in messages)
+    for name in ("现实回忆", "参考资料", "工具结果"):
+        rendered = "\n".join(m["content"] for m in messages)
+        assert rendered.count(f"【{name}】") == rendered.count(f"【/{name}】") == 1
+
+
 def test_legacy_perception_slot_is_separate_and_can_be_disabled(sandbox, monkeypatch):
     _apply_build_stubs(monkeypatch)
     from core.prompt_builder import build
