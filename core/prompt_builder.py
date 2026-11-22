@@ -14,7 +14,13 @@ from core.error_handler import log_error
 from core.prompt_ablation import ALWAYS_ON
 from core.data_paths import DEFAULT_CHAR_ID
 from core.prompt_budget import HARD_LIMIT, SOFT_LIMIT, TRIM_TARGET, apply_budget
-from core.prompt_sections import character_description
+from core.prompt_sections import (
+    _dedupe_filler_prefix_history,
+    _project_inner_diary_excerpt,
+    _recent_openings,
+    _split_inner_diary_layers,
+    character_description,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -43,37 +49,6 @@ def _watch_segment_is_fresh(segment_time: str, *, today=None) -> bool:
         return False
 
 
-
-
-_INNER_DIARY_FEELING_MARKER = re.compile(r"(?m)^##\s*今日感受\s*$")
-_INNER_DIARY_TODAY_HEADING = re.compile(r"^(#{0,6}\s*)今日(事件|感受)\s*$")
-
-
-def _split_inner_diary_layers(diary_text: str) -> tuple[str, str]:
-    """Split on-disk inner diary into facts/feeling. File headings stay as written."""
-    text = (diary_text or "").strip()
-    if not text:
-        return "", ""
-    marker = _INNER_DIARY_FEELING_MARKER.search(text)
-    if marker:
-        return text[:marker.start()].strip(), text[marker.end():].strip()
-    if re.search(r"(?m)^##\s*今日事件\s*$", text):
-        return text, ""
-    return "", text
-
-
-def _project_inner_diary_excerpt(text: str, limit: int) -> str:
-    """Rewrite today's file headings for yesterday's prompt projection."""
-    if not text:
-        return ""
-    lines: list[str] = []
-    for line in text.splitlines():
-        match = _INNER_DIARY_TODAY_HEADING.match(line.strip())
-        if match:
-            lines.append(f"{match.group(1)}昨日{match.group(2)}")
-            continue
-        lines.append(line)
-    return "\n".join(lines).strip()[:limit]
 
 
 # tone → soft description for afterglow hint (see _format_afterglow_soft_hint)
@@ -315,56 +290,6 @@ def _load_jailbreak(layer: int | None = None, *, char_id: str | None = None) -> 
         log_error("prompt_builder._load_jailbreak.entries", e)
 
     return "\n".join(parts)
-
-def _recent_openings(history: list[dict], n: int = 3, k: int = 8) -> list[str]:
-    """Return the first k chars of the last n assistant turns (fail-open)."""
-    outs: list[str] = []
-    for turn in reversed(history):
-        if turn.get("role") != "assistant":
-            continue
-        head = str(turn.get("content") or "").lstrip().replace("\n", "")[:k]
-        if head:
-            outs.append(head)
-        if len(outs) >= n:
-            break
-    return outs
-
-
-def _dedupe_filler_prefix_history(history: list[dict], prefix: str) -> list[dict]:
-    """
-    历史投影去同质（问题7 (a)）：只改注入 prompt 的历史副本，绝不写回 short_term 存储。
-
-    近场 assistant 回复连续以填充词前缀 P 开头时，模型会从上下文里"学到"每句都要 P 开头——
-    一条软提示对抗不了整段历史的示范效应。这里保留最早一条完整的 P，其余各条剥掉开头的 P，
-    使投影给模型看的历史里不再是"每句都嗯。"。
-
-    被剥掉前缀的消息额外带 `_raw_content` 记录原始文本（未去同质），供 pipeline 侧输出端
-    校验重试（问题7 (c)）复原同一份检测所需的原始 assistant 历史；`_raw_content` 与 `_layer` 等
-    内部字段一样在 `sanitize_messages()` 出口统一剥离，不会发给供应商，也不写回磁盘。
-    """
-    projected: list[dict] = []
-    kept_one = False
-    for msg in history:
-        content = msg.get("content")
-        if (
-            msg.get("role") == "assistant"
-            and isinstance(content, str)
-            and content.lstrip().startswith(prefix)
-        ):
-            if not kept_one:
-                kept_one = True
-                projected.append(msg)
-            else:
-                lstripped = content.lstrip()
-                leading_ws = content[: len(content) - len(lstripped)]
-                new_msg = dict(msg)
-                new_msg["content"] = leading_ws + lstripped[len(prefix):]
-                new_msg["_raw_content"] = content
-                projected.append(new_msg)
-        else:
-            projected.append(msg)
-    return projected
-
 
 def build(
     character: Character,

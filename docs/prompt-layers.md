@@ -402,6 +402,8 @@ output:
 
 ## token 裁剪
 
+Reality 的来源分区和只读日记／历史投影由 `core/prompt_sections.py` 渲染。`core/prompt_budget.py` 按渲染后的字符数计算预算，`core/prompt_builder.py` 负责装配和输出观测结果。离线基线可用 `python -m pytest -q -s tests/round2_p2_benchmark.py` 复跑。
+
 ### 估算方式
 
 ```python
@@ -450,6 +452,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 75 | `6i_self_agent_md` | 角色自写 AGENT.md 工作习惯；低于系统安全与用户指令，晚于情景记忆、早于世界书丢 |
 | 80 | `5.5_lore` | 世界书设定，最后丢 |
 | 85 | `coplay_context` | 陪玩模式游戏进度/动态 + 剧透压制约束，内容很小，比 lore 更晚丢 |
+| 85 | `10.9_pinned_tool_results` | 已授权、有界的历史工具快照，和同优先级层整批裁剪 |
 
 不在裁剪表里（无 `_drop_priority`）：`6a_user_identity`、`5_profile`、`5_profile_pref`、`5.1_user_facts`、`9_history`、`11_author_note`、`11.5_post_history`、`10.5_action_trace`（够小且时效性强，不参与裁剪）、`10.6_hardware_jobs`（当前设备状态事实，不参与裁剪）、`anti_collapse_hint`（触发时才存在，内容是纠偏软提示，裁掉即失去纠偏效果，够小不参与裁剪）等核心层。
 
