@@ -40,11 +40,12 @@ def ci_baseline(root, environ):
     event = json.loads(Path(environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     name = environ["GITHUB_EVENT_NAME"]
     if name == "push" and event["ref"] == "refs/heads/main":
-        after = event["after"]
-        if not re.fullmatch(r"[0-9a-f]{40}", after):
-            raise ValueError("invalid push head")
-        # First parent of the pushed head, not origin/main (already advanced).
-        return git(root, "rev-parse", after + "^1")
+        before = event.get("before")
+        if not isinstance(before, str) or not re.fullmatch(r"[0-9a-f]{40}", before) or before == "0" * 40:
+            raise ValueError("invalid push before SHA")
+        # Compare the whole pushed batch to its pre-push state. main() verifies
+        # the commit and reads its ledger; missing history must fail closed.
+        return before
     branch = event["pull_request"]["base"]["ref"] if name == "pull_request" else "main"
     git(root, "check-ref-format", "--branch", branch)
     # Resolve the current target HEAD, not the PR's possibly stale base SHA.

@@ -473,6 +473,7 @@ def test_ci_entrypoints_enforce_debt_convergence(cutover_git_repository, mutatio
 def test_ci_entrypoint_selects_target_not_the_expanded_head(cutover_git_repository, event_name, event_ref):
     """Exercise --ci with real Git refs and deliberately misleading PR base SHA."""
     root, path, ledger, source = cutover_git_repository
+    before = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
     if event_ref != "refs/heads/main":
         subprocess.run(["git", "checkout", "-b", "codex/fixture"], cwd=root, check=True, capture_output=True)
     ledger["dependencies"][0]["count"] = 3
@@ -484,7 +485,7 @@ def test_ci_entrypoint_selects_target_not_the_expanded_head(cutover_git_reposito
                     "commit", "-m", "Synthetic expansion"], cwd=root, check=True, capture_output=True)
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
     subprocess.run(["git", "remote", "add", "origin", str(root)], cwd=root, check=True, capture_output=True)
-    event = {"ref": event_ref, "after": head,
+    event = {"ref": event_ref, "before": before, "after": head,
              "pull_request": {"base": {"ref": "main", "sha": head}}}
     event_file = root / "event.json"
     event_file.write_bytes(json.dumps(event).encode())
@@ -494,3 +495,49 @@ def test_ci_entrypoint_selects_target_not_the_expanded_head(cutover_git_reposito
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 1 and "debt expansion" in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("scenario", ["multi_commit", "single_commit", "zero", "unreadable", "malformed", "non_string", "missing"])
+def test_main_push_ci_uses_event_before_and_fails_closed(cutover_git_repository, scenario):
+    """A batch must compare to pre-push A, even if its last commit has no debt diff."""
+    root, path, ledger, source = cutover_git_repository
+    before = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+
+    def commit(message):
+        subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                        "-c", "commit.gpgsign=false", "-c", "core.hooksPath=.git/hooks",
+                        "commit", "-m", message], cwd=root, check=True, capture_output=True)
+
+    if scenario == "multi_commit":
+        ledger["dependencies"].append(dict(ledger["dependencies"][0], source="core/extra.py", count=1))
+        (root / "core/extra.py").write_bytes(source.encode())
+        path.write_bytes(json.dumps(ledger).encode())
+        commit("B: introduce a real dependency and register its debt")
+    (root / "unrelated.txt").write_bytes(b"Unrelated change; no architecture debt changes.\n")
+    commit("C: unrelated change" if scenario == "multi_commit" else "B: unrelated change")
+    after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+    event = {"ref": "refs/heads/main", "before": before, "after": after}
+    invalid = {"zero": "0" * 40, "unreadable": "1" * 40, "malformed": "not-a-sha", "non_string": None}
+    if scenario in invalid:
+        event["before"] = invalid[scenario]
+    elif scenario == "missing":
+        del event["before"]
+    event_file = root / "event.json"
+    event_file.write_bytes(json.dumps(event).encode())
+    result = subprocess.run(
+        [sys.executable, "scripts/check_architecture_debt.py", "--ci"], cwd=root,
+        env=dict(os.environ, GITHUB_EVENT_NAME="push", GITHUB_EVENT_PATH=str(event_file)),
+        capture_output=True, text=True, timeout=30,
+    )
+    if scenario == "single_commit":
+        assert result.returncode == 0 and "baseline " + before in result.stdout, result.stdout + result.stderr
+    elif scenario == "multi_commit":
+        assert result.returncode == 1 and "debt expansion relative to " + before in result.stderr, result.stdout + result.stderr
+    else:
+        assert result.returncode == 1 and "Architecture debt check failed" in result.stderr, result.stdout + result.stderr
+        assert "Debt convergence passed" not in result.stdout
+        if scenario == "unreadable":
+            assert invalid[scenario] in result.stderr
+        else:
+            assert "invalid push before SHA" in result.stderr
