@@ -22,7 +22,8 @@ def forbidden_targets(module):
         return ("admin.routers.dream",)
     if module.startswith("core.dream."):
         return ("admin.routers",)
-    if module in {"core.prompt_sections", "core.prompt_budget", "core.memory.prompt_sources", "core.memory.reality_context"}:
+    if module in {"core.prompt_sections", "core.prompt_budget", "core.memory.prompt_sources",
+                  "core.memory.reality_context", "core.post_process.turn_effects"}:
         return ("admin", "core.pipeline", "core.tool_dispatcher")
     raise ValueError(module)
 
@@ -98,6 +99,7 @@ def target_files():
         ROOT / "core/prompt_sections.py",
         ROOT / "core/memory/prompt_sources.py",
         ROOT / "core/memory/reality_context.py",
+        ROOT / "core/post_process/turn_effects.py",
     })
 
 
