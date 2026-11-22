@@ -56,6 +56,10 @@ flowchart LR
 | 普通 Prompt | 26.744 / 30.567 | 25.146 / 27.314 |
 | 超预算 Prompt | 24.791 / 29.392 | 24.971 / 29.603 |
 
-## 实际运行验收
+## 合并与运行验收
 
-P1 额度接管的隔离验证和生产上线证据见[额度接管交付](first-send-quota-failover.md)。现有上游 HTTP 400 样本缺少可用参数字段，仍待查因。历史生产性能数据见 [P2-0 基线](round2-p2-baseline.md)。P2 的生产联调、真机操作、真实模型 usage 与实际 TTS 在当前记录为 NOT VERIFIED，TTS 按用户安排跳过。
+- [PR #32](https://github.com/cicikat/PresenceKit/pull/32) 已合并。最终 Windows 定向回归 693 项通过。PR 双版本 Smoke、全量、浏览器、离线评估通过。[PR 测试](https://github.com/cicikat/PresenceKit/actions/runs/44978487462) · [PR 离线评估](https://github.com/cicikat/PresenceKit/actions/runs/44978487373)
+- 合并提交 `f7e59b5a1c10531e3df21f832fc23b89c8488db2` 的双版本全量、浏览器与离线评估通过。该后端提交与桌面 `af6c4d9368ff61aca09988440a2ee89247a7b275`、手机 `abb8d504bee304957d865cc6de2c2cecb9c67715` 的固定三仓合同通过。[main 测试](https://github.com/cicikat/PresenceKit/actions/runs/44978729501) · [main 离线评估](https://github.com/cicikat/PresenceKit/actions/runs/44978729405) · [三仓合同](https://github.com/cicikat/PresenceKit/actions/runs/44978744571)
+- 2026-11-22 15:37:22（上海时间）完成 VPS 后端切换，停止到健康确认用时 6.62 秒。仅替换清单内的 19 个运行时程序文件，保留两处原有历史记忆定制，并把取证部分接入拆分后的 Reality 服务。独立验证安装与回滚哈希，私有配置校验一致，服务 active。鉴权健康与四个观测端点返回 200，无凭据的健康请求返回 401，切换窗口内五类启动错误计数为零。
+- 切换前对现行版、待上线版各跑一次隔离历史记忆 fixture，切换后对实际安装程序复测一次。三次的角色范围、显式检索词、历史层位置和 `recall_policy=none` 行为一致，外发请求为零。回滚清单与程序副本保存在服务器部署目录，仅恢复本次程序文件。
+- P1 额度接管另有[上线与隔离验证](first-send-quota-failover.md)。历史上游 HTTP 400 样本缺少可用参数字段，仍待查因。P2 真实设备会话、真实模型 usage 和生产长期性能保持 NOT VERIFIED。TTS 按用户安排跳过。
