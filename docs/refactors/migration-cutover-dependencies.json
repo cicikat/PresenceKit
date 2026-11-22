@@ -1,0 +1,511 @@
+{
+  "status": "pending_independent_review",
+  "owner": "Codex implementation; user-coordinated independent reviewer",
+  "baseline_date": "2026-11-22",
+  "suggested_review_date": "2026-11-29",
+  "removal_task": {
+    "core-router": "T1",
+    "router-private": "T1",
+    "scheduler-state": "T2",
+    "scheduler-owner": "T2"
+  },
+  "dependencies": [
+    {
+      "source": "admin/routers/autonomy.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/autonomy.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._owner_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/chat_log.py",
+      "rule": "router-private",
+      "owner": "calendar_stats",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/chat_log.py",
+      "rule": "router-private",
+      "owner": "get_day",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/chat_log.py",
+      "rule": "router-private",
+      "owner": "list_dates",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/control_center.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/control_center.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._owner_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/dream.py",
+      "rule": "router-private",
+      "owner": "<module>",
+      "target": "import:admin.routers.dream_presets._valid_world_layer_values",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/dream_observability.py",
+      "rule": "router-private",
+      "owner": "dream_state_get",
+      "target": "access:admin.routers.dream_presets._VALID_SCENARIO_INJECTION_MODE",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/dream_sessions.py",
+      "rule": "router-private",
+      "owner": "dream_enter",
+      "target": "access:admin.routers.dream_presets._VALID_DREAM_MODE",
+      "count": 2
+    },
+    {
+      "source": "admin/routers/dream_worlds.py",
+      "rule": "router-private",
+      "owner": "put_dream_preset",
+      "target": "access:admin.routers.dream_presets._reload_dream_preset_registry",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/group_dream.py",
+      "rule": "router-private",
+      "owner": "_valid_world_layer_values",
+      "target": "import:admin.routers.dream._valid_world_layer_values",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/integrations.py",
+      "rule": "scheduler-state",
+      "owner": "_active_scope",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/jailbreak_entries.py",
+      "rule": "router-private",
+      "owner": "<module>",
+      "target": "import:admin.routers.users._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/life_records.py",
+      "rule": "scheduler-state",
+      "owner": "settings",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/lorebook.py",
+      "rule": "router-private",
+      "owner": "<module>",
+      "target": "import:admin.routers.users._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/mobile.py",
+      "rule": "router-private",
+      "owner": "mobile_chat",
+      "target": "import:admin.routers.chat._check_reality_not_in_dream",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/mobile.py",
+      "rule": "router-private",
+      "owner": "mobile_chat",
+      "target": "import:admin.routers.chat._run_session_request",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/mobile.py",
+      "rule": "router-private",
+      "owner": "mobile_chat",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/mobile.py",
+      "rule": "router-private",
+      "owner": "mobile_final_history",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/mobile.py",
+      "rule": "router-private",
+      "owner": "register_push_device",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "rule": "router-private",
+      "owner": "chat_turn_reasoning",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "rule": "router-private",
+      "owner": "tool_audit",
+      "target": "import:admin.routers.provenance._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "rule": "router-private",
+      "owner": "tool_trace_uids",
+      "target": "import:admin.routers.provenance._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "rule": "router-private",
+      "owner": "tool_traces",
+      "target": "import:admin.routers.provenance._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "rule": "scheduler-state",
+      "owner": "drinking_state",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "rule": "scheduler-state",
+      "owner": "mail_weekly_state",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "rule": "scheduler-state",
+      "owner": "mail_weekly_state",
+      "target": "import:core.scheduler.loop._owner_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observe.py",
+      "rule": "router-private",
+      "owner": "get_recall_trace",
+      "target": "import:admin.routers.provenance._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observe.py",
+      "rule": "router-private",
+      "owner": "get_vector_overview",
+      "target": "import:admin.routers.provenance._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/observe.py",
+      "rule": "router-private",
+      "owner": "search_vector",
+      "target": "import:admin.routers.provenance._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/owner_turn.py",
+      "rule": "router-private",
+      "owner": "owner_turn",
+      "target": "import:admin.routers.chat._check_reality_not_in_dream",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/period.py",
+      "rule": "router-private",
+      "owner": "<module>",
+      "target": "import:admin.routers.users._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/phone_control.py",
+      "rule": "router-private",
+      "owner": "phone_control_debug_start",
+      "target": "import:admin.routers.character._active_character_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/phone_control.py",
+      "rule": "router-private",
+      "owner": "phone_control_status",
+      "target": "import:admin.routers.character._active_character_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/relations.py",
+      "rule": "router-private",
+      "owner": "<module>",
+      "target": "import:admin.routers.users._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/self_management.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/self_management.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._owner_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/sensor.py",
+      "rule": "router-private",
+      "owner": "_phone_policy_scope",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/sensor.py",
+      "rule": "router-private",
+      "owner": "get_ambient_snapshot",
+      "target": "import:admin.routers.chat._owner_media_scope",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/sensor.py",
+      "rule": "router-private",
+      "owner": "receive_ambient",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_browser.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_gmail.py",
+      "rule": "router-private",
+      "owner": "<module>",
+      "target": "import:admin.routers.character._active_character_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_llm.py",
+      "rule": "router-private",
+      "owner": "_rewrite_character_model_routing",
+      "target": "import:admin.routers.character._active_character_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_llm.py",
+      "rule": "router-private",
+      "owner": "_rewrite_character_model_routing",
+      "target": "import:admin.routers.character._reload_character",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_misc.py",
+      "rule": "router-private",
+      "owner": "_current_tts_character_id",
+      "target": "import:admin.routers.character._active_character_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_misc.py",
+      "rule": "router-private",
+      "owner": "_mail_view",
+      "target": "import:admin.routers.character._active_character_id",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_misc.py",
+      "rule": "router-private",
+      "owner": "_mail_view",
+      "target": "import:admin.routers.settings_llm._looks_placeholder",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_misc.py",
+      "rule": "router-private",
+      "owner": "_mail_view",
+      "target": "import:admin.routers.settings_llm._mask_key",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/settings_thinking.py",
+      "rule": "router-private",
+      "owner": "_live_char_id",
+      "target": "import:admin.routers.settings_llm._active_character_id_for_routing_warning",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/video_call.py",
+      "rule": "router-private",
+      "owner": "_camera_scope",
+      "target": "import:admin.routers.chat._owner_media_scope",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/video_call.py",
+      "rule": "router-private",
+      "owner": "_camera_scope",
+      "target": "import:admin.routers.chat._session_grant",
+      "count": 1
+    },
+    {
+      "source": "admin/routers/watch.py",
+      "rule": "router-private",
+      "owner": "_character_read_stats",
+      "target": "import:admin.routers.provenance._resolve_char_id",
+      "count": 1
+    },
+    {
+      "source": "core/activity/continuity.py",
+      "rule": "core-router",
+      "owner": "reality_dialogue.decorate.wrapped",
+      "target": "import:admin.routers._common.active_char_id",
+      "count": 1
+    },
+    {
+      "source": "core/activity/minecraft.py",
+      "rule": "core-router",
+      "owner": "MinecraftService._principal",
+      "target": "import:admin.routers._common.active_char_id",
+      "count": 1
+    },
+    {
+      "source": "core/activity/minecraft_routing.py",
+      "rule": "core-router",
+      "owner": "route_view",
+      "target": "import:admin.routers._common.active_char_id",
+      "count": 1
+    },
+    {
+      "source": "core/audio_perception.py",
+      "rule": "scheduler-state",
+      "owner": "_scope",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "core/autonomy/effective_state.py",
+      "rule": "scheduler-state",
+      "owner": "scheduler_source_enabled",
+      "target": "import:core.scheduler.loop._cfg",
+      "count": 1
+    },
+    {
+      "source": "core/companion/service.py",
+      "rule": "core-router",
+      "owner": "handle_event",
+      "target": "import:admin.routers.chat.run_owner_chat_turn",
+      "count": 2
+    },
+    {
+      "source": "core/control_center/effective_state.py",
+      "rule": "scheduler-state",
+      "owner": "_owner_scope",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "core/control_center/effective_state.py",
+      "rule": "scheduler-state",
+      "owner": "_owner_scope",
+      "target": "import:core.scheduler.loop._owner_id",
+      "count": 1
+    },
+    {
+      "source": "core/ime_awareness.py",
+      "rule": "scheduler-state",
+      "owner": "effective_state",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "core/ime_awareness.py",
+      "rule": "scheduler-state",
+      "owner": "effective_state",
+      "target": "import:core.scheduler.loop._owner_id",
+      "count": 1
+    },
+    {
+      "source": "core/owner_chat/service.py",
+      "rule": "scheduler-state",
+      "owner": "run_owner_chat_turn",
+      "target": "import:core.scheduler.loop.mark_user_active",
+      "count": 1
+    },
+    {
+      "source": "core/owner_turn_service.py",
+      "rule": "scheduler-state",
+      "owner": "_canonical_character_id",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "core/scheduler/gating.py",
+      "rule": "scheduler-state",
+      "owner": "_decide",
+      "target": "import:core.scheduler.loop._user_active_recently",
+      "count": 1
+    },
+    {
+      "source": "core/scheduler/loop.py",
+      "rule": "scheduler-owner",
+      "owner": "_user_active_recently",
+      "target": "definition:_user_active_recently",
+      "count": 1
+    },
+    {
+      "source": "core/scheduler/loop.py",
+      "rule": "scheduler-owner",
+      "owner": "last_user_message_time",
+      "target": "definition:last_user_message_time",
+      "count": 1
+    },
+    {
+      "source": "core/scheduler/loop.py",
+      "rule": "scheduler-owner",
+      "owner": "mark_user_active",
+      "target": "definition:mark_user_active",
+      "count": 1
+    },
+    {
+      "source": "core/wake_bridge.py",
+      "rule": "scheduler-state",
+      "owner": "WakeBridge._validate_scope_values",
+      "target": "import:core.scheduler.loop._active_char_id_or_none",
+      "count": 1
+    },
+    {
+      "source": "main.py",
+      "rule": "scheduler-state",
+      "owner": "handle_message",
+      "target": "import:core.scheduler.loop.mark_user_active",
+      "count": 1
+    }
+  ]
+}

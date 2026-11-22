@@ -30,6 +30,12 @@ scenario_authoring / world_authoring。无反向 Facade、第二套状态或消�
 [AR-02](docs/refactors/ar02-dependency-cleanup.md)；CI 守门
 `tests/test_ar02_dependency_directions.py` 包含动态导入和故障注入。
 
+2026-11-22 T0 对三仓 main 的迁移遗留核实与目标所有者见
+[迁移切断清单](docs/refactors/migration-cutover-inventory.md)。现有 AR-02 已清零边界
+继续零容忍；全仓新增的 Core→Router、Router 私有依赖和 Scheduler 通用状态入口
+由同一测试文件及独立 architecture CI job 保护。尚存债务按文件/函数/目标/次数冻结，
+由 T1/T2 迁移时逐项联删；T0 不代表 Pipeline、Session、资产或记忆切换已经完成。
+
 工单 268 增加个人微信文本私聊 reference transport：第三方 REST/WS 仅在
 `integrations/wechat/` 解码，经 `integrations/wechat_transport.py` 规范合同、
 `core/wechat_service.py` owner 绑定及 `core/im_ingress.py` admission 进入现有 main 私聊
