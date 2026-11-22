@@ -473,14 +473,13 @@ async def test_video_call_tool_is_scoped_and_autonomy_eligible(monkeypatch):
 def test_hangup_followup_only_cancels_for_new_owner_activity(monkeypatch):
     from core.autonomy import runner
     from core.autonomy.models import Job
-    from core.scheduler import loop
 
     job = Job(uid="owner", char_id="character", source="autonomy", opportunity={
         "signals": [{"source": "video_call_hangup", "created_at": 100.0}],
     })
-    monkeypatch.setattr(loop, "last_user_message_time", lambda: 99.0)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", 99.0)
     assert runner._user_became_active_for_job(job) is False
-    monkeypatch.setattr(loop, "last_user_message_time", lambda: 101.0)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", 101.0)
     assert runner._user_became_active_for_job(job) is True
 
 

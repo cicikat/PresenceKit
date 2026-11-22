@@ -22,6 +22,10 @@ def forbidden_targets(module):
         return ("admin.routers.dream",)
     if module.startswith("core.dream."):
         return ("admin.routers",)
+    if module == "core.scheduler.loop":
+        return ("admin.routers",)
+    if module == "core.autonomy.runner":
+        return ("admin.routers", "core.scheduler.loop")
     if module in {"core.prompt_sections", "core.prompt_budget", "core.memory.prompt_sources",
                   "core.memory.reality_context", "core.post_process.turn_effects"}:
         return ("admin", "core.pipeline", "core.tool_dispatcher")
@@ -100,6 +104,8 @@ def target_files():
         ROOT / "core/memory/prompt_sources.py",
         ROOT / "core/memory/reality_context.py",
         ROOT / "core/post_process/turn_effects.py",
+        ROOT / "core/scheduler/loop.py",
+        ROOT / "core/autonomy/runner.py",
     })
 
 
@@ -119,6 +125,7 @@ def test_domain_dependency_directions():
     ("admin.routers.dream_sessions", "admin.routers.dream", "admin.routers", "dream"),
     ("core.prompt_budget", "core.pipeline", "core", "pipeline"),
     ("core.prompt_sections", "core.tool_dispatcher", "core", "tool_dispatcher"),
+    ("core.autonomy.runner", "core.scheduler.loop", "core.scheduler", "loop"),
 ])
 @pytest.mark.parametrize("template", [
     "import {forbidden} as back",

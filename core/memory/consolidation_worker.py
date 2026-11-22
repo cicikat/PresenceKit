@@ -89,8 +89,8 @@ def _foreground_active(uid: str, cfg: dict[str, Any], *, now: float | None = Non
     timestamp = time.time() if now is None else float(now)
     if timestamp - _last_message_at(uid) < int(cfg["idle_seconds"]): return True
     try:
-        from core.scheduler.loop import _user_active_recently
-        if _user_active_recently(int(cfg["idle_seconds"])): return True
+        from core.conversation_activity import user_active_recently
+        if user_active_recently(int(cfg["idle_seconds"])): return True
         from core.conversation_gate import conversation_lock
         if conversation_lock(uid).locked(): return True
         from core.message_queue import active_sessions, queue_size

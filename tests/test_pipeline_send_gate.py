@@ -20,6 +20,8 @@ import time
 
 import pytest
 
+from core import conversation_activity
+
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -35,13 +37,13 @@ def _isolation(monkeypatch):
     import core.pipeline_registry as _preg
     orig_pipeline = _preg.get()
     # Reset active-window so user is not flagged as active
-    orig_last_msg = _loop._last_user_message_time
-    _loop._last_user_message_time = 0.0
+    orig_last_msg = conversation_activity._last_user_message_time
+    conversation_activity._last_user_message_time = 0.0
     yield
     clear_dedup_registry_for_test()
     _cg._conversation_locks.clear()
     _preg.register(orig_pipeline)
-    _loop._last_user_message_time = orig_last_msg
+    conversation_activity._last_user_message_time = orig_last_msg
 
 
 def _allow_dream_guard(monkeypatch):

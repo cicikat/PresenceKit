@@ -78,14 +78,14 @@ def test_desk_busy_requires_fresh_data_and_recent_chat(monkeypatch):
 
     rs.update(_payload(idle=0))
     # 5 分钟前聊过 + 正在键鼠操作 -> 在场但在忙
-    monkeypatch.setattr(loop, "_last_user_message_time", time.time() - 300)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time() - 300)
     sig = gating._desk_busy_signal()
     assert sig["attribution"] == "PRESENT_IDLE" and sig["busy"] is True
     # 聊天静默 >=30 分钟 -> FOCUSED_SILENT，不拦截
-    monkeypatch.setattr(loop, "_last_user_message_time", time.time() - 3600)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time() - 3600)
     sig = gating._desk_busy_signal()
     assert sig["attribution"] == "FOCUSED_SILENT" and sig["busy"] is False
     # 键鼠停了 -> 不 busy
     rs.update(_payload(idle=400))
-    monkeypatch.setattr(loop, "_last_user_message_time", time.time() - 300)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time() - 300)
     assert gating._desk_busy_signal()["busy"] is False
