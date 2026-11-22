@@ -2,7 +2,7 @@
 
 > 本文是后端测试入口和验收边界的统一说明。它不替代代码、测试文件或 CI；当命令、测试范围与本文冲突时，以当前代码和 `.github/workflows/tests.yml` 为准。
 >
-> 盘点日期：2026-08-10。本文记录的是测试结构与证据边界，不代表本轮已经重新跑完所有测试。
+> 盘点日期：2026-11-22。本文记录的是测试结构与证据边界，不代表本轮已经重新跑完所有测试。
 
 ## 一、运行前提
 
@@ -37,17 +37,21 @@ pytest -n auto -q
 
 ## 三、CI 实际运行范围
 
-`.github/workflows/tests.yml` 当前只运行固定的 v0.1 后端 smoke subset，并在 Python 3.10 / 3.12 矩阵上执行。它会复制 `config.example.yaml`，验证公开 fresh-clone 配置下的鉴权、安全写入、QQ 收口、prompt layer、现实 scrub、trait / author-note 等回归。
+当前工作流按事件选择以下验证，不能把单个绿色 job 当作全部验收：
 
-CI **不会自动证明**以下内容：
+| 工作流 / job | 触发与范围 | 证据边界 |
+|---|---|---|
+| tests.yml / pytest | 非 main push、PR、schedule、手动；Python 3.10/3.12，pytest -n 4 -m smoke，清单见 tests/ci_suites.py；拒绝 skip | 仅核心 smoke |
+| tests.yml / full-pytest | main push、PR、schedule、手动；Python 3.10/3.12 全量 pytest、skip 分类、串行状态隔离；3.12 另跑业务 mutation | SKIP_CROSS_REPO=1，不代表三仓或真实设备 |
+| tests.yml / browser | main push、PR、schedule、手动；隔离 Admin Chromium 合同 | 不代表手机或真实生产配置 |
+| offline-evals.yml / offline | main push、PR、schedule、手动；3.12 identity / format / memeval，失败退出，上传日志 | 离线门禁，非真实 LLM 质量验收 |
+| offline-evals.yml / coplay-opt-in | 仅手动显式 run_coplay=true | 外部模型、单独成本边界，不是 PR 必跑 |
+| protocol-compatibility.yml | workflow_dispatch / workflow_call，冻结三仓完整 SHA，提供者与消费者合同，上传 evidence | 仅对记录的 SHA 组合有效；普通 tests 不自动触发 |
+| manual-sensor-evidence.yml | 手工传感器证据入口，具体条件见工作流 | 不能由单元测试替代真机证据 |
 
-- 全量 `tests/` 已通过；
-- identity、format、memeval、coplay 等独立评测已通过；
-- `tests/manual/` 的真实传感器冒烟已通过；
-- desktop / mobile 的构建、协议兼容、真机安装升级已通过；
-- 真正的 LLM、QQ、WebSocket 对端、ESP32 或 Android 设备行为已通过。
+main 直接推送会运行双版本全量与 browser，smoke job 按条件跳过；PR 会运行三类 job。使用测试结果时应同时标明提交 SHA、工作流、事件、实际 job 结果和 skip 分类。QQ、真实 WebSocket 对端、ESP32、真实支付通知与 Android 生命周期仍需对应实测。
 
-因此，“CI 通过”只能写成“后端 smoke subset 通过”，不能写成“三仓测试通过”或“发布验收完成”。
+.github/protocol-matrix.json 与 tests/protocol_fixtures/v1 已存在；它们描述协议和固定组合证据，不能把未运行的三仓 SHA 组合标成通过。手机财务同步的原生回归见手机 ci.yml 的 finance-native；真实 loopback HTTP 合同仍需显式启用 financeContract，不能与支付真机验收混淆。
 
 ## 四、提交前建议顺序
 
@@ -59,9 +63,8 @@ CI **不会自动证明**以下内容：
 
 ## 五、当前已知测试缺口
 
-- CI 没有全量 pytest job，也没有独立的评测 job；评测脚本失败不会阻塞当前 CI。
-- 三仓没有统一、版本化的 protocol fixture；mobile `/mobile/chat`、poll/ack、desktop HTTP/WS correlation 需要在固定三仓 commit 上做兼容矩阵。
+- 已有版本化 protocol fixture 与冻结 SHA 的跨仓工作流；尚未验证的 mobile `/mobile/chat`、poll/ack、desktop HTTP/WS correlation 组合仍需单独执行并记录。
 - scheduler / relay / mobile queue、Dream 期间 reality park、sensor 到真实发送的完整链路仍需要跨进程或真机证据，单元测试不能替代。
-- `pytest.ini` 注册了 `audit`、`contract`、`smoke` marker，但当前测试文件没有实际使用这些 marker；如果要按层级筛选，需先补标记或删除无效配置。
+- smoke marker 由 `tests/ci_suites.py::mark_suites` 在收集时添加，清单缺失会失败；不要按测试源码里有无装饰器判断覆盖。
 - [`test_record.md`](test_record.md) 只是历史手工记录模板，不是可复现测试规范；新的手工验收应记录日期、版本、环境、命令、输入、结果和证据位置。
 - 工单 257 R8 复用测试与缺口见 [`runtime-recovery-257.md`](runtime-recovery-257.md)。该记录不是全量套件或真机 soak；桌面消费者、SHA matrix、真机重连/后台/撤权仍 open。

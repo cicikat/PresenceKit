@@ -1470,3 +1470,7 @@ current：手机私有Outbox v1新增可选queued_at（旧快照回退created_at
 CSV保留空格、空单元格、引号与换行；XLSX提取工作表和单元格地址、原始数字/日期值及公式文本，不执行公式；PPTX保留页序和正文/表格。PDF逐页提取文字，混合PDF无文字页标为未识别；纯扫描PDF返回422 `document_needs_ocr`，需上传页面图片或先转为可搜索PDF。容器超限返回422 `document_container_too_large`；损坏/加密/空正文返回 `file_parse_failed`；超过正文上限返回 `document_text_too_large`，均不静默截断。文档内图片、图表、版面和视频尚未自动视觉识别，旧DOC/XLS/PPT需转换。
 
 验证：后端HTTP/资料库及相关59项、增量含换行31项、桌面7项Vitest、TS/Vite生产构建、Rust检查和附件原生测试、手机静态分析和84项发送/附件回归通过；隔离浏览器验证CSV发送、实际选择器过滤、右侧关闭和附件保留。observe：真实安装版/手机文件提供器/真实模型与生产部署未验收。详见 [331工单历史](https://github.com/cicikat/PresenceKit/blob/a0596b25fd56c10386d1719145e53f0ed00a853a/cc-tasks/331-multiformat-chat-attachments.md)。
+
+## 财务队列恢复63（current / observe）
+
+current：手机同步跳过本机暂停的自动账目，手动账目独立可发送；人工处理错误停止后台重排，409/422隔离单条，网络故障保留退避。scope/HTTP字段、后端effective与桌面消费者不变；状态复用手机snapshot/sync_status，恢复经显式同步或对应记录纠错入口。observe：真实支付通知、权限往返与后台/强停/重启仍未验收，合成回归不替代。

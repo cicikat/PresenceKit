@@ -36,3 +36,7 @@ Record：candidate_id、source_app（精确白名单或manual）、source_event_
 定向 HTTP、SQLite/Robolectric 和 Flutter 自动化是合成验收；Android14 真实支付通知、OEM、后台/杀进程/重启、真实角色模型、生产服务均须单独实测。Dev APK 不等同正式发行或端到端真机通过。离线生产数据未用于测试。
 
 330-C：Python3.12 定向 finance/schema/data-registry/dependency/backup-state 共327项通过（`.tmp/finance-backend-tests.log`）。实际隔离管理服务经浏览器登录，在新版「消息分发与客户端设置 → 服务配置总览」确认默认关闭、开启保存、刷新持久、再次关闭的真实回包和可见状态；使用匿名空账本，不调用支付/模型。管理面 fragment/core/settings-center 缓存版本已更新。
+
+## 手机同步恢复（工单63）
+
+本机通知收集关闭/授权撤销只暂停自动来源操作，不拦截手动来源操作；暂停操作保持原ID及载荷。401/403、后端关闭、配置/协议或回执异常须处理后由用户显式同步，不后台无限重试；断网、限流、普通服务端故障保留退避。409/422隔离单条，后续正常操作继续，纠错/采用服务端版本沿用现有入口。手机snapshot与逐条sync_status提供本机观测；无后端设置、scope、HTTP schema或桌面运行行为变化。真实支付与设备恢复仍observe。
