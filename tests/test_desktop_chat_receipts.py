@@ -102,6 +102,29 @@ async def test_final_reply_failure_does_not_replay_executed_tool(app, monkeypatc
     assert effects == ["virtual send"]
 
 
+async def test_quota_failure_exposes_safe_reason_and_preserves_receipt(app, monkeypatch):
+    from core.llm_failover import UpstreamQuotaExhausted
+
+    effects = []
+    rid = request_id()
+
+    async def execute(message, channel, **kwargs):
+        effects.append(message)
+        raise UpstreamQuotaExhausted()
+
+    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        args = {"headers": headers(rid), "json": {"message": "virtual send"}}
+        response = await client.post("/desktop/chat", **args)
+        assert (response.status_code, response.json()) == (503, {"detail": "upstream_quota_exhausted"})
+        receipt = await client.get(f"/desktop/chat/requests/{rid}", headers=headers(rid))
+        assert receipt.json() == {
+            "request_id": rid, "status": "failed", "error_code": "upstream_quota_exhausted",
+        }
+        assert (await client.post("/desktop/chat", **args)).status_code == 409
+    assert effects == ["virtual send"]
+
+
 async def test_only_a_persisted_preflight_rejection_authorizes_new_request(app, monkeypatch):
     rid = request_id()
     blocked = True

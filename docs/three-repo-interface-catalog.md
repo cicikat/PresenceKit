@@ -39,6 +39,8 @@ current：桌面失败/未知显式感叹号重发、断流正文保留与晚到
 
 ## 桌面失败提示与工具回合接续（2026-11-15，current / open / observe）
 
+2026-11-22 额度拒绝接管（observe）：已配置的模型备用路由可接管网关明确报出的配额拒绝，桌面和手机共享这一后端行为。桌面主聊天无可用回复时，HTTP 503 `detail` 和对应 `failed` 回执的可选 `error_code` 使用 `upstream_quota_exhausted`。桌面沿用原请求对账和手动重发，旧客户端忽略新增的可选字段。手机 HTTP、收件 ACK 与 WS 字段沿用现有合同。详见 [通道合同](channels.md#工单-307--连接所有权与正文恢复)。
+
 current：桌面失败或未知结果保留本地草稿，红色感叹号允许显式使用新 request_id 重发，复用用户气泡、保留新输入，恢复查询不自动重放；无 REST/WS/IPC、scope、运营开关或手机行为变更。observe：隔离浏览器已验证点击/双击及去重，真实安装版 Windows/Tauri 重发未验收。open：生产主模型 503 后，工具回合可能重新选择已熔断主模型，再被 tool_history_present 阻止备用，造成最终 HTTP 500；服务日志与 API 台账已互证，未改生产模型路由。详见 [已知问题](known-issues.md#工具回合在模型切换后再次回到熔断主模型2026-11-15open) 和桌面 docs/chat-correlation.md。
 
 ## 工单 314 · 桌面 Browser + Visual Workbench（current / open / observe）

@@ -290,6 +290,7 @@ async def _execute_desktop_request(request_id, *, auth, owner_id, payload, execu
 
 @router.get("/desktop/chat/requests/{request_id}", summary="查询本客户端聊天请求结果")
 async def desktop_chat_request(request_id: str, response: Response, _auth=Depends(require_scopes("chat"))):
+    from core.llm_failover import UpstreamQuotaExhausted
     from core.owner_turn_service import project_receipted_reply, read_owner_turn_receipt
 
     owner_id, _ = _owner_media_scope()
@@ -301,6 +302,8 @@ async def desktop_chat_request(request_id: str, response: Response, _auth=Depend
     result = {"request_id": request_id, "status": row["status"] if row else "unknown"}
     if row and row.get("error_code") == "not_executed":
         result["status"] = "not_executed"
+    if row and row["status"] == "failed" and row.get("error_code") == UpstreamQuotaExhausted.__name__:
+        result["error_code"] = UpstreamQuotaExhausted.code
     if row and row["status"] == "completed":
         reply = project_receipted_reply(row)
         result.update(turn_id=row["canonical_turn_id"], msg_id=row.get("transport_msg_id"))
@@ -387,8 +390,11 @@ async def desktop_chat(
         else:
             result = await _execute()
     except Exception as exc:
+        from core.llm_failover import UpstreamQuotaExhausted
         from core.llm_client import UpstreamResponseFormatError
 
+        if isinstance(exc, UpstreamQuotaExhausted):
+            raise HTTPException(503, UpstreamQuotaExhausted.code) from None
         if not isinstance(exc, UpstreamResponseFormatError):
             raise
         upstream_status = exc.http_status

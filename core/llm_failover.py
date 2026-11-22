@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+from openai import APIStatusError
 
 from core.llm_protocol import UpstreamResponseFormatError, error_category_for_exception
 from core.model_registry import ModelClient, get_model_client
@@ -74,6 +75,7 @@ FAILOVER_ELIGIBLE = frozenset({
     "connection_error",
     "timeout",
     "upstream_rate_limited",
+    "upstream_quota_exhausted",
     "upstream_unavailable",
     "geo_blocked",
 })
@@ -94,7 +96,8 @@ _GEO_MARKERS = (
 
 _BREAKER_THRESHOLD = 3
 _BREAKER_COOLDOWN_S = 60.0
-_BREAKER_TRIP = frozenset({"auth_or_forbidden", "upstream_5xx", "upstream_auth_failed", "upstream_unavailable"})
+_BREAKER_TRIP = frozenset({"auth_or_forbidden", "upstream_5xx", "upstream_auth_failed", "upstream_unavailable",
+                           "upstream_quota_exhausted"})
 
 _SHUTTING_DOWN = False
 
@@ -215,6 +218,8 @@ def classify_exception(exc: BaseException) -> tuple[str, str]:
         return "cancelled", ""
     if isinstance(exc, FailoverSkip):
         return exc.category, ""
+    if isinstance(exc, UpstreamQuotaExhausted):
+        return exc.code, exc.code
 
     status = _status_of(exc)
     text = str(exc).lower()
@@ -225,6 +230,11 @@ def classify_exception(exc: BaseException) -> tuple[str, str]:
     if any(marker in text for marker in _CONTENT_FILTER_MARKERS) and status not in (401, 429):
         if not (isinstance(status, int) and status >= 500):
             return "content_filtered", ""
+
+    if status == 403 and isinstance(exc, APIStatusError) and exc.code == "local:insufficient_quota":
+        return UpstreamQuotaExhausted.code, UpstreamQuotaExhausted.code
+    if status in (401, 403):
+        return "upstream_auth_failed", ""
 
     if (
         isinstance(exc, (asyncio.TimeoutError, TimeoutError, httpx.TimeoutException))
@@ -244,7 +254,7 @@ def classify_exception(exc: BaseException) -> tuple[str, str]:
         return "upstream_rate_limited", "upstream_rate_limited"
     if isinstance(status, int) and status >= 500:
         return "upstream_unavailable", "upstream_unavailable"
-    if status in (401, 403) or "unauthorized" in text:
+    if "unauthorized" in text:
         return "upstream_auth_failed", ""
     if "forbidden" in text and status is None:
         return "upstream_auth_failed", ""
@@ -318,6 +328,14 @@ def confirm_format_failure(preset: str, call_category: str) -> None:
 
 def clear_breakers() -> None:
     _BREAKERS.clear()
+
+
+class UpstreamQuotaExhausted(RuntimeError):
+    code = "upstream_quota_exhausted"
+
+    def __init__(self, *, partial_text: str = "") -> None:
+        super().__init__(self.code)
+        self.partial_text = partial_text
 
 
 class FailoverSkip(Exception):
@@ -631,7 +649,8 @@ async def execute_create(
                 switch_reason=switch_reason, logical_final=logical_final, failover=failover,
             )
             return AttemptOutcome(
-                ok=False, error=exc, mc=mc, role=role, preset=mc.name,
+                ok=False, error=UpstreamQuotaExhausted() if category == UpstreamQuotaExhausted.code else exc,
+                mc=mc, role=role, preset=mc.name,
                 error_category=category, failover_reason=reason,
                 duration_ms=duration_ms, logical_call_id=logical_id, attempt_id=attempt_id,
             )
@@ -750,8 +769,11 @@ async def execute_create(
     fallback.failover_reason = primary.failover_reason or primary.skip_reason
     if route is not None:
         route.accept(original_mc, fallback, call_category, char_id)
-    if not fallback.ok and fallback.error is None:
-        fallback.error = primary.error
+    if not fallback.ok and (fallback.error is None or isinstance(primary.error, UpstreamQuotaExhausted)):
+        if isinstance(primary.error, UpstreamQuotaExhausted) and fallback.error is not None:
+            fallback.error = UpstreamQuotaExhausted(partial_text=getattr(fallback.error, "partial_text", ""))
+        else:
+            fallback.error = primary.error
     return fallback
 
 
@@ -849,7 +871,9 @@ async def execute_stream(
                 logical_final=emitted or fallback_mc is None or role == "fallback",
                 failover=failover,
             )
-            wrapped = StreamAttemptError(exc, category=category, reason=reason, emitted=emitted, mc=mc)
+            error = (UpstreamQuotaExhausted(partial_text=getattr(exc, "partial_text", ""))
+                     if category == UpstreamQuotaExhausted.code else exc)
+            wrapped = StreamAttemptError(error, category=category, reason=reason, emitted=emitted, mc=mc)
             raise wrapped from exc
         duration_ms = int((time.perf_counter() - started) * 1000)
         confirm_business_success(mc.name, call_category)
@@ -890,7 +914,7 @@ async def execute_stream(
                     route_role="primary", skip_reason="not_eligible",
                     error_category=err.category, logical_final=True,
                 )
-            raise err.original
+            raise err.original from None
         switch_reason = err.reason or "primary_failed"
     except FailoverSkip as skip:
         # Only an open primary breaker may skip straight to a configured fallback.
@@ -916,13 +940,24 @@ async def execute_stream(
             route_role="fallback", skip_reason="budget_exhausted",
             error_category="budget_exhausted", logical_final=True, failover=True,
         )
+        if switch_reason == UpstreamQuotaExhausted.code:
+            raise UpstreamQuotaExhausted()
         raise FailoverSkip("budget_exhausted")
-    async for piece in _stream_one(
-        fallback_mc,
-        role="fallback",
-        switch_reason=switch_reason or "primary_failed",
-    ):
-        yield piece
+    try:
+        async for piece in _stream_one(
+            fallback_mc,
+            role="fallback",
+            switch_reason=switch_reason or "primary_failed",
+        ):
+            yield piece
+    except FailoverSkip:
+        if switch_reason == UpstreamQuotaExhausted.code:
+            raise UpstreamQuotaExhausted() from None
+        raise
+    except StreamAttemptError as err:
+        if switch_reason == UpstreamQuotaExhausted.code:
+            raise UpstreamQuotaExhausted(partial_text=getattr(err.original, "partial_text", "")) from None
+        raise
     if route is not None:
         route.accept(original_mc, AttemptOutcome(ok=True, mc=fallback_mc, role="fallback",
                      failover_reason=switch_reason), call_category, char_id)
