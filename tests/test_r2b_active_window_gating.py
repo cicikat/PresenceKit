@@ -381,7 +381,7 @@ class TestPipelineSendR2C:
 
         monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
         monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-        monkeypatch.setattr(loop, "_last_user_message_time", time.time())  # user active
+        monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time())  # user active
         monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
         monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
@@ -402,7 +402,7 @@ class TestPipelineSendR2C:
 
         monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
         monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-        monkeypatch.setattr(loop, "_last_user_message_time", time.time())  # user active
+        monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time())  # user active
         monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
         monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
@@ -449,7 +449,7 @@ class TestPipelineSendR2C:
 
         monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
         monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-        monkeypatch.setattr(loop, "_last_user_message_time", 0.0)
+        monkeypatch.setattr("core.conversation_activity._last_user_message_time", 0.0)
         monkeypatch.setattr(_dnd, "is_dnd", lambda uid: True)
         monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
         monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)

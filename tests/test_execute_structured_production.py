@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTION_ROOTS = (ROOT / "core", ROOT / "admin", ROOT / "channels")
 PRODUCTION_CALLERS = (
-    ROOT / "core" / "pipeline.py",
+    ROOT / "core" / "owner_chat" / "tool_loop.py",
     ROOT / "core" / "autonomy" / "runner.py",
     ROOT / "admin" / "routers" / "settings_mcp.py",
     ROOT / "core" / "character_permissions.py",

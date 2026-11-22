@@ -21,14 +21,15 @@ _MARKERS = [
 
 # Only explicitly approved one-way/read-only Reality consumers belong here.
 _ALLOWLIST: set[tuple[str, str]] = {
-    ("core/pipeline.py", "impression_loader"),
+    ("core/pipeline.py", "impression_loader"),  # Echo attribution before capture.
+    ("core/memory/reality_context.py", "impression_loader"),
     ("core/memory/user_hidden_state.py", "afterglow"),
     ("core/memory/user_hidden_state_integrator.py", "afterglow"),
     ("core/memory/user_hidden_state_store.py", "afterglow"),
     ("core/prompt_builder.py", "afterglow"),
     ("core/memory/path_resolver.py", "afterglow"),
     ("core/memory/user_facts.py", "afterglow"),
-    ("core/pipeline.py", "afterglow"),
+    ("core/memory/reality_context.py", "afterglow"),
 }
 
 

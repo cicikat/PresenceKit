@@ -52,8 +52,7 @@ def measure():
 if __name__ == '__main__':
     current = measure()
     # Compare the previous Python safe codecs on exactly the same API and data.
-    with patch('admin.config_control.load_config_yaml', yaml.safe_load), \
-         patch('admin.config_control.dump_config_yaml', yaml.safe_dump), \
-         patch('core.config_loader.load_config_yaml', yaml.safe_load):
+    with patch('core.config_yaml.load_config_yaml', yaml.safe_load), \
+         patch('admin.config_control.dump_config_yaml', yaml.safe_dump):
         previous = measure()
     print(json.dumps({'settings_post_ms': current, 'previous_codecs_ms': previous}))

@@ -13,26 +13,33 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def forbidden_target(module):
+def forbidden_targets(module):
     if module.startswith("core.tool_runtime.") or module.startswith("core.tools.") and module.endswith("_definitions"):
-        return "core.tool_dispatcher"
+        return ("core.tool_dispatcher",)
     if module.startswith("core.owner_chat."):
-        return "admin.routers.chat"
+        return ("admin.routers",)
     if module.startswith("admin.routers.dream_"):
-        return "admin.routers.dream"
+        return ("admin.routers.dream",)
     if module.startswith("core.dream."):
-        return "admin.routers"
+        return ("admin.routers",)
+    if module == "core.scheduler.loop":
+        return ("admin.routers",)
+    if module == "core.autonomy.runner":
+        return ("admin.routers", "core.scheduler.loop")
+    if module in {"core.prompt_sections", "core.prompt_budget", "core.memory.prompt_sources",
+                  "core.memory.reality_context", "core.post_process.turn_effects"}:
+        return ("admin", "core.pipeline", "core.tool_dispatcher")
     raise ValueError(module)
 
 
 def dependency_violations(source, module):
-    forbidden = forbidden_target(module)
+    forbidden = forbidden_targets(module)
     tree = ast.parse(source)
     errors = []
     aliases = {}
 
     def is_forbidden(target):
-        return target == forbidden or target.startswith(forbidden + ".")
+        return any(target == prefix or target.startswith(prefix + ".") for prefix in forbidden)
 
     def resolve(node):
         if isinstance(node, ast.Name):
@@ -92,6 +99,13 @@ def target_files():
         *(ROOT / "core/owner_chat").rglob("*.py"),
         *ROOT.glob("admin/routers/dream_*.py"),
         *(ROOT / "core/dream").rglob("*.py"),
+        *(ROOT / "core").glob("prompt_budget.py"),
+        ROOT / "core/prompt_sections.py",
+        ROOT / "core/memory/prompt_sources.py",
+        ROOT / "core/memory/reality_context.py",
+        ROOT / "core/post_process/turn_effects.py",
+        ROOT / "core/scheduler/loop.py",
+        ROOT / "core/autonomy/runner.py",
     })
 
 
@@ -109,6 +123,9 @@ def test_domain_dependency_directions():
     ("core.tool_runtime.execution", "core.tool_dispatcher", "core", "tool_dispatcher"),
     ("core.owner_chat.service", "admin.routers.chat", "admin.routers", "chat"),
     ("admin.routers.dream_sessions", "admin.routers.dream", "admin.routers", "dream"),
+    ("core.prompt_budget", "core.pipeline", "core", "pipeline"),
+    ("core.prompt_sections", "core.tool_dispatcher", "core", "tool_dispatcher"),
+    ("core.autonomy.runner", "core.scheduler.loop", "core.scheduler", "loop"),
 ])
 @pytest.mark.parametrize("template", [
     "import {forbidden} as back",

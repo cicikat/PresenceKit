@@ -4,6 +4,8 @@
 
 # docs/memory.md — 记忆子系统设计
 
+P2 只读向量对账使用 `python scripts/check_memory_projections.py --owner <uid> --character <char_id>`。它输出限定 Event Log 时间窗和情景主记录的候选数、当前索引数及缺失数。命令只扫描新事件桶，避免首次读取 legacy 时写入历史归属。索引不存在时不创建，索引不可读时报告不可用。既有 janitor 复用同一计划函数，按原有授权和上限补缺，保留外部来源及现有文件布局。
+
 第一轮 R3：`capture_turn_retry`、`summarize_to_midterm`、`reflect_to_episodic` 与 `consolidate_to_identity` 使用有界 SQLite outbox，
 路径由 `DataPaths.memory_task_outbox()` 获取，属于备份 inventory 覆盖的 data/runtime。
 capture 在首个投影写入前保存恢复快照，完成后清除正文；失败保留原 scope/source/授权源/

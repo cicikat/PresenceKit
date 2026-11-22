@@ -259,8 +259,8 @@ def _user_activity_facts(uid: str, char_id: str, *, now: float) -> dict:
     """Return observable activity facts without guessing intent or mood."""
     active_recently = False
     try:
-        from core.scheduler.loop import _user_active_recently
-        active_recently = bool(_user_active_recently())
+        from core.conversation_activity import user_active_recently
+        active_recently = user_active_recently()
     except Exception:
         pass
 
@@ -1145,8 +1145,8 @@ def _camera_signal_closed(job: Job) -> bool:
 
 
 def _user_became_active(uid: str) -> bool:
-    from core.scheduler.loop import _user_active_recently
-    return bool(_user_active_recently())
+    from core.conversation_activity import user_active_recently
+    return user_active_recently()
 
 
 def _is_video_call_hangup(job: Job) -> bool:
@@ -1183,10 +1183,10 @@ def _user_became_active_for_job(job: Job) -> bool:
         if job_is_call_scoped(job):
             # Same call-scoped quiet window the admission used, so a relaxed
             # admission is not cancelled the moment the loop starts.
-            from core.scheduler.loop import last_user_message_time
-            return time.time() - last_user_message_time() < silence_window(job.uid, job.char_id)
+            from core.conversation_activity import user_active_recently
+            return user_active_recently(silence_window(job.uid, job.char_id))
         return _user_became_active(job.uid)
-    from core.scheduler.loop import last_user_message_time
+    from core.conversation_activity import last_user_message_time
     hangup_at = max((float(signal.get("created_at") or 0) for signal in
                      (job.opportunity or {}).get("signals") or []
                      if isinstance(signal, dict) and signal.get("source") == "video_call_hangup"), default=0)

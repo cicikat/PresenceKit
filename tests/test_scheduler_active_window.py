@@ -23,64 +23,6 @@ class _FakePipeline:
         return "reply"
 
 
-def _install_fastapi_stub(monkeypatch):
-    class HTTPException(Exception):
-        def __init__(self, status_code=500, detail=""):
-            super().__init__(detail)
-            self.status_code = status_code
-            self.detail = detail
-
-    class APIRouter:
-        def get(self, *args, **kwargs):
-            return lambda fn: fn
-
-        def post(self, *args, **kwargs):
-            return lambda fn: fn
-
-        def put(self, *args, **kwargs):
-            return lambda fn: fn
-
-        def delete(self, *args, **kwargs):
-            return lambda fn: fn
-
-    def marker(default=None, *args, **kwargs):
-        return default
-
-    class HTTPBearer:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def __call__(self):
-            return None
-
-    class HTTPAuthorizationCredentials:
-        credentials = ""
-
-    monkeypatch.setitem(
-        sys.modules,
-        "fastapi",
-        SimpleNamespace(
-            APIRouter=APIRouter,
-            Body=marker,
-            Depends=marker,
-            File=marker,
-            Form=marker,
-            HTTPException=HTTPException,
-            Query=marker,
-            Request=object,
-            UploadFile=object,
-        ),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "fastapi.security",
-        SimpleNamespace(
-            HTTPBearer=HTTPBearer,
-            HTTPAuthorizationCredentials=HTTPAuthorizationCredentials,
-        ),
-    )
-
-
 def _install_ui_transport_stubs(monkeypatch):
     """Keep this scheduler test outside the concrete WebSocket transports."""
     import channels
@@ -112,9 +54,8 @@ def _install_ui_transport_stubs(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_owner_chat_turn_marks_user_active(monkeypatch):
-    _install_fastapi_stub(monkeypatch)
     _install_ui_transport_stubs(monkeypatch)
-    from admin.routers import chat
+    from core.owner_chat.service import run_owner_chat_turn
     from core.scheduler import loop
 
     turns = []
@@ -129,7 +70,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
             artifacts=[],
         )
 
-    monkeypatch.setattr(loop, "_last_user_message_time", 0.0)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", 0.0)
     monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "u1"}})
     async def fake_probe(message, user_id, *, char_id=TEST_CHAR_ID, provenance_channel=None):
@@ -139,7 +80,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
     monkeypatch.setattr("channels.registry.get", lambda name: None)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
-    await chat.run_owner_chat_turn("hello", "desktop")
+    await run_owner_chat_turn("hello", "desktop")
 
     assert loop._user_active_recently()
     assert turns and turns[0]["user_text"] == "hello"
@@ -203,7 +144,7 @@ async def test_pipeline_send_non_migrated_compatibility_trigger_is_execution_onl
 
     monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(loop, "_last_user_message_time", time.time())
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time())
     monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
@@ -237,3 +178,14 @@ async def test_pipeline_send_migrated_trigger_queues_signal_without_llm(monkeypa
     assert captured["uid"] == "u1"
     assert captured["char_id"] == "char-a"
     assert captured["trigger_name"] == "hr_critical"
+
+
+def test_scheduler_and_autonomy_share_the_same_activity_timestamp(monkeypatch):
+    from core import conversation_activity
+    from core.scheduler import loop
+
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", 0.0)
+    conversation_activity.mark_user_active(now=1000.0)
+    assert loop.last_user_message_time() == 1000.0
+    assert conversation_activity.user_active_recently(now=1119.999)
+    assert not conversation_activity.user_active_recently(now=1120.0)

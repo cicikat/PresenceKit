@@ -420,11 +420,22 @@ def list_entries(uid: str, char_id: str, *, source: str | None = None,
         db.close()
 
 
-# ── async wrappers (executor-backed) ─────────────────────────────────────────
-# 同步函数保留原样供非 async 调用方（如 episodic_memory.retrieve、admin 调试路由）
-# 直接调用；以下包装仅供已在事件循环内的热路径（fetch_context / event_log.search）
-# 使用，把阻塞 sqlite 调用挪到单 worker 线程池，不占用事件循环。
+def read_projection_keys(uid: str, char_id: str) -> set[tuple[str, str]]:
+    """Read vector metadata without creating a database or loading sqlite-vec."""
+    import sqlite3
+    from contextlib import closing
 
+    path = _db_path(uid, char_id)
+    if not path.exists():
+        return set()
+    if path.with_name(path.name + "-wal").exists() and not path.with_name(path.name + "-shm").exists():
+        # Don't manufacture a sidecar or ignore uncheckpointed rows in a dry run.
+        raise RuntimeError("cannot inspect WAL without its existing shared-memory file")
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        return {(source, str(source_id)) for source, source_id in db.execute("SELECT source, source_id FROM vec_meta")}
+
+
+# Async wrappers keep blocking sqlite access in the existing executor.
 async def query_async(
     uid: str,
     char_id: str,

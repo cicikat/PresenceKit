@@ -9,6 +9,7 @@ import time
 from datetime import datetime, date
 from typing import Optional
 
+from core import conversation_activity
 from core.error_handler import log_error
 from core.sandbox import get_paths, safe_user_id
 
@@ -172,7 +173,6 @@ _scheduler_start_time: float = time.time()
 _last_sensor_aware_tick: float = 0.0
 
 # 上次用户消息时间戳（用于调度抢占检查）
-_last_user_message_time: float = 0.0
 
 # 调度器 task 句柄
 _scheduler_task: Optional[asyncio.Task] = None
@@ -354,17 +354,16 @@ async def _send(content: str, behavior: dict | None = None):
 
 
 def mark_user_active():
-    global _last_user_message_time
-    _last_user_message_time = time.time()
+    conversation_activity.mark_user_active()
 
 
 def _user_active_recently(window_seconds: int = 120) -> bool:
-    return (time.time() - _last_user_message_time) < window_seconds
+    return conversation_activity.user_active_recently(window_seconds)
 
 
 def last_user_message_time() -> float:
     """Read-only activity timestamp for one-shot post-call autonomy cancellation."""
-    return _last_user_message_time
+    return conversation_activity.last_user_message_time()
 
 
 async def _pipeline_send(
@@ -785,8 +784,8 @@ async def _check_log_maintenance():
     except Exception as e:
         log_error("scheduler.log_maintenance.observations", e)
     try:
-        from admin.routers.perception import cleanup_visual_trace
-        cleanup_visual_trace()
+        from core.image_observability import prune
+        prune()
     except Exception as e:
         log_error("scheduler.log_maintenance.visual_trace", e)
     try:

@@ -11,6 +11,8 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 
@@ -40,7 +42,8 @@ def test_memory_event_baseline_fixture_has_all_boundary_cases():
     assert all(not scenarios[name]["memory_eligible"] for name in ("dream_isolated", "stage_isolated", "web_echo_isolated", "coplay_isolated"))
 
 
-def test_legacy_memory_chain_golden_shape_and_character_isolation(sandbox, monkeypatch):
+@pytest.mark.parametrize("temporal_projection_fails", [False, True])
+def test_legacy_memory_chain_golden_shape_and_character_isolation(sandbox, monkeypatch, temporal_projection_fails):
     from core.memory import event_log, short_term
     from core.memory.fixation_pipeline import capture_turn
     from core.memory.scope import MemoryScope
@@ -63,6 +66,11 @@ def test_legacy_memory_chain_golden_shape_and_character_isolation(sandbox, monke
         raise RuntimeError("memory-event baseline runs without embeddings")
 
     monkeypatch.setattr(embedding, "embed", _offline_embed)
+    if temporal_projection_fails:
+        def unavailable_projection(*args):
+            raise OSError("fixture projection read failed")
+
+        monkeypatch.setattr("core.memory.temporal_facts.project", unavailable_projection)
 
     assert capture_turn(uid, user_text, reply_text, turn_id=turn_id, char_id=TEST_CHAR_ID, envelope=stamp_user_chat()) == turn_id
     capture_turn(uid, user_text, peer_text, turn_id=f"{uid}_1700000000001", char_id=TEST_PEER_CHAR_ID, envelope=stamp_user_chat())

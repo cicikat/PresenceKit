@@ -145,6 +145,10 @@ spend:
 
 ### Scheduler/autonomy effective state (Brief 153)
 
+P2 将最后一次 owner 聊天时间放在 `core/conversation_activity.py`。旧 scheduler 入口仍转发到同一时间戳，autonomy 直接读取，活动窗口的边界与原来一致。视觉 trace 清理由 scheduler 直接调用 `core.image_observability.prune()`。候选阶段仍以 Signal、Opportunity、Run 及投递 attempt 回执各自记账。调度触发 stamp、模型评估冷却和发言预算分别度量不同事实，不能合并为同一个时间戳。
+
+2026-11-22 对最近四天保留的 100 条 run 做只读统计，其中 93 条 `circuit_open`、6 条 `blocked_user_active`、1 条 `llm_failed`。这批保留记录中 99 条止于准入，无法计入模型沉默次数；另有 18 条手机持久收件 ACK。保留记录有上限，不能用这批数据推断四天内的完整拒绝率或取消现有闸门。
+
 调度器总闸、例行来源闸、autonomy 配置/代理覆盖、talk gate、冷却与预算的读取统一使用
 `GET /admin/autonomy/effective-state`。`core/autonomy/effective_state.py` 是运行时解析
 入口；生产消费者也从该模块读取相同 effective 值，避免管理面把多个配置端点拼成另一套

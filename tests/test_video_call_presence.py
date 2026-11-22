@@ -116,17 +116,15 @@ def test_call_scope_lowers_min_interval_for_the_camera_source(sandbox, monkeypat
 def test_loop_cancellation_uses_the_same_scoped_window(monkeypatch):
     from core.autonomy import runner
     from core.autonomy.models import Job
-    from core.scheduler import loop
 
     job = Job(uid="owner", char_id="char", source="autonomy",
               opportunity={"signals": [{"source": "video_call_camera"}]})
-    monkeypatch.setattr(loop, "last_user_message_time", lambda: time.time() - 60)
-    monkeypatch.setattr(loop, "_user_active_recently", lambda window_seconds=120: True)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time() - 60)
     assert runner._user_became_active_for_job(job) is True  # feature off: global 120 s rule
     _open_call()
     _enable(monkeypatch, silence_seconds=30)
     assert runner._user_became_active_for_job(job) is False  # 60 s quiet > 30 s call window
-    monkeypatch.setattr(loop, "last_user_message_time", lambda: time.time() - 10)
+    monkeypatch.setattr("core.conversation_activity._last_user_message_time", time.time() - 10)
     assert runner._user_became_active_for_job(job) is True
 
 

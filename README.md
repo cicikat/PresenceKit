@@ -4,7 +4,7 @@
 
 A **single-user AI companion backend**. It owns persona, long-term memory, mood, tools, proactive contact, and an isolated dream runtime. A QQ bot is only one optional channel. [PresenceKit-desktop](https://github.com/cicikat/PresenceKit-desktop) and [PresenceKit-mobile](https://github.com/cicikat/PresenceKit-mobile) are thin clients: they render UI, capture sensors, and deliver messages. They **do not own** memory, persona, scheduling, or business data.
 
-The current product train is **v1.1.0**. The desktop wire protocol remains frozen **v0.1** (`POST /desktop/chat` + `/ws/desktop`), not a new EventBus. Exact HTTP schemas live in the running `/openapi.json`. Topic docs under `docs/` are the product source of truth; root `ARCHITECTURE.md` / `DESIGN.md` / `AGENTS.md` are developer entry points.
+The current public release train is **v1.3.0**. Desktop wire protocol **v0.1** (`POST /desktop/chat` and `/ws/desktop`) is versioned independently. Exact HTTP schemas live in the running `/openapi.json`. Topic docs under `docs/` are the product source of truth. The root `ARCHITECTURE.md`, `DESIGN.md`, and `AGENTS.md` are developer entry points.
 
 ---
 
@@ -29,9 +29,9 @@ PresenceKit (this repo — backend, sole business source of truth)
 
 | Repo | Version | Notes |
 |---|---|---|
-| Backend PresenceKit | [v1.1.0](https://github.com/cicikat/PresenceKit/releases/tag/v1.1.0) | this repo |
-| Desktop PresenceKit-desktop | [v1.1.0](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.1.0) | render/ack on the client; frozen v0.1 protocol |
-| Mobile PresenceKit-mobile | [v1.1.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.1.0) | life-record UI, heatmap, dream chrome on the phone |
+| Backend PresenceKit | [v1.3.0](https://github.com/cicikat/PresenceKit/releases/tag/v1.3.0) | this repo |
+| Desktop PresenceKit-desktop | [v1.3.0](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.3.0) | client rendering and acknowledgements, frozen v0.1 wire protocol |
+| Mobile PresenceKit-mobile | [v1.3.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.3.0) | life records, heatmap and Dream interface |
 
 Cross-repo contracts and gaps: [docs/three-repo-doc-index.md](docs/three-repo-doc-index.md), [docs/three-repo-interface-catalog.md](docs/three-repo-interface-catalog.md). Feature flags, effective state, and scopes: [docs/feature-control-surface.md](docs/feature-control-surface.md).
 

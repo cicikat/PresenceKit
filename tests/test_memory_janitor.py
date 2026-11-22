@@ -12,6 +12,7 @@ from __future__ import annotations
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
+import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -242,7 +243,14 @@ def test_janitor_recovers_missing_vectors_without_rebuilding_existing_sources(sa
     monkeypatch.setattr(vs, "_configured_dim", lambda: 4)
     monkeypatch.setattr("core.memory.embedding.embed", AsyncMock(return_value=[[.1,.2,.3,.4]]))
     async def run():
+        from core.memory.scope import MemoryScope
+        from core.memory.vector_reconciliation import inspect_vector_projections
+
         await vs.upsert(uid,_CHAR,"web","existing-web",100,"synthetic reference")
+        scope = MemoryScope.reality_scope(uid, _CHAR)
+        original_index = vs._db_path(uid, _CHAR).read_bytes()
+        assert inspect_vector_projections(scope) == {"canonical": 1, "indexed": 1, "missing": 1}
+        assert vs._db_path(uid, _CHAR).read_bytes() == original_index
         # Missing asynchronous projection with temporarily unavailable DB IO.
         with patch.object(vs, "_open_db", return_value=None):
             await janitor._check_vector_consistency(_CHAR,uid)
@@ -255,6 +263,7 @@ def test_janitor_recovers_missing_vectors_without_rebuilding_existing_sources(sa
             ("web","existing-web"),("episodic","missing-episode")}
         await janitor._check_vector_consistency(_CHAR,uid)
         assert len(vs.list_entries(uid,_CHAR)) == 2
+        assert inspect_vector_projections(scope) == {"canonical": 1, "indexed": 2, "missing": 0}
     asyncio.run(run())
 
 
@@ -282,3 +291,22 @@ def test_vector_repair_is_bounded_and_preserves_isolated_sources(sandbox, monkey
         assert not any(row["source_id"]=="fixture-web" or row["source_id"].startswith("isolated-") for row in entries)
         assert vs.list_entries(uid,"another-character")==[]
     asyncio.run(run())
+
+
+def test_projection_check_does_not_create_index_or_claim_legacy_history(sandbox, monkeypatch, capsys):
+    from core.memory import event_log, vector_store
+    from scripts.check_memory_projections import main
+
+    uid = "fixture-projection-dry-run"
+    _seed(uid, [_ep("missing-episode", narrative_summary="A canonical episode")])
+    legacy = event_log._legacy_event_log_dir(uid)
+    legacy.mkdir(parents=True)
+    path = vector_store._db_path(uid, _CHAR)
+    monkeypatch.setattr("sys.argv", ["check_memory_projections", "--owner", uid, "--character", _CHAR])
+    before = {file.relative_to(sandbox._base): file.read_bytes() for file in sandbox._base.rglob("*") if file.is_file()}
+
+    assert main() == 0
+    assert json.loads(capsys.readouterr().out) == {"canonical": 1, "indexed": 0, "missing": 1}
+    assert not path.exists()
+    assert not event_log._legacy_owner_record_path(uid).exists()
+    assert {file.relative_to(sandbox._base): file.read_bytes() for file in sandbox._base.rglob("*") if file.is_file()} == before

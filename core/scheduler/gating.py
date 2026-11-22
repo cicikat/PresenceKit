@@ -338,12 +338,12 @@ def _desk_busy_signal(now: Optional[float] = None) -> dict:
     if snap is None:
         return result
     try:
-        from core.scheduler import loop as _loop
+        from core.conversation_activity import last_user_message_time
         from core.scheduler.presence_model import (
             Attribution, PhysicalPresence, derive_presence_state,
         )
 
-        last_chat = float(getattr(_loop, "_last_user_message_time", 0.0) or 0.0)
+        last_chat = last_user_message_time()
         state = derive_presence_state(
             idle_seconds=int(snap.get("input", {}).get("idle_seconds", 0)),
             continuous_at_desk_seconds=realtime_state.get_continuous_at_desk_seconds(),
