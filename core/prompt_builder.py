@@ -13,7 +13,8 @@ from core.character_loader import Character
 from core.error_handler import log_error
 from core.prompt_ablation import ALWAYS_ON
 from core.data_paths import DEFAULT_CHAR_ID
-from core.prompt_sections import arrange_sections, character_description
+from core.prompt_budget import HARD_LIMIT, SOFT_LIMIT, TRIM_TARGET, apply_budget
+from core.prompt_sections import character_description
 
 
 logger = logging.getLogger(__name__)
@@ -1703,48 +1704,20 @@ def build(
             len(_meta_message.get("content", "")) / 1.7, 1
         )
 
-    _layers_before_trim = [
-        m.get("_report_layer") or m.get("_layer", "unknown") for m in arrange_sections(messages)
-    ]
-    token_estimate = sum(len(m["content"]) for m in arrange_sections(messages))
-    _removed_layers: list[str] = []
-    if token_estimate > 30000:
-        _prompt_logger.warning(f"[prompt] token估算超硬上限: {token_estimate}，触发层裁剪")
-        # R4-B: 动态裁剪——收集所有带 _drop_priority 的消息，按 priority 升序排列（数字越小越先丢），
-        # 同 priority 整批一次性丢弃，直到估算 ≤28000。无 _drop_priority 的层永不被自动丢弃。
-        _droppable = [
-            (i, m) for i, m in enumerate(messages)
-            if m.get("_drop_priority") is not None
-        ]
-        _droppable.sort(key=lambda x: (x[1]["_drop_priority"], x[0]))
-        _drop_indices: set[int] = set()
-        _di = 0
-        while _di < len(_droppable) and token_estimate > 28000:
-            _cur_prio = _droppable[_di][1]["_drop_priority"]
-            # 整批同 priority 的消息一次性丢弃
-            while _di < len(_droppable) and _droppable[_di][1]["_drop_priority"] == _cur_prio:
-                _idx, _msg = _droppable[_di]
-                _drop_indices.add(_idx)
-                _removed_layers.append(_msg.get("_layer", "?"))
-                _di += 1
-            # Rebuild section boundaries after each priority batch, including
-            # their overhead even when a section's first/last leaf was removed.
-            token_estimate = sum(len(m["content"]) for m in arrange_sections(
-                [m for j, m in enumerate(messages) if j not in _drop_indices]
-            ))
-        if _drop_indices:
-            messages = [m for j, m in enumerate(messages) if j not in _drop_indices]
-        if _removed_layers:
-            _prompt_logger.info(f"[prompt] 裁剪层：{_removed_layers}，裁剪后估算：{token_estimate}")
-        if token_estimate > 28000:
+    budget = apply_budget(messages)
+    if budget.original_chars > HARD_LIMIT:
+        _prompt_logger.warning(f"[prompt] token估算超硬上限: {budget.original_chars}，触发层裁剪")
+        if budget.removed_layers:
+            _prompt_logger.info(f"[prompt] 裁剪层：{budget.removed_layers}，裁剪后估算：{budget.final_chars}")
+        if budget.final_chars > TRIM_TARGET:
             _prompt_logger.warning(
                 "[prompt] 裁完仍超预算: %d，全部可裁层已丢弃，无法继续压缩",
-                token_estimate,
+                budget.final_chars,
             )
-    elif token_estimate > 15000:
-        _prompt_logger.warning(f"[prompt] token估算超软警戒: {token_estimate}")
+    elif budget.original_chars > SOFT_LIMIT:
+        _prompt_logger.warning(f"[prompt] token估算超软警戒: {budget.original_chars}")
 
-    messages = arrange_sections(messages)
+    messages = budget.messages
     for _meta_message in messages:
         _meta_message["_estimated_tokens"] = round(len(_meta_message["content"]) / 1.7, 1)
 
@@ -1760,15 +1733,15 @@ def build(
         "layers_activated": [
             m.get("_report_layer") or m.get("_layer", "unknown") for m in messages
         ],
-        "layers_before_trim": _layers_before_trim,
-        "token_estimate": sum(len(m["content"]) for m in messages),
+        "layers_before_trim": budget.original_layers,
+        "token_estimate": budget.final_chars,
         # token_estimate is a historical character-count field used by the
         # trimmer thresholds.  Keep it compatible, and expose unambiguous
         # character/token estimates for the observability surface.
-        "char_estimate": sum(len(m["content"]) for m in messages),
-        "estimated_tokens": round(sum(len(m["content"]) for m in messages) / 1.7, 1),
+        "char_estimate": budget.final_chars,
+        "estimated_tokens": round(budget.final_chars / 1.7, 1),
         "tags": list(_tags),
-        "removed_layers": _removed_layers,
+        "removed_layers": budget.removed_layers,
         "ablated_layers": _ablated_layers,
     }
 
