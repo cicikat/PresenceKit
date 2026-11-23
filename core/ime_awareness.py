@@ -132,11 +132,12 @@ def effective_state(uid=None, char_id=None):
         reason = 'ime_ingest_disabled'
     else:
         try:
-            from core.scheduler.loop import _owner_id, _active_char_id_or_none
+            from core.owner_config import configured_owner_id
+            from core.character_context import selected_character_id_or_none
             from core.autonomy.effective_state import autonomy_enabled, autonomy_talk_enabled, scheduler_enabled
             from core.autonomy import store
-            uid = uid or _owner_id()
-            char_id = char_id or _active_char_id_or_none()
+            uid = uid or configured_owner_id()
+            char_id = char_id or selected_character_id_or_none()
             if not uid or not char_id:
                 reason = 'owner_or_character_missing'
             elif not scheduler_enabled():

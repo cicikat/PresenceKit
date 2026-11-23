@@ -244,8 +244,7 @@ async def test_handle_message_main_path_intact(sandbox, monkeypatch):
         "llm": {"tool_call_mode": "function_calling"},
     })
 
-    import core.scheduler.loop as _sl
-    monkeypatch.setattr(_sl, "mark_user_active", lambda: None)
+    monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     import core.presence as _pr
     monkeypatch.setattr(_pr, "update_last_message", lambda uid: None)
     import core.scheduler.state_machine as _sm

@@ -78,8 +78,7 @@ def _patch_text_output(monkeypatch):
 def _patch_scheduler_noise(monkeypatch):
     """Silence scheduler / presence side effects."""
     try:
-        import core.scheduler.loop as _sl
-        monkeypatch.setattr(_sl, "mark_user_active", lambda: None)
+        monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     except Exception:
         pass
     try:

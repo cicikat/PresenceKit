@@ -311,8 +311,8 @@ async def test_wake_merges_with_other_low_signal_into_one_opportunity(
         "core.self_management.policy.autonomy_enabled", lambda *_args: True
     )
     monkeypatch.setattr(
-        "core.scheduler.loop._cfg",
-        lambda: {"enabled": True, "random_message": True},
+        "core.config_loader.get_config",
+        lambda: {"scheduler": {"enabled": True, "random_message": True}},
     )
     _isolate_optional_signal_sources(monkeypatch)
     assert enqueue_desktop_wake_signal(

@@ -364,11 +364,11 @@ def _desk_busy_signal(now: Optional[float] = None) -> dict:
 
 def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[TriggerProposal], str, list[dict]]:
     # Deferred imports to avoid circular dependency (gating ↔ loop / dnd).
-    from core.scheduler.loop import _user_active_recently
+    from core.conversation_activity import user_active_recently
     from core.scheduler.triggers.dnd import is_dnd
 
     state = get_current_state(uid)
-    chat_active = _user_active_recently()
+    chat_active = user_active_recently()
     desk = _desk_busy_signal()
     user_active = chat_active or bool(desk["busy"])
     user_active_reason = "chat" if chat_active else ("desk_busy" if desk["busy"] else None)

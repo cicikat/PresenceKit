@@ -66,11 +66,11 @@ def _make_proposal(trigger_name: str, urgency: float = 0.5):
 
 
 def _patch_decide_env(monkeypatch, *, user_active: bool, dnd_active: bool):
-    """Patch loop._user_active_recently and dnd.is_dnd to fixed values."""
+    """Patch conversation_activity.user_active_recently and dnd.is_dnd to fixed values."""
     import core.scheduler.loop as _loop
     import core.scheduler.triggers.dnd as _dnd
 
-    monkeypatch.setattr(_loop, "_user_active_recently", lambda *a, **kw: user_active)
+    monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda *a, **kw: user_active)
     monkeypatch.setattr(_dnd, "is_dnd", lambda uid: dnd_active)
     from core.scheduler.state_machine import TriggerState
     monkeypatch.setattr("core.scheduler.gating.get_current_state", lambda uid: TriggerState.QUIET)
@@ -348,7 +348,7 @@ class TestGatingDeferQueueIntegration:
         # Second tick: user inactive → trigger picked and released
         import core.scheduler.loop as _loop
         import core.scheduler.triggers.dnd as _dnd
-        monkeypatch.setattr(_loop, "_user_active_recently", lambda *a, **kw: False)
+        monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda *a, **kw: False)
         monkeypatch.setattr(_dnd, "is_dnd", lambda uid: False)
 
         _decide("u1", [_make_proposal("hr_high")])
@@ -745,7 +745,7 @@ class TestDeferNoMark:
         import core.scheduler.loop as _loop
         import core.scheduler.triggers.dnd as _dnd
 
-        monkeypatch.setattr(_loop, "_user_active_recently", lambda *a, **kw: True)
+        monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda *a, **kw: True)
         monkeypatch.setattr(_dnd, "is_dnd", lambda uid: False)
         monkeypatch.setattr("core.scheduler.gating.get_current_state", lambda uid: TriggerState.QUIET)
         monkeypatch.setattr("core.scheduler.gating.is_trigger_ready", lambda name: True)

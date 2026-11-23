@@ -195,8 +195,7 @@ def _patch_pipeline_for_group(monkeypatch):
 def _patch_infra(monkeypatch):
     """静默外部副作用（scheduler / presence / config）。"""
     try:
-        import core.scheduler.loop as _sl
-        monkeypatch.setattr(_sl, "mark_user_active", lambda: None)
+        monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     except Exception:
         pass
     try:

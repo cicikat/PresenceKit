@@ -74,7 +74,7 @@ async def run_owner_chat_turn(
     if not user_id:
         raise HTTPException(status_code=503, detail="owner_id 未配置")
     try:
-        from core.scheduler.loop import mark_user_active
+        from core.conversation_activity import mark_user_active
         from core.scheduler.state_machine import notify_owner_turn
 
         mark_user_active()

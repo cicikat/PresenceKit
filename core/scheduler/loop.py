@@ -9,7 +9,8 @@ import time
 from datetime import datetime, date
 from typing import Optional
 
-from core import conversation_activity
+from core.character_context import selected_character_id_or_none as _active_char_id_or_none
+from core.owner_config import configured_owner_id as _owner_id
 from core.error_handler import log_error
 from core.sandbox import get_paths, safe_user_id
 
@@ -321,10 +322,6 @@ def _log_effective_gap_if_changed() -> None:
         _last_logged_gap = gap
 
 
-def _owner_id() -> str:
-    return str(_cfg().get("owner_id", "")).strip()
-
-
 def _char_name() -> str:
     """角色显示名。始终从 pipeline_registry 的活跃 character card 取。
     pipeline 未注册或 character 属性缺失时 fail-loud（不读 config）。
@@ -351,19 +348,6 @@ async def _send(content: str, behavior: dict | None = None):
         return
     from channels.registry import broadcast
     await broadcast(content, oid, behavior=behavior)
-
-
-def mark_user_active():
-    conversation_activity.mark_user_active()
-
-
-def _user_active_recently(window_seconds: int = 120) -> bool:
-    return conversation_activity.user_active_recently(window_seconds)
-
-
-def last_user_message_time() -> float:
-    """Read-only activity timestamp for one-shot post-call autonomy cancellation."""
-    return conversation_activity.last_user_message_time()
 
 
 async def _pipeline_send(
@@ -635,17 +619,6 @@ async def _pipeline_send(
     except Exception as e:
         log_error("scheduler._pipeline_send", e)
     return None
-
-
-def _active_char_id_or_none() -> str | None:
-    """Return the active character id from active_prompt_assets.json, or None if unavailable."""
-    try:
-        import json as _j
-        data = _j.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
-        cid = (data.get("active_character") or "").strip()
-        return cid or None
-    except Exception:
-        return None
 
 
 def _all_observation_paths() -> list:

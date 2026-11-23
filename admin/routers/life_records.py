@@ -157,7 +157,6 @@ async def settings(char_id: str | None = None, auth=Depends(require_scopes('admi
     char_id = character(char_id)
     result = await asyncio.to_thread(store.observe, uid, char_id=char_id)
     try:
-        from core.scheduler.loop import _active_char_id_or_none
         from core.context_continuity import observability
         result['continuity'] = await asyncio.to_thread(observability, uid, char_id) if uid and char_id else {'unavailable': True}
     except Exception:

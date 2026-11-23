@@ -786,10 +786,10 @@ class WakeBridge:
         uid = safe_user_id(uid)
         char_id = safe_user_id(char_id)
         from core.config_loader import get_config
-        from core.scheduler.loop import _active_char_id_or_none
+        from core.character_context import selected_character_id_or_none
 
         owner_uid = str(get_config().get("scheduler", {}).get("owner_id") or "").strip()
-        active_char_id = _active_char_id_or_none()
+        active_char_id = selected_character_id_or_none()
         if not owner_uid or uid != owner_uid:
             raise ValueError("uid is outside configured owner scope")
         if not active_char_id or char_id != active_char_id:

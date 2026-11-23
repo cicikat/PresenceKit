@@ -143,7 +143,7 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "owner"}},
     )
-    monkeypatch.setattr("core.scheduler.loop.mark_user_active", lambda: None)
+    monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda _uid: None)
     monkeypatch.setattr("core.tool_dispatcher.tool_loop_active", lambda _uid: False)
     monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', fake_probe)
@@ -294,7 +294,7 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
         lambda: {"scheduler": {"owner_id": "owner"}},
     )
     monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda _uid: None)
-    monkeypatch.setattr("core.scheduler.loop.mark_user_active", lambda: None)
+    monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda _uid: None)
     monkeypatch.setattr("core.scheduler.proactive_ledger.record_user_message", lambda _uid: None)
     monkeypatch.setattr("core.scheduler.sensor_events.notify_chat_happened", lambda: None)

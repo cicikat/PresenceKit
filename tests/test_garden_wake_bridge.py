@@ -29,7 +29,7 @@ def _garden(**overrides):
 @pytest.fixture
 def garden_env(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner-1"}})
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "char-a")
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: "char-a")
 
 
 def _state(sandbox):
@@ -233,7 +233,7 @@ def _patch_time_sensitive_gate(monkeypatch, *, user_active=False, dnd_active=Fal
     import core.scheduler.triggers.dnd as dnd
 
     calls = []
-    monkeypatch.setattr(loop, "_user_active_recently", lambda: user_active)
+    monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda: user_active)
     monkeypatch.setattr(dnd, "is_dnd", lambda uid: dnd_active)
     monkeypatch.setattr(gating, "get_current_state", lambda uid: state or TriggerState.CHATTING)
     monkeypatch.setattr(gating, "is_trigger_ready", lambda *args, **kwargs: True)

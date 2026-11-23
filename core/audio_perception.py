@@ -563,9 +563,9 @@ def prompt_hint():
 
 
 def _scope(channel):
-    from core.scheduler.loop import _active_char_id_or_none
+    from core.character_context import selected_character_id_or_none
     uid = str((get_config().get("scheduler") or {}).get("owner_id") or "")
-    return (uid, _active_char_id_or_none(), channel)
+    return (uid, selected_character_id_or_none(), channel)
 
 
 def _receipt_payload(result):

@@ -332,6 +332,14 @@ def test_admin_activity_storage_uses_public_operations():
     )
 
 
+def test_t2_conversation_activity_boundaries_are_zero():
+    """All T2 state/identity dependencies are retired, regardless of old ledgers."""
+    retired = {"scheduler-owner", "scheduler-state"}
+    assert not [row for row in cutover_scan() if row["rule"] in retired], "T2 activity must remain zero"
+    ledger = json.loads(DEBT_PATH.read_text(encoding="utf-8"))
+    assert not [row for row in ledger["dependencies"] if row["rule"] in retired], "T2 activity debt may not be restored"
+
+
 @pytest.mark.parametrize("member", ACTIVITY_PRIVATE_MEMBERS)
 @pytest.mark.parametrize("template", [
     "from {module} import {name} as hidden",
@@ -510,6 +518,28 @@ def test_retired_t1_debt_cannot_be_restored_with_source_and_json(cutover_git_rep
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 1 and "T1 must remain zero" in result.stdout, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("restore_source", [True, False])
+@pytest.mark.parametrize("member", ["mark_user_active", "_owner_id"])
+def test_retired_t2_activity_cannot_be_restored(cutover_git_repository, restore_source, member):
+    """Run the CI assertion with an old ledger, with and without restored code."""
+    root, path, ledger, _ = cutover_git_repository
+    ledger["dependencies"].append({
+        "source": "core/debt.py", "rule": "scheduler-state", "owner": "<module>",
+        "target": "import:core.scheduler.loop." + member, "count": 1,
+    })
+    path.write_bytes(json.dumps(ledger).encode())
+    if restore_source:
+        (root / "core/debt.py").write_bytes(("from core.scheduler.loop import " + member + "\n").encode())
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--noconftest", "-c", "pytest.ini", "-q",
+         "tests/test_ar02_dependency_directions.py::test_t2_conversation_activity_boundaries_are_zero"],
+        cwd=root, env=dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"),
+        capture_output=True, text=True, timeout=30,
+    )
+    expected = "T2 activity must remain zero" if restore_source else "T2 activity debt may not be restored"
+    assert result.returncode == 1 and expected in result.stdout, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("event_name,event_ref", [

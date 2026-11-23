@@ -275,7 +275,6 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
     import core.perform_mapper as perform_mapper
     import core.pipeline_registry as pipeline_registry
     import core.reality_output_guard as reality_output_guard
-    import core.scheduler.loop as scheduler_loop
     import core.scheduler.state_machine as scheduler_state
     import core.tool_dispatcher as tool_dispatcher
     import core.turn_sink as turn_sink
@@ -336,7 +335,7 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
     monkeypatch.setattr(pipeline_registry, "get", lambda: FakePipeline())
     monkeypatch.setattr(config_loader, "get_config", lambda: {"scheduler": {"owner_id": "owner"}})
     monkeypatch.setattr(tool_dispatcher, "tool_loop_active", lambda uid: False)
-    monkeypatch.setattr(scheduler_loop, "mark_user_active", lambda: None)
+    monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     monkeypatch.setattr(scheduler_state, "notify_owner_turn", lambda uid: None)
     monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', noop_async)
     monkeypatch.setattr("core.conversation_gate.conversation_lock", noop_lock)

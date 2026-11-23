@@ -78,7 +78,7 @@ def test_manual_test_wake_uses_formal_garden_ingress_without_inline_drain(sandbo
     monkeypatch.setattr(integrations, "_integration_token_configured", lambda: True)
     monkeypatch.setattr(integrations, "_active_scope", lambda: ("owner-a", "char-a"))
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner-a"}})
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "char-a")
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: "char-a")
     monkeypatch.setattr(auth, "resolve_token", lambda value: auth.TokenInfo(
         "fixture-admin", frozenset({"admin"})) if value == "fixture-t1" else None)
     drain, generate, sink = AsyncMock(), AsyncMock(), AsyncMock()

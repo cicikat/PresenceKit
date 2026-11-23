@@ -9,9 +9,10 @@ router = APIRouter()
 
 
 def _scope() -> tuple[str, str]:
-    from core.scheduler.loop import _active_char_id_or_none, _owner_id
+    from core.character_context import selected_character_id_or_none
+    from core.owner_config import configured_owner_id
 
-    uid, char_id = _owner_id(), _active_char_id_or_none()
+    uid, char_id = configured_owner_id(), selected_character_id_or_none()
     if not uid or not char_id:
         raise HTTPException(status_code=409, detail="owner or active character is not configured")
     return str(uid), str(char_id)

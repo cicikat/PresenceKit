@@ -303,7 +303,7 @@ async def handle_message(message: dict, *, ingress=None):
     try:
         from core.config_loader import get_config as _get_config
         from core.scheduler.state_machine import notify_owner_turn
-        from core.scheduler.loop import mark_user_active
+        from core.conversation_activity import mark_user_active
 
         owner_id = str(_get_config().get("scheduler", {}).get("owner_id", "")).strip()
         if owner_id and str(user_id) == owner_id:

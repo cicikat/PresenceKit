@@ -77,3 +77,13 @@ def routing_character_id() -> str | None:
     if not isinstance(raw, str) or not raw:
         return None
     return Path(raw).stem
+
+
+def selected_character_id_or_none() -> str | None:
+    """Return the active character id from active_prompt_assets.json, or None if unavailable."""
+    try:
+        data = json.loads(_get_paths().active_prompt_assets().read_text(encoding="utf-8"))
+        cid = (data.get("active_character") or "").strip()
+        return cid or None
+    except Exception:
+        return None

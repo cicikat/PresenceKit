@@ -489,7 +489,7 @@ async def test_f7_handle_message_adapter_scrubs_before_post_process(sandbox, mon
         "llm": {"tool_call_mode": "function_calling"},
     })
     for mod_path, attr, stub in [
-        ("core.scheduler.loop", "mark_user_active", lambda: None),
+        ("core.conversation_activity", "mark_user_active", lambda: None),
         ("core.presence", "update_last_message", lambda uid: None),
         ("core.scheduler.state_machine", "notify_owner_turn", lambda uid: None),
     ]:

@@ -30,3 +30,9 @@ def owner_status(cfg: dict | None = None) -> dict:
         "owner_birthday": birthday_raw if birthday_ok else "",
         "owner_birthday_set": birthday_ok,
     }
+
+
+def configured_owner_id() -> str:
+    """Read the unvalidated configured owner, preserving Scheduler ID semantics."""
+    from core.config_loader import get_config
+    return str(get_config().get("scheduler", {}).get("owner_id", "")).strip()

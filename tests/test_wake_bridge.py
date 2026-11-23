@@ -33,7 +33,7 @@ def _event(**overrides):
 @pytest.fixture
 def bridge_env(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner-1"}})
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "char-a")
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: "char-a")
 
 
 def _state(sandbox, *, uid="owner-1", char_id="char-a", provider="example_forum"):
@@ -283,7 +283,7 @@ def test_provider_uid_and_character_scopes_are_isolated(bridge_env, sandbox, mon
     assert _run(bridge.submit_mapping(_event())).status == "accepted"
     assert _run(bridge.submit_mapping(_event(provider="other_forum"))).status == "accepted"
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner-2"}})
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "char-b")
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: "char-b")
     assert _run(bridge.submit_mapping(_event(uid="owner-2", char_id="char-b"))).status == "accepted"
     assert len(calls) == 3
     assert sandbox.wake_bridge_state("owner-1", char_id="char-a", provider="example_forum").exists()

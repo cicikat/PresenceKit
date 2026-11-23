@@ -40,8 +40,8 @@ def _scope() -> tuple[str, str]:
     if not uid:
         raise HTTPException(status_code=503, detail="owner_id_not_configured")
     try:
-        from core.scheduler.loop import _active_char_id_or_none
-        char_id = str(_active_char_id_or_none() or "").strip()
+        from core.character_context import selected_character_id_or_none
+        char_id = str(selected_character_id_or_none() or "").strip()
     except Exception:
         char_id = ""
     if not char_id:

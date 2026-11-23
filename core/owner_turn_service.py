@@ -274,9 +274,9 @@ async def _execute_and_record(
 
 def _canonical_character_id() -> str | None:
     try:
-        from core.scheduler.loop import _active_char_id_or_none
+        from core.character_context import selected_character_id_or_none
 
-        return _active_char_id_or_none()
+        return selected_character_id_or_none()
     except Exception:
         return None
 
