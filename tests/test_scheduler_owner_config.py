@@ -8,6 +8,14 @@ from admin.routers import scheduler
 from core.owner_config import owner_status
 
 
+@pytest.mark.parametrize("value,expected", [("  owner-a  ", "owner-a"), (17, "17"), ("", "")])
+def test_configured_owner_reader_preserves_runtime_id(monkeypatch, value, expected):
+    """Moving ownership must preserve whitespace trimming and numeric owner IDs."""
+    from core.owner_config import configured_owner_id
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": value}})
+    assert configured_owner_id() == expected
+
+
 def test_put_owner_id_rejects_illegal_chars(monkeypatch):
     monkeypatch.setattr(scheduler, "_sched_cfg", lambda: {})
     monkeypatch.setattr(scheduler, "_save_sched_cfg", lambda cfg: None)

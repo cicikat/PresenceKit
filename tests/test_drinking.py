@@ -72,7 +72,7 @@ def test_registry_not_probe_and_perform():
 def test_observation_scope(monkeypatch):
     from admin.routers.observability import router
     from admin.auth import require_scopes
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: TEST_CHAR_ID)
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: TEST_CHAR_ID)
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)

@@ -61,12 +61,9 @@ def scheduler_enabled(config: dict | None = None) -> bool:
 def scheduler_source_enabled(name: str, config: dict | None = None) -> bool:
     """Resolve one scheduler producer switch, including the global master."""
     if config is None:
-        # Keep the legacy `_cfg()` seam observable for callers/tests that
-        # provide a hot-reloaded scheduler view, while the control-plane
-        # builder passes its already-resolved config explicitly.
-        from core.scheduler.loop import _cfg
+        from core.config_loader import get_config
 
-        config = _cfg()
+        config = get_config().get("scheduler", {})
     if not scheduler_enabled(config):
         return False
     path = _SCHEDULER_SOURCE_PATHS.get(str(name))

@@ -15,7 +15,7 @@ def legacy(monkeypatch):
     cfg = deepcopy(LEGACY_CFG)
     monkeypatch.setattr(audio, "get_config", lambda: cfg)
     monkeypatch.setattr("core.config_loader.get_config", lambda: cfg)
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "fixture_character")
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: "fixture_character")
     audio._receipts.clear()
     return cfg
 

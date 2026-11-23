@@ -56,7 +56,7 @@ def _install_ui_transport_stubs(monkeypatch):
 async def test_owner_chat_turn_marks_user_active(monkeypatch):
     _install_ui_transport_stubs(monkeypatch)
     from core.owner_chat.service import run_owner_chat_turn
-    from core.scheduler import loop
+    from core import conversation_activity
 
     turns = []
 
@@ -82,7 +82,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
 
     await run_owner_chat_turn("hello", "desktop")
 
-    assert loop._user_active_recently()
+    assert conversation_activity.user_active_recently()
     assert turns and turns[0]["user_text"] == "hello"
 
 
@@ -180,12 +180,42 @@ async def test_pipeline_send_migrated_trigger_queues_signal_without_llm(monkeypa
     assert captured["trigger_name"] == "hr_critical"
 
 
-def test_scheduler_and_autonomy_share_the_same_activity_timestamp(monkeypatch):
+@pytest.mark.parametrize("window,elapsed,expected", [
+    (120, 119.999, True), (120, 120.0, False), (120, 120.001, False),
+    (30, 29.999, True), (30, 30.0, False),
+])
+def test_conversation_activity_window_boundary(monkeypatch, window, elapsed, expected):
     from core import conversation_activity
-    from core.scheduler import loop
 
     monkeypatch.setattr("core.conversation_activity._last_user_message_time", 0.0)
     conversation_activity.mark_user_active(now=1000.0)
-    assert loop.last_user_message_time() == 1000.0
-    assert conversation_activity.user_active_recently(now=1119.999)
-    assert not conversation_activity.user_active_recently(now=1120.0)
+    assert conversation_activity.last_user_message_time() == 1000.0
+    assert conversation_activity.user_active_recently(window, now=1000.0 + elapsed) is expected
+
+
+@pytest.mark.parametrize("elapsed,blocked", [(119.999, True), (120.0, False)])
+def test_activity_clock_controls_scheduler_gating(monkeypatch, elapsed, blocked):
+    """A real activity write must block filler until the exact window expires."""
+    from core import conversation_activity
+    from core.memory import realtime_state
+    from core.scheduler import gating
+    from core.scheduler.state_machine import TriggerState
+
+    monkeypatch.setattr(conversation_activity, "_last_user_message_time", 0.0)
+    monkeypatch.setattr(conversation_activity, "time", SimpleNamespace(time=lambda: 1000.0 + elapsed))
+    monkeypatch.setattr("core.character_loader.is_proactive_disabled", lambda: False)
+    monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda uid: False)
+    monkeypatch.setattr(realtime_state, "get_presence", lambda now: realtime_state.PRESENCE_UNKNOWN)
+    monkeypatch.setattr(gating, "get_current_state", lambda uid: TriggerState.QUIET)
+    monkeypatch.setattr(gating, "is_trigger_ready", lambda name: True)
+    conversation_activity.mark_user_active(now=1000.0)
+    proposal = gating.TriggerProposal(
+        trigger_name="random_message", urgency=0.5, topic_source="test",
+        requires_state=[TriggerState.QUIET],
+    )
+    picked, reason, candidates = gating._decide("u1", [proposal])
+    assert (picked is None) is blocked
+    if blocked:
+        assert reason == "active_window_filtered"
+    else:
+        assert picked is proposal

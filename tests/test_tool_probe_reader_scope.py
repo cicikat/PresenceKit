@@ -56,7 +56,6 @@ _MSG = {"user_id": "probe_test_uid", "content": "查一下天气", "sender_name"
 def _patch_env(monkeypatch):
     """Patch all handle_message dependencies except user_profile.load."""
     import core.config_loader as _cl
-    import core.scheduler.loop as _sl
     import core.scheduler.state_machine as _sm
     import core.presence as _pr
     import core.memory.group_context as _gc
@@ -70,7 +69,7 @@ def _patch_env(monkeypatch):
         "scheduler": {"owner_id": _MSG['user_id']},
         "llm": {"tool_call_mode": "function_calling"},
     })
-    monkeypatch.setattr(_sl, "mark_user_active", lambda: None)
+    monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     monkeypatch.setattr(_sm, "notify_owner_turn", lambda uid: None)
     monkeypatch.setattr(_pr, "update_last_message", lambda uid: None)
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)

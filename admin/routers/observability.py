@@ -67,11 +67,12 @@ async def mail_weekly_state(_auth=Depends(require_scopes('state.read'))):
     import time
     from core.config_loader import get_config
     from core.mail import weekly_contract
-    from core.scheduler.loop import _active_char_id_or_none, _owner_id
+    from core.character_context import selected_character_id_or_none
+    from core.owner_config import configured_owner_id
     from core.scheduler.triggers.letter_writer import _in_weekly_window
     cfg = get_config()
     mail = cfg.get('mail', {})
-    uid, char_id = _owner_id(), _active_char_id_or_none()
+    uid, char_id = configured_owner_id(), selected_character_id_or_none()
     backend = mail.get("backend", "smtp")
     configured = all(bool(mail.get(key)) for key in ("smtp_host", "smtp_user", "smtp_password", "to_addr"))
     if backend == "gmail_api":
@@ -907,9 +908,9 @@ async def character_permissions_test(
 
 @router.get("/observability/drinking", summary="角色酒意与自然衰减")
 async def drinking_state(_auth=Depends(require_scopes("state.read"))):
-    from core.scheduler.loop import _active_char_id_or_none
+    from core.character_context import selected_character_id_or_none
     from core.tools.drinking import snapshot
-    char_id = _active_char_id_or_none()
+    char_id = selected_character_id_or_none()
     return snapshot(char_id) if char_id else {"enabled": False, "effective": False, "blocking_reason": "no_character"}
 
 

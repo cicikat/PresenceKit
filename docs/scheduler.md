@@ -145,7 +145,7 @@ spend:
 
 ### Scheduler/autonomy effective state (Brief 153)
 
-P2 将最后一次 owner 聊天时间放在 `core/conversation_activity.py`。旧 scheduler 入口仍转发到同一时间戳，autonomy 直接读取，活动窗口的边界与原来一致。视觉 trace 清理由 scheduler 直接调用 `core.image_observability.prune()`。候选阶段仍以 Signal、Opportunity、Run 及投递 attempt 回执各自记账。调度触发 stamp、模型评估冷却和发言预算分别度量不同事实，不能合并为同一个时间戳。
+P2 将最后一次 owner 聊天时间放在 `core/conversation_activity.py`。T2 已删除 scheduler 的三个活动时钟转发入口；main、owner chat、gating、autonomy 直接调用该唯一所有者，默认 120 秒窗口及严格小于边界保持不变。切断与验证见 [T2 报告](refactors/migration-cutover-t2.md)。视觉 trace 清理由 scheduler 直接调用 `core.image_observability.prune()`。候选阶段仍以 Signal、Opportunity、Run 及投递 attempt 回执各自记账。调度触发 stamp、模型评估冷却和发言预算分别度量不同事实，不能合并为同一个时间戳。
 
 2026-11-22 对最近四天保留的 100 条 run 做只读统计，其中 93 条 `circuit_open`、6 条 `blocked_user_active`、1 条 `llm_failed`。这批保留记录中 99 条止于准入，无法计入模型沉默次数；另有 18 条手机持久收件 ACK。保留记录有上限，不能用这批数据推断四天内的完整拒绝率或取消现有闸门。
 

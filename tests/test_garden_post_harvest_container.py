@@ -189,7 +189,7 @@ def _patch_gating_env(monkeypatch, *, dnd_active: bool):
     import core.scheduler.triggers.dnd as _dnd
     from core.scheduler.state_machine import TriggerState
 
-    monkeypatch.setattr(_loop, "_user_active_recently", lambda: False)
+    monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda: False)
     monkeypatch.setattr(_dnd, "is_dnd", lambda uid: dnd_active)
     monkeypatch.setattr("core.scheduler.gating.get_current_state", lambda uid: TriggerState.QUIET)
     monkeypatch.setattr("core.scheduler.gating.is_trigger_ready", lambda name: True)

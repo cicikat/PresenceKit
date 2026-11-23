@@ -123,7 +123,7 @@ def _patch_watch_decision_env(
 ):
     monkeypatch.setattr("core.scheduler.gating.get_current_state", lambda uid: state)
     monkeypatch.setattr(
-        "core.scheduler.loop._user_active_recently", lambda *a, **kw: user_active
+        "core.conversation_activity.user_active_recently", lambda *a, **kw: user_active
     )
     monkeypatch.setattr(
         "core.scheduler.triggers.dnd.is_dnd", lambda uid: dnd_active

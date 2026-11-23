@@ -40,8 +40,8 @@ def test_morning_scheduler_and_routine_candidates_merge_without_forcing_talk(
     from core.autonomy.signal_adapters import adapt_time_background, emit_trigger_signal
 
     monkeypatch.setattr(
-        "core.scheduler.loop._cfg",
-        lambda: {"enabled": True, "morning_greeting": True},
+        "core.config_loader.get_config",
+        lambda: {"scheduler": {"enabled": True, "morning_greeting": True}},
     )
     now = datetime(2026, 8, 7, 7, 30).timestamp()
     queued, status = emit_trigger_signal(
@@ -76,8 +76,8 @@ def test_disabled_routine_source_is_rejected_and_pending_fact_is_not_consumed(
     from core.autonomy.signal_adapters import adapt_time_background, emit_trigger_signal
 
     monkeypatch.setattr(
-        "core.scheduler.loop._cfg",
-        lambda: {"enabled": True, "morning_greeting": False},
+        "core.config_loader.get_config",
+        lambda: {"scheduler": {"enabled": True, "morning_greeting": False}},
     )
     assert emit_trigger_signal("owner", "char", "morning_greeting") == (
         False,
@@ -301,7 +301,7 @@ def test_high_urgency_signal_keeps_talk_semantics(sandbox, monkeypatch):
     from core.autonomy.models import Opportunity
     from core.autonomy.signal_adapters import emit_trigger_signal
 
-    monkeypatch.setattr("core.scheduler.loop._cfg", lambda: {"enabled": True})
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"enabled": True}})
     assert emit_trigger_signal(
         "owner", "char", "hr_critical", priority=0.95, urgency=0.95, now=1_000.0
     )[0]

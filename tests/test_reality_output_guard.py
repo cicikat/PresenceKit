@@ -272,9 +272,8 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     monkeypatch.setattr(_td, "tool_loop_active", lambda uid: False)
 
     # Stub out scheduler notifiers
-    import core.scheduler.loop as _sl
     import core.scheduler.state_machine as _sm
-    monkeypatch.setattr(_sl, "mark_user_active", lambda: None)
+    monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     monkeypatch.setattr(_sm, "notify_owner_turn", lambda uid: None)
 
     # Stub tool probe to skip (must be async — the real function is a coroutine)

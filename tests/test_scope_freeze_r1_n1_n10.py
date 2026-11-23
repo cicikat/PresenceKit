@@ -41,8 +41,7 @@ def _patch_noise(monkeypatch, owner_id: str = _OWNER_ID):
         "llm": {"tool_call_mode": "function_calling"},
     })
     try:
-        import core.scheduler.loop as _sl
-        monkeypatch.setattr(_sl, "mark_user_active", lambda: None)
+        monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     except Exception:
         pass
     try:

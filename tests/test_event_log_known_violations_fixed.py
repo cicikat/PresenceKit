@@ -361,7 +361,7 @@ def test_recall_last_mentioned_active_unavailable_returns_none(sandbox, registry
     """recall_last_mentioned with no char_id and no active → returns None, no yexuan fallback."""
     from core.scheduler import last_mentioned as _lm
 
-    monkeypatch.setattr(_lm, "_active_char_id_or_none", lambda: None)
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: None)
 
     path_accessed = []
     import core.memory.path_resolver as _pr
@@ -378,13 +378,13 @@ def test_recall_last_mentioned_active_unavailable_returns_none(sandbox, registry
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_recall_last_mentioned_explicit_char_id_bypasses_active(sandbox, registry, monkeypatch):
-    """recall_last_mentioned with explicit char_id does not call _active_char_id_or_none."""
+    """Explicit char_id bypasses the selected-character owner read."""
     from core.scheduler import last_mentioned as _lm
     from core.memory.path_resolver import resolve_path
     from core.memory.scope import MemoryScope
 
     active_called = []
-    monkeypatch.setattr(_lm, "_active_char_id_or_none", lambda: active_called.append(1) or TEST_CHAR_ID)
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: active_called.append(1) or TEST_CHAR_ID)
 
     uid = "20004"
     date_str = "2026-06-05"

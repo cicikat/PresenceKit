@@ -353,7 +353,7 @@ async def test_shadow_tick_migrated_winner_queues_signal_without_executor(sandbo
     monkeypatch.setattr(gating, "is_trigger_ready", lambda _name, **_kwargs: True)
     monkeypatch.setattr("core.character_loader.is_proactive_disabled", lambda **_k: False)
     monkeypatch.setattr("core.scheduler.proactive_ledger.can_send", lambda *_a, **_k: (True, "ok"))
-    monkeypatch.setattr("core.scheduler.loop._user_active_recently", lambda: False)
+    monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda: False)
     monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda _uid: False)
     monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "char")
 

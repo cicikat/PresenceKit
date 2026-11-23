@@ -390,15 +390,15 @@ class TestTriggerCharId(unittest.TestCase):
             result = _resolve_char_id("u_unknown", None)
             self.assertIsNone(result, "must return None, not a hardcoded character name")
 
-    def test_scheduler_active_char_id_none_when_assets_missing(self):
-        from core.scheduler.loop import _active_char_id_or_none
+    def test_selected_char_id_none_when_assets_missing(self):
+        from core.character_context import selected_character_id_or_none
 
-        with patch("core.scheduler.loop.get_paths") as mock_gp:
+        with patch("core.character_context._get_paths") as mock_gp:
             mock_gp.return_value.active_prompt_assets.return_value.read_text = MagicMock(
                 side_effect=FileNotFoundError("missing")
             )
-            result = _active_char_id_or_none()
-            self.assertIsNone(result, "_active_char_id_or_none must return None when assets missing")
+            result = selected_character_id_or_none()
+            self.assertIsNone(result, "selected_character_id_or_none must return None when assets missing")
 
 
 # ── T9: WS push_message carries source=reality ────────────────────────────────

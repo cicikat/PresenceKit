@@ -1,7 +1,7 @@
 # 迁移遗留切断：T0 事实清单与执行报告
 
-日期：2026-11-22。T0 已交付；本轮施工 T1，T2–T9 与 HINT 未开始。
-后续状态：用户已允许 T1 施工；T1 将旧入口与调用者迁走后联删 45 条债务，当前仅余 26 条 T2 债务。
+日期：2026-11-22。T0 已交付；T1 已合并；T2 活动时钟切断已施工，等待独立审查；T3–T9 与 HINT 未开始。
+后续状态：用户已允许 T1 施工；T1 将旧入口与调用者迁走后联删 45 条债务，T2 将剩余 26 条活动时钟、角色/owner/配置读取债务全部联删，机器清单已清零，见 [T2 报告](migration-cutover-t2.md)。
 下文保留 T0 原始事实快照；实际 T1 所有者、删除项与验证见 [T1 报告](migration-cutover-t1.md)。
 门禁的单向收敛与动态访问加固见 [T0.1 报告](migration-cutover-gate-hardening.md)。
 本单最后一节明确限定“现在只执行 T0”。下一项须由用户协调的独立审查通过后开始。
@@ -62,8 +62,8 @@ Scheduler 门禁保护已识别的活动/身份 API，不能自动判定任意�
 | T1 users/provenance/character 私有实现 | jailbreak_entries、lorebook、period、relations；observe、observability、watch；phone_control、settings_gmail/llm/misc | 角色请求解析与 HTTP 校验留 HTTP 适配；角色加载/重载归 Core 现有所有者 | 新发现，精确函数清单见 JSON；没有外部 Python 私有契约证据 | 联删各私有转出；相关 router/settings 回归；不可建立 admin.common 杂物箱 |
 | T1 settings_llm 私有实现 | settings_misc 的 key masking；settings_thinking 的角色路由提示解析 | 凭据展示归明确的 HTTP 脱敏工具；路由有效状态归现有 model/control-center 所有者 | 新发现，内部；不能改变密钥遮罩或 effective state | 删除私有跨 Router 导入；相关 settings 安全回归 |
 | T1 Dream 私有重导出与跨 Router 常量/重载 | dream.py、group_dream、dream_sessions/observability/worlds 对 dream_presets | 校验常量归领域合同，registry 重载归实际 registry；HTTP composition 仅挂载 router | 现存内部消费者；dream_common 本身是 HTTP helper，不误认作对外业务服务 | 删除 `_valid_world_layer_values` 重导出；Dream/Stage 回归；AR-02 兼容表更新 |
-| T2 活动状态包装 | main.handle_message、owner_chat.service、scheduler.gating；loop 自身 3 个包装 | 已有 `core.conversation_activity` | 内部；时间戳已只有一份，不能声称当前有双份状态；迁移消费者后删包装 | 删除 mark_user_active/_user_active_recently/last_user_message_time；`test_scheduler_active_window.py`、相关活动取消回归 |
-| T2 Scheduler 身份/配置读取 | audio_perception、autonomy/control_center、ime_awareness、owner_turn_service、wake_bridge；各 admin scope 帮助函数，见 JSON | 配置归 config_loader；角色归明确 Core scope/角色所有者 | 新发现；Scheduler 内部调度 API 不盲删；需要区分生命周期与通用业务状态 | 删除跨业务私有读取；相关 scope/autonomy/scheduler 回归 |
+| T2 活动状态包装（已切断，待审查） | main.handle_message、owner_chat.service、scheduler.gating 已直连活动所有者；loop 三个包装已删除 | `core.conversation_activity` | 内部；进程内唯一时间戳，默认 120 秒严格小于边界不变 | 六条债务联删；时钟/gating 边界、相关入口回归与不可恢复门禁见 [T2 报告](migration-cutover-t2.md) |
+| T2 Scheduler 身份/配置读取（已切断，待审查） | audio_perception、autonomy/control_center、ime_awareness、owner_turn_service、wake_bridge；各 admin scope 帮助函数，见 JSON | 配置归 config_loader；角色归明确 Core scope/角色所有者 | 跨业务调用已直连 config_loader、owner_config、character_context；Scheduler 内部仍可消费这些同一实现的函数引用，不持有第二份状态或解析实现 | 跨业务私有读取与 20 条债务已联删；相关 scope/autonomy/scheduler 回归见 T2 报告 |
 | T3 `Pipeline.fetch_context/run_agentic_loop/post_process*` 门面 | main、owner_chat prepare/generation、scheduler.loop、stage.views、dream.reality_continuation、turn_sink | 已有 reality_context / owner_chat.tool_loop / turn_effects；prompt 归 prompt_builder、模型传输归 llm_client；生成防护和会话持有需明确生命周期设计 | 内部消费者确实存在，不能现在删；turn_sink 仍调用组合 post_process，不能误判无调用者 | 逐方法迁移并联删测试 patch；`test_pipeline_*scope*.py`、tool loop、scheduler、owner chat 集成；ARCHITECTURE/prompt/memory 文档 |
 | T3 `pipeline_registry` | main 注册；character_loader/name_provider/cleanup、model_registry、资源完整性、tool policy/context、owner chat、autonomy、dream、stage 周边、scheduler、channels.qq、admin settings/character 等读取 | main 生命周期持有运行实例；是否显式注入须在 T3 对每类读者确定，T0 不盲改 | 内部 Service Locator 仍实际使用；recovery_validation 和 stage.views 还独立构造 Pipeline | 保留/删除结论须附完整注册/读取扫描；`test_r7b_scheduler_pipeline_registry.py`、启动/热切换/恢复回归 |
 | T4 无 Session → active character | 后端 chat/history/media、sensor、video-call 的隐式 scope；桌面 Rust send_chat/get_chat_request/computer_use 等 HTTP 调用 | core.session_scope 签发的固定 grant；客户端按角色/连接持有 | 桌面是真实未迁移消费者；手机已有 session 支持但也有无 session 分支测试，不能写成已强制 | 客户端先改再删服务端 fallback；session/receipt/media/history 回归；桌面 build/UI、手机合同；三仓协议文档 |

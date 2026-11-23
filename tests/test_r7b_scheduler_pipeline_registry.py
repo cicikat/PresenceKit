@@ -82,7 +82,7 @@ async def test_pipeline_send_reads_from_registry(monkeypatch):
         return SimpleNamespace(fanout_failures={})
 
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(loop, "_user_active_recently", lambda: False)
+    monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda: False)
     monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(loop, "_char_name", lambda: "Companion")
     monkeypatch.setattr("core.perceive_event.receive_perceive_event", _make_perceive_accepted())
@@ -119,7 +119,7 @@ async def test_hot_swap_registry_pipeline(monkeypatch):
         return SimpleNamespace(fanout_failures={})
 
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(loop, "_user_active_recently", lambda: False)
+    monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda: False)
     monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(loop, "_char_name", lambda: "Companion")
     monkeypatch.setattr("core.perceive_event.receive_perceive_event", _make_perceive_accepted())
@@ -171,7 +171,7 @@ async def test_pipeline_send_degrades_when_registry_empty(monkeypatch):
         sent.append(content)
 
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(loop, "_user_active_recently", lambda: False)
+    monkeypatch.setattr("core.conversation_activity.user_active_recently", lambda: False)
     monkeypatch.setattr(loop, "_send", fake_send)
 
     result = await loop._pipeline_send(

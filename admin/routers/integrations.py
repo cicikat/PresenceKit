@@ -45,10 +45,10 @@ def _integration_token_configured() -> bool:
 
 
 def _active_scope() -> tuple[str, str]:
-    from core.scheduler.loop import _active_char_id_or_none
+    from core.character_context import selected_character_id_or_none
 
     uid = str(get_config().get("scheduler", {}).get("owner_id") or "").strip()
-    return uid, str(_active_char_id_or_none() or "").strip()
+    return uid, str(selected_character_id_or_none() or "").strip()
 
 
 def _garden_entry(uid: str, char_id: str) -> dict[str, Any]:

@@ -21,7 +21,7 @@ def configured(monkeypatch):
     cfg = deepcopy(CFG)
     monkeypatch.setattr(audio, "get_config", lambda: cfg)
     monkeypatch.setattr("core.config_loader.get_config", lambda: cfg)
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "fixture_character")
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: "fixture_character")
     audio._receipts.clear()
     return cfg
 
@@ -435,7 +435,7 @@ def test_receipt_does_not_follow_edited_or_cross_channel(configured):
 def test_receipt_drops_on_char_switch_and_disable(configured, monkeypatch):
     result = {"text": "hello", "tone": "calm"}
     key = audio.issue_receipt(result, "desktop")
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "other_character")
+    monkeypatch.setattr("core.character_context.selected_character_id_or_none", lambda: "other_character")
     assert audio.consume_receipt(key, "hello", "desktop") is None
     key = audio.issue_receipt(result, "desktop")
     configured["stt_presets"]["enabled"] = False

@@ -160,6 +160,7 @@ DEBT_PATH = ROOT / "docs/refactors/migration-cutover-dependencies.json"
 ACTIVITY_API = {"mark_user_active", "user_active_recently", "_user_active_recently",
                 "last_user_message_time", "_last_user_message_time"}
 IDENTITY_API = {"_owner_id", "_active_char_id_or_none", "_cfg", "_char_name"}
+MOVED_IDENTITY_IMPLEMENTATIONS = {"_owner_id", "_active_char_id_or_none"}
 ACTIVITY_PRIVATE_MEMBERS = (
     "core.activity.store._session_is_stale",
     "core.activity.transcript._path",
@@ -281,12 +282,12 @@ def cutover_dependencies(source, module):
         elif isinstance(node, ast.Subscript) and resolve(node.value) == "sys.modules":
             record(resolve(node), owner, "dynamic")
         if module.startswith("core.scheduler."):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in ACTIVITY_API:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in ACTIVITY_API | MOVED_IDENTITY_IMPLEMENTATIONS:
                 rows.append(("scheduler-owner", owner, "definition:" + node.name))
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
                 targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                 for target in targets:
-                    if isinstance(target, ast.Name) and target.id in ACTIVITY_API:
+                    if isinstance(target, ast.Name) and target.id in ACTIVITY_API | MOVED_IDENTITY_IMPLEMENTATIONS:
                         rows.append(("scheduler-owner", owner, "state:" + target.id))
         for child in ast.iter_child_nodes(node):
             visit(child, owner)
@@ -332,6 +333,14 @@ def test_admin_activity_storage_uses_public_operations():
     )
 
 
+def test_t2_conversation_activity_boundaries_are_zero():
+    """All T2 state/identity dependencies are retired, regardless of old ledgers."""
+    retired = {"scheduler-owner", "scheduler-state"}
+    assert not [row for row in cutover_scan() if row["rule"] in retired], "T2 activity must remain zero"
+    ledger = json.loads(DEBT_PATH.read_text(encoding="utf-8"))
+    assert not [row for row in ledger["dependencies"] if row["rule"] in retired], "T2 activity debt may not be restored"
+
+
 @pytest.mark.parametrize("member", ACTIVITY_PRIVATE_MEMBERS)
 @pytest.mark.parametrize("template", [
     "from {module} import {name} as hidden",
@@ -372,6 +381,51 @@ def test_cutover_keeps_legitimate_http_composition_and_activity_consumption():
     assert cutover_dependencies("from admin.routers._common import active_char_id", "admin.routers.new") == []
     assert cutover_dependencies("from core.conversation_activity import mark_user_active", "core.owner_chat.service") == []
     assert cutover_dependencies("from core.scheduler.loop import start", "main") == []
+
+
+@pytest.mark.parametrize("module", ["core.scheduler.loop", "core.scheduler.triggers.example"])
+@pytest.mark.parametrize("name", ["_owner_id", "_active_char_id_or_none"])
+@pytest.mark.parametrize("template,kind", [
+    ("def {name}(): return 'local'", "definition"),
+    ("async def {name}(): return 'local'", "definition"),
+    ("{name} = lambda: 'local'", "state"),
+    ("{name}: object = lambda: 'local'", "state"),
+    ("{name} = local_reader", "state"),
+])
+def test_scheduler_cannot_recreate_moved_identity(module, name, template, kind):
+    """Reject independent implementations regardless of scheduler submodule."""
+    rows = cutover_dependencies(template.format(name=name), module)
+    assert any(rule == "scheduler-owner" and target == kind + ":" + name
+               for rule, _, target in rows), rows
+
+
+def test_scheduler_can_import_identity_owners_and_define_internal_helpers():
+    source = (
+        "from core.owner_config import configured_owner_id as _owner_id\n"
+        "from core.character_context import selected_character_id_or_none as _active_char_id_or_none\n"
+        "def _cfg(): return {}\n"
+        "def _char_name(): return 'Companion'\n"
+    )
+    assert cutover_dependencies(source, "core.scheduler.loop") == []
+
+
+@pytest.mark.parametrize("name", ["_owner_id", "_active_char_id_or_none"])
+def test_ci_rejects_and_recovers_moved_scheduler_identity(cutover_git_repository, name):
+    """Inject into a real file; run CI's repository assertion before/after removal."""
+    root, _, _, _ = cutover_git_repository
+    directory = root / "core/scheduler"
+    directory.mkdir()
+    path = directory / "loop.py"
+    path.write_bytes(("def " + name + "(): return 'local'\n").encode())
+    command = [sys.executable, "-m", "pytest", "--noconftest", "-c", "pytest.ini", "-q", "-vv",
+               "tests/test_ar02_dependency_directions.py::test_migration_cutover_has_no_new_or_stale_dependency_debt"]
+    env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+    failed = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=30)
+    assert failed.returncode == 1 and "scheduler-owner" in failed.stdout, failed.stdout + failed.stderr
+    path.write_bytes(b"from core.owner_config import configured_owner_id as _owner_id\n"
+                     b"from core.character_context import selected_character_id_or_none as _active_char_id_or_none\n")
+    recovered = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=30)
+    assert recovered.returncode == 0, recovered.stdout + recovered.stderr
 
 
 def test_cutover_repository_scan_detects_new_sites_and_repeated_debt(tmp_path):
@@ -510,6 +564,28 @@ def test_retired_t1_debt_cannot_be_restored_with_source_and_json(cutover_git_rep
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 1 and "T1 must remain zero" in result.stdout, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("restore_source", [True, False])
+@pytest.mark.parametrize("member", ["mark_user_active", "_owner_id"])
+def test_retired_t2_activity_cannot_be_restored(cutover_git_repository, restore_source, member):
+    """Run the CI assertion with an old ledger, with and without restored code."""
+    root, path, ledger, _ = cutover_git_repository
+    ledger["dependencies"].append({
+        "source": "core/debt.py", "rule": "scheduler-state", "owner": "<module>",
+        "target": "import:core.scheduler.loop." + member, "count": 1,
+    })
+    path.write_bytes(json.dumps(ledger).encode())
+    if restore_source:
+        (root / "core/debt.py").write_bytes(("from core.scheduler.loop import " + member + "\n").encode())
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--noconftest", "-c", "pytest.ini", "-q",
+         "tests/test_ar02_dependency_directions.py::test_t2_conversation_activity_boundaries_are_zero"],
+        cwd=root, env=dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"),
+        capture_output=True, text=True, timeout=30,
+    )
+    expected = "T2 activity must remain zero" if restore_source else "T2 activity debt may not be restored"
+    assert result.returncode == 1 and expected in result.stdout, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("event_name,event_ref", [

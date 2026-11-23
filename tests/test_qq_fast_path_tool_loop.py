@@ -33,7 +33,6 @@ def _patch_handle_message_dependencies(monkeypatch, pipeline, execute_result):
     import core.memory.group_context as group_context
     import core.presence as presence
     import core.response_processor as response_processor
-    import core.scheduler.loop as scheduler_loop
     import core.scheduler.state_machine as state_machine
     import core.tool_dispatcher as tool_dispatcher
     import main
@@ -42,7 +41,7 @@ def _patch_handle_message_dependencies(monkeypatch, pipeline, execute_result):
         "scheduler": {"owner_id": _USER_ID},
         "tool_loop": {"enabled": True, "categories": ["info"], "exclude_tools": []},
     })
-    monkeypatch.setattr(scheduler_loop, "mark_user_active", lambda: None)
+    monkeypatch.setattr("core.conversation_activity.mark_user_active", lambda: None)
     monkeypatch.setattr(state_machine, "notify_owner_turn", lambda uid: None)
     monkeypatch.setattr(presence, "update_last_message", lambda uid: None)
     monkeypatch.setattr(group_context, "append", lambda *args, **kwargs: None)
