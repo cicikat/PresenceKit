@@ -160,6 +160,10 @@ DEBT_PATH = ROOT / "docs/refactors/migration-cutover-dependencies.json"
 ACTIVITY_API = {"mark_user_active", "user_active_recently", "_user_active_recently",
                 "last_user_message_time", "_last_user_message_time"}
 IDENTITY_API = {"_owner_id", "_active_char_id_or_none", "_cfg", "_char_name"}
+ACTIVITY_PRIVATE_MEMBERS = (
+    "core.activity.store._session_is_stale",
+    "core.activity.transcript._path",
+)
 HTTP_HELPERS = {
     "admin.routers." + path.stem
     for path in (ROOT / "admin/routers").glob("*.py")
@@ -207,6 +211,8 @@ def cutover_dependencies(source, module):
         return ""
 
     def record(target, owner, kind):
+        if module.startswith("admin.") and any(target == member or target.startswith(member + ".") for member in ACTIVITY_PRIVATE_MEMBERS):
+            rows.append(("admin-activity-private", owner, kind + ":" + target))
         if module.startswith("core.") and (target == "admin.routers" or target.startswith("admin.routers.")):
             rows.append(("core-router", owner, kind + ":" + target))
         if module.startswith("admin.routers.") and target.startswith("admin.routers."):
@@ -243,7 +249,7 @@ def cutover_dependencies(source, module):
                 value = resolve(node.value)
                 aliases.clear()
                 aliases.update(previous_aliases)
-                if value.startswith(("admin.routers.", "core.scheduler.loop")):
+                if value.startswith(("admin.routers.", "core.scheduler.loop", "core.activity.store", "core.activity.transcript")):
                     for target in targets:
                         if isinstance(target, ast.Name):
                             bindings[target.id] = value
@@ -318,6 +324,27 @@ def test_t1_http_dependency_boundaries_are_zero():
     assert not [row for row in cutover_scan() if row["rule"] in retired], "T1 must remain zero"
     ledger = json.loads(DEBT_PATH.read_text(encoding="utf-8"))
     assert not [row for row in ledger["dependencies"] if row["rule"] in retired], "T1 debt may not be restored"
+
+
+def test_admin_activity_storage_uses_public_operations():
+    assert not [row for row in cutover_scan() if row["rule"] == "admin-activity-private"], (
+        "Admin must use public activity lifetime and transcript operations"
+    )
+
+
+@pytest.mark.parametrize("member", ACTIVITY_PRIVATE_MEMBERS)
+@pytest.mark.parametrize("template", [
+    "from {module} import {name} as hidden",
+    "import {module} as storage\nstorage.{name}",
+    "from core.activity import {leaf} as storage\ngetattr(storage, '{name}')",
+    "def handle():\n from {module} import {name}",
+    "from importlib import import_module as load\nstorage = load('{module}')\nstorage.{name}",
+    "import sys as system\nstorage = system.modules.get('{module}')\nstorage.{name}",
+])
+def test_admin_private_activity_access_is_rejected(member, template):
+    module, name = member.rsplit(".", 1)
+    source = template.format(module=module, name=name, leaf=module.rsplit(".", 1)[1])
+    assert any(row[0] == "admin-activity-private" for row in cutover_dependencies(source, "admin.example"))
 
 
 @pytest.mark.parametrize("module,source,rule", [

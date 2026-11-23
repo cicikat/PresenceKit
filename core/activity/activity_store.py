@@ -125,10 +125,10 @@ def find_active_session(char_id: str, uid: str) -> ReadingSession | None:
         try:
             data = json.loads(meta.read_text(encoding="utf-8"))
             s = ReadingSession.from_dict(data)
-            from core.activity.store import _session_is_stale
+            from core.activity.store import is_session_stale
             if (s.uid, s.char_id, s.session_id) != (uid, char_id, session_dir.name):
                 continue
-            if s.status == "active" and not _session_is_stale(s):
+            if s.status == "active" and not is_session_stale(s):
                 candidates.append(s)
         except Exception:
             continue

@@ -16,7 +16,7 @@ def _visible_dialogue(uid, char_id, kind, sid, entries):
     from core.memory.event_query import get_event
     from core.memory.scope import MemoryScope
     links = {}
-    root = transcript._path(char_id, uid, kind, sid).parent / "dialogue_receipts"
+    root = transcript.path_for_session(char_id, uid, kind, sid).parent / "dialogue_receipts"
     if root.exists():
         for path in root.glob("*.json"):
             try:
@@ -72,7 +72,7 @@ def revision(value) -> str:
 
 
 def projection_status(uid: str, char_id: str, kind: str, sid: str) -> dict:
-    root = transcript._path(char_id, uid, kind, sid).parent
+    root = transcript.path_for_session(char_id, uid, kind, sid).parent
     path = root / "continuity_projection.json"
     result = {"status": "not_projected", "covered_entries": 0, "pending_receipts": 0}
     if path.exists():
@@ -119,7 +119,7 @@ def list_sessions(uid: str, char_id: str, *, offset: int = 0, limit: int = 20,
                 continue
             try:
                 value = session(uid, char_id, kind, directory.name)
-                stale = store._session_is_stale(value)
+                stale = store.is_session_stale(value)
                 if active_only and (value.status != "active" or stale):
                     continue
                 raw = value.to_dict()
@@ -158,7 +158,7 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
         entries = [raw]
     elif section == "events":
         root = (get_paths().reading_session_dir(char_id=char_id, uid=uid, session_id=sid)
-                if kind == "reading" else transcript._path(char_id, uid, kind, sid).parent)
+                if kind == "reading" else transcript.path_for_session(char_id, uid, kind, sid).parent)
         path = root / "state_events.jsonl"
         entries = []
         if path.exists():
@@ -169,7 +169,7 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
                     except json.JSONDecodeError:
                         continue
     elif section == "summary":
-        path = transcript._path(char_id, uid, kind, sid).parent / "continuity_projection.json"
+        path = transcript.path_for_session(char_id, uid, kind, sid).parent / "continuity_projection.json"
         if not path.exists():
             return {"status": "pending", "source_ref": source_ref, "items": []}
         projection = json.loads(path.read_text(encoding="utf-8"))
@@ -181,7 +181,7 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
         entries = list(getattr(value, "state", {}).get("move_history", []))
     elif section == "dialogue":
         entries = []
-        path = transcript._path(char_id, uid, kind, sid)
+        path = transcript.path_for_session(char_id, uid, kind, sid)
         if path.exists():
             with path.open(encoding="utf-8") as stream:
                 for index, line in enumerate(stream):
@@ -194,7 +194,7 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
                     entries.append(entry)
     elif section == "entry" and number:
         # Exact references resolve from original lines, even outside the recent page.
-        path = transcript._path(char_id, uid, kind, sid)
+        path = transcript.path_for_session(char_id, uid, kind, sid)
         if not path.exists():
             raise LookupError("source unavailable")
         entries = []

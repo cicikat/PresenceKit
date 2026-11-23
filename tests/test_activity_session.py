@@ -245,3 +245,51 @@ def test_session_id_valid_hex_accepted(sandbox):
     )
     assert sid in str(p)
     assert str(p).startswith(str(sandbox._base))
+
+
+@pytest.mark.parametrize("kind", ["reading", "chess"])
+@pytest.mark.parametrize("bound", ["idle_ttl_seconds", "max_age_seconds"])
+@pytest.mark.parametrize("delta,expected", [(-1, False), (0, True), (1, True)])
+def test_public_session_expiry_boundary(kind, bound, delta, expected):
+    """Registered TTLs expire inclusively, independently of the other clock."""
+    from datetime import datetime, timezone
+    from core.activity.registry import get_activity_meta
+    meta = get_activity_meta(kind)
+    current = 2_000_000_000.0
+    assert 0 < meta.idle_ttl_seconds + 100 < meta.max_age_seconds
+    created = current - meta.idle_ttl_seconds - 100
+    updated = current - 1
+    if bound == "idle_ttl_seconds":
+        updated = current - meta.idle_ttl_seconds - delta
+    else:
+        created = current - meta.max_age_seconds - delta
+    value = ActivitySession(
+        session_id="ttl-boundary", uid="fixture-owner", char_id=TEST_CHAR_ID,
+        activity_type=kind, status="active", state={},
+        created_at=datetime.fromtimestamp(created, timezone.utc).isoformat(),
+        updated_at=datetime.fromtimestamp(updated, timezone.utc).isoformat(),
+    )
+    original = value.to_dict()
+    assert activity_store.is_session_stale(value, now=current) is expected
+    assert value.to_dict() == original
+
+
+@pytest.mark.parametrize("timestamp", ["", None, "unparseable"])
+def test_public_session_expiry_without_usable_timestamps(timestamp):
+    value = ActivitySession("missing-time", "fixture-owner", TEST_CHAR_ID, "chess", "active", {}, timestamp, timestamp)
+    assert activity_store.is_session_stale(value, now=2_000_000_000) is False
+
+
+def test_public_session_expiry_unknown_type_and_missing_attributes():
+    from types import SimpleNamespace
+    assert activity_store.is_session_stale(SimpleNamespace(activity_type="unknown_fixture"), now=2_000_000_000) is False
+    with pytest.raises(AttributeError, match="updated_at"):
+        activity_store.is_session_stale(SimpleNamespace(activity_type="chess"), now=2_000_000_000)
+
+
+def test_public_session_expiry_uses_clock_when_now_omitted(monkeypatch):
+    from types import SimpleNamespace
+    value = ActivitySession("wall-clock", "fixture-owner", TEST_CHAR_ID, "chess", "active", {},
+                            "2000-01-01T00:00:00+00:00", "2000-01-01T00:00:00+00:00")
+    monkeypatch.setattr(activity_store, "time", SimpleNamespace(time=lambda: 2_000_000_000))
+    assert activity_store.is_session_stale(value) is True

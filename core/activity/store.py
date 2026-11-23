@@ -44,7 +44,8 @@ def _parse_session_ts(value: str) -> float | None:
         return None
 
 
-def _session_is_stale(session: ActivitySession, *, now: float | None = None) -> bool:
+def is_session_stale(session: ActivitySession, *, now: float | None = None) -> bool:
+    """Read the registered idle/max-age bounds without changing session state."""
     meta = get_activity_meta(getattr(session, "activity_type", getattr(session, "mode", "")))
     if meta is None:
         return False
@@ -183,7 +184,7 @@ def find_active_session(
                 continue
             if s.status != "active":
                 continue
-            if _session_is_stale(s, now=current):
+            if is_session_stale(s, now=current):
                 if persist_expiry:
                     _expire_session(s, reason="stale_ttl")
                 continue

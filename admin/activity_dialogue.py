@@ -23,13 +23,6 @@ from core.turn_sink import record_assistant_turn, TurnSource
 from core.write_envelope import stamp_user_chat
 
 
-def _line_count(path):
-    if not path.exists():
-        return 0
-    with path.open(encoding="utf-8") as stream:
-        return sum(1 for _ in stream)
-
-
 def reality_dialogue(kind, *, assistant_only=False):
     def decorate(function):
         @functools.wraps(function)
@@ -53,8 +46,8 @@ def reality_dialogue(kind, *, assistant_only=False):
                 sid = body.session_id
             try:
                 value = records.session(uid, char_id, kind, sid)
-                from core.activity.store import _session_is_stale
-                if _session_is_stale(value):
+                from core.activity.store import is_session_stale
+                if is_session_stale(value):
                     raise HTTPException(409, "activity session expired")
             except LookupError:
                 raise HTTPException(404, "activity source unavailable")
@@ -81,14 +74,13 @@ def reality_dialogue(kind, *, assistant_only=False):
                     return receipt["response"]
                 if receipt is None:
                     from core.activity import transcript
-                    source_path = transcript._path(char_id, uid, kind, sid)
-                    entry_start = _line_count(source_path)
+                    entry_start = transcript.count_lines(char_id, uid, kind, sid)
                     response = await function(body, auth=auth)
                     if assistant_only and not response.get("comment"):
                         return response
                     receipt = {"status": "pending", "response": response, "request_id": request_id,
                                "entry_start": entry_start,
-                               "entry_end": _line_count(source_path),
+                               "entry_end": transcript.count_lines(char_id, uid, kind, sid),
                                "input_hash": hashlib.sha256(text.encode()).hexdigest(),
                                "turn_id": uuid.uuid4().hex}
                     if not safe_write_json(receipt_path, receipt):
