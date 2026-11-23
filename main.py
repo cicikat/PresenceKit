@@ -181,12 +181,13 @@ def _init_modules():
         lore_engine.load_entries(character.world_book)
 
     logger.info("正在初始化 Pipeline...")
-    from core.pipeline import Pipeline, register_slow_handlers
+    from core.pipeline import Pipeline
+    from core.post_process.handlers import register_slow_handlers
     _pipeline = Pipeline(character, lore_engine, active_character_id=char_ref)
     from core.pipeline_registry import register as _reg
     _reg(_pipeline)
 
-    register_slow_handlers()
+    register_slow_handlers(_pipeline)
     logger.info("慢任务 handler 已注册")
 
     from core.memory.pending_perception import cleanup_stale as _cleanup_stale
@@ -498,7 +499,7 @@ async def handle_message(message: dict, *, ingress=None):
 
         # ── 步骤4：拉取上下文（并发）────────────────────────────────────────
         logger.debug("[handle_message] 并发拉取上下文...")
-        context = await _pipeline.fetch_context(user_id, content, group_id, frozen_scope=_frozen_scope)
+        context = await _pipeline.context.fetch(user_id, content, group_id, frozen_scope=_frozen_scope)
 
         # ── 步骤5：组装 prompt ───────────────────────────────────────────────
         logger.debug("[handle_message] 组装 prompt...")
@@ -527,7 +528,7 @@ async def handle_message(message: dict, *, ingress=None):
         logger.debug("[handle_message] 调用主 LLM...")
         if _loop_active:
             from channels import desktop_ws as _desktop_ws
-            raw_reply = await _pipeline.run_agentic_loop(
+            raw_reply = await _pipeline.tools.run(
                 messages, uid=user_id, char_id=_char_id, session_state=state, is_group=is_group,
                 exclude_tools=_fast_path_exclude_tools,
                 tool_call_required=_pretool.must_call_tool,

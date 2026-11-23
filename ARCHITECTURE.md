@@ -34,7 +34,7 @@ scenario_authoring / world_authoring。无反向 Facade、第二套状态或消�
 [迁移切断清单](docs/refactors/migration-cutover-inventory.md)。现有 AR-02 已清零边界
 继续零容忍；全仓新增的 Core→Router、Router 私有依赖和 Scheduler 通用状态入口
 由同一测试文件及独立 architecture CI job 保护。T1 已清零 Core→Router 和 Router 私有依赖，
-45 条债务联删后禁止恢复；剩余 26 条 Scheduler 债务仍按文件/函数/目标/次数冻结，待 T2。
+45 条债务联删后禁止恢复；T2/T2.1 将剩余 26 条 Scheduler 债务清零，并禁止旧身份实现复活。
 HTTP 准入/异常映射归明确职责的 admin 支持模块，角色选择与热重载、会话、Dream 和状态查询
 归 Core 所有者；详见 [T1 迁移与验证](docs/refactors/migration-cutover-t1.md)。
 本单不代表 Pipeline、Session、资产或记忆切换已经完成。
@@ -111,6 +111,11 @@ Intiface / Buttplug 硬件是 reality-side actuator：只有 owner 私聊中的�
 
 ## Pipeline 四步骤
 
+T3：`Pipeline` 保留角色/世界书生命周期、prompt 组装和模型生成的实际代码；
+`context`、`tools`、`effects` 分别为 RealityContextReader、ToolTurnRunner、TurnEffects 的实际领域实例。
+旧检索、工具回合和后处理转发方法已删除；慢队列注册与 handler 属于 `core/post_process/handlers.py`，由 main 显式注入运行实例。
+调用图、注册表保留理由与验证见 [T3 报告](docs/refactors/migration-cutover-t3.md)。
+
 ```
 用户消息
     │
@@ -143,7 +148,7 @@ get_tags()（build_prompt 内计算；部分入口可显式传入复用）
     │
     ▼ 步骤3  主生成
   Path C 激活（有效 tool_loop 开关 + owner 私聊 + function_calling preset）→
-    Pipeline.run_agentic_loop()：chat_turn ↔ execute(origin="assistant_loop")，最多 max_steps / total_timeout_s
+    ToolTurnRunner.run()：chat_turn ↔ execute(origin="assistant_loop")，最多 max_steps / total_timeout_s
   否则 → llm_client.chat(messages)，含重试
     │
     ▼ 步骤4  post_process()（owner 入口与调度器主动消息通过 turn_sink 等待关键写入）
@@ -161,7 +166,7 @@ get_tags()（build_prompt 内计算；部分入口可显式传入复用）
   │   └─ yandere / hidden-state 信号   使用本轮真实 emotion
   └─ avatar / profile / slow_queue      单 worker 异步执行总结、反思、画像更新等
   │
-  │  【慢队列】post_process_slow 入队后单 worker 异步执行：
+  │  【慢队列】run_deferred_effects 入队后单 worker 异步执行：
   ├─ summarize_to_midterm              LLM 压缩单轮到 mid_term，写血缘字段；emotion 显著时触发 reflect_to_episodic(eager)
   ├─ reflect_to_episodic               mid_term 列表 → episodic，更新 fixation_state；达阈值触发 consolidate_to_identity
   ├─ consolidate_to_identity           unconsolidated episodic + old identity + profile → user_identity.yaml
@@ -319,7 +324,7 @@ data/
 > **Brief 88（现实侧全量信号映射，H1 接线完成）**：`RealityEventType` 扩至 5 类
 > （新增 `BODY_TOPIC` / `AFFECTION_EXPRESSED`）。对话侧判定落在新模块
 > `core/memory/user_hidden_state_reality_signals.py::process_reality_turn()`，挂
-> `pipeline.post_process_slow` detect_emotion 完成之后，判定全用现成数据（tags /
+> `pipeline.effects.run_deferred_effects` detect_emotion 完成之后，判定全用现成数据（tags /
 > emotion / 现实轮 gap 快照 / 常量词表），零 LLM，fail-open；trigger 轮零参与。
 > 中期层（sensitivity.current / touch_need.deficit）固定用本模块自建
 > `stamp_user_chat()`，不看调用方 envelope；长期层（body_memory，经

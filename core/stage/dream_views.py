@@ -3,7 +3,7 @@ Per-character generation view for a group dream turn (Dream Stage).
 
 Independent from `core.stage.views.StageCharacterView` by design (Brief 100
 §2): the reality view's two `RuntimeError` guards stay untouched, and this
-class never touches `Pipeline.fetch_context()` / `Pipeline.build_prompt()` or
+class never touches `Pipeline.context.fetch()` / `Pipeline.build_prompt()` or
 any reality `MemoryScope` — it only reads the group dream's frozen shared
 state and calls `core.dream.dream_prompt.build_dream_prompt()` +
 `core.llm_client.chat()` directly, exactly like the solo dream pipeline does.
@@ -56,7 +56,7 @@ def _render_group_dream_transcript(
 
 
 class DreamStageCharacterView:
-    """A scoped dream generation view. Never calls Pipeline.fetch_context/build_prompt."""
+    """A scoped dream generation view. Never calls Pipeline.context.fetch/build_prompt."""
 
     def __init__(self, char_id: str):
         from core import character_loader

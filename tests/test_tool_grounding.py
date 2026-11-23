@@ -223,7 +223,7 @@ def test_detect_tool_meta_leak_does_not_flag_ordinary_mentions_of_tools():
 
 def _make_pipeline():
     from core.pipeline import Pipeline
-    return Pipeline.__new__(Pipeline)
+    return Pipeline(character=None, lore_engine=None)
 
 
 _LEAKED = ("加载电脑桌面与应用操作的工具定义。含：desktop_minimize。"

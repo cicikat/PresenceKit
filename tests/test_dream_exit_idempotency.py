@@ -76,7 +76,7 @@ async def test_continuation_uses_reality_pipeline_and_marks_after_send(sandbox, 
         "char_id": "dreamer",
     })
     pipeline = SimpleNamespace(
-        fetch_context=AsyncMock(return_value={"history": [], "profile": {}, "relation": {}, "group_context": "", "user_identity_text": "", "user_facts_text": "", "event_search_result": "", "lore_entries": []}),
+        context=SimpleNamespace(fetch=AsyncMock(return_value={"history": [], "profile": {}, "relation": {}, "group_context": "", "user_identity_text": "", "user_facts_text": "", "event_search_result": "", "lore_entries": []})),
         build_prompt=MagicMock(return_value=([{"role": "user", "content": "safe"}], {})),
         run_llm=AsyncMock(return_value="现实侧的一句回应"),
         _active_character_id="dreamer",
@@ -89,10 +89,10 @@ async def test_continuation_uses_reality_pipeline_and_marks_after_send(sandbox, 
     task = reality_continuation._tasks[(uid, dream_id)]
     await task
 
-    assert pipeline.fetch_context.await_count == 1
+    assert pipeline.context.fetch.await_count == 1
     assert pipeline.run_llm.await_count == 1
-    assert "梦" in pipeline.fetch_context.await_args.args[1]
-    assert "archive" not in pipeline.fetch_context.await_args.args[1]
+    assert "梦" in pipeline.context.fetch.await_args.args[1]
+    assert "archive" not in pipeline.context.fetch.await_args.args[1]
     sent.assert_awaited_once()
     assert get_record(
         dream_id,

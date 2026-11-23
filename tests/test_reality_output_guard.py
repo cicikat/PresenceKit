@@ -155,10 +155,12 @@ async def test_desktop_guard_removes_character_prefix_before_record():
     received: list[str] = []
 
     class _FakePipeline:
+        context = property(lambda self: self)
+        effects = property(lambda self: self)
         class character:
             name = "Companion"
 
-        async def fetch_context(self, *a, **kw):
+        async def fetch(self, *a, **kw):
             return {}
 
         def build_prompt(self, *a, **kw):
@@ -167,11 +169,11 @@ async def test_desktop_guard_removes_character_prefix_before_record():
         async def run_llm(self, messages):
             return "Companion：你好"
 
-        async def post_process_critical(self, uid, content, reply, **kwargs):
+        async def capture_critical(self, uid, content, reply, **kwargs):
             received.append(reply)
             return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-        async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+        async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
             return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
     from core.reality_output_guard import clean_reality_reply_text
@@ -230,12 +232,14 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
         name = "Companion"
 
     class _FakePipeline:
+        context = property(lambda self: self)
+        effects = property(lambda self: self)
         character = _FakeCharacter()
 
         def _current_reality_scope(self, uid):
             return type("Scope", (), {"character_id": TEST_CHAR_ID})()
 
-        async def fetch_context(self, uid, message, group_id=None, **kwargs):
+        async def fetch(self, uid, message, group_id=None, **kwargs):
             return {}
 
         def build_prompt(self, uid, message, context, **kwargs):
@@ -244,10 +248,10 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
         async def run_llm(self, messages):
             return "Companion：今天很开心见到你。"
 
-        async def post_process_critical(self, uid, content, reply, **kwargs):
+        async def capture_critical(self, uid, content, reply, **kwargs):
             return {"turn_id": "t99", "critical_written": True, "emotion": "neutral"}
 
-        async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+        async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
             return {"emotion": "happy", "turn_id": critical_result.get("turn_id")}
 
     async def _fake_record(*, assistant_text, uid, source, **kwargs):

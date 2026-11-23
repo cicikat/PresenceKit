@@ -84,7 +84,7 @@ def test_signal_persisted_via_sandbox_path(sandbox):
 
 def _make_pipeline():
     from core.pipeline import Pipeline
-    return Pipeline.__new__(Pipeline)
+    return Pipeline(character=None, lore_engine=None)
 
 
 def _history_messages(contents: list[str]) -> list[dict]:

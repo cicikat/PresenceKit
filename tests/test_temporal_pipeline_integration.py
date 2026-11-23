@@ -18,7 +18,7 @@ def test_real_fetch_and_prompt_use_latest_user_evidence(chars_tree,sandbox,regis
     assert event_store.append_event(scope,{'event_id':'housing-new','occurred_at':1700100000,'actor':'user','kind':'user_message',
         'source':'user_chat','raw_text':'我现在住在出租屋','memory_text':'我现在住在出租屋'}).ok
     pipeline=_make_pipeline(TEST_CHAR_ID,registry);_write_active(sandbox,TEST_CHAR_ID)
-    context=asyncio.run(pipeline.fetch_context(scope.uid,'我现在住在哪里',frozen_scope=scope))
+    context=asyncio.run(pipeline.context.fetch(scope.uid,'我现在住在哪里',frozen_scope=scope))
     messages,_=pipeline.build_prompt(scope.uid,'我现在住在哪里',context,char_id=TEST_CHAR_ID,consume_pending_perception=False)
     layer=next(message for message in messages if message.get('_layer')=='5_profile')
     assert '出租屋' in layer['content'] and '青旅' not in layer['content']

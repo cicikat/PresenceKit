@@ -262,7 +262,7 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
                 )
                 return
             scope = MemoryScope.reality_scope(uid, char_id)
-            context = await pipeline.fetch_context(
+            context = await pipeline.context.fetch(
                 uid,
                 _CONTINUATION_PROMPT,
                 frozen_scope=scope,

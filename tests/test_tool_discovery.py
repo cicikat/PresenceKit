@@ -54,7 +54,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(pipeline, "_anti_collapse_prefix_retry", lambda msgs, text, **kw: final())
 
     async def run(content="查询", **kwargs):
-        return await pipeline.run_agentic_loop([{"role": "user", "content": content}],
+        return await pipeline.tools.run([{"role": "user", "content": content}],
             uid="u1", char_id="c1", session_state=object(), **kwargs)
 
     return script, requests, executions, run

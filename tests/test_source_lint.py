@@ -18,6 +18,7 @@ tests/test_r2b_active_window_gating.py::TestPipelineSendR2C，同样未重复迁
 每条守卫一个测试函数，docstring 注明来源。
 """
 from __future__ import annotations
+from core.post_process import handlers as _handlers
 
 import inspect
 import re
@@ -57,7 +58,7 @@ def test_consolidate_to_growth_not_registered_in_slow_queue():
     """来源：P1-2J。slow_queue 不得注册 consolidate_to_growth handler。"""
     from core import pipeline as _pipeline
 
-    register_src = inspect.getsource(_pipeline.register_slow_handlers)
+    register_src = inspect.getsource(_handlers.register_slow_handlers)
     assert "consolidate_to_growth" not in register_src, (
         "consolidate_to_growth must not be a slow_queue handler"
     )

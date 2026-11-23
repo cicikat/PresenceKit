@@ -104,7 +104,7 @@ set-active 端点，避免和真实检测状态打架。
 
 - **不写** mid_term / episodic / identity（该主链的唯一入口就是
   `summarize_to_midterm`，跳过它即切断整条 promotion 链）；
-- **照常写** short_term（走 `post_process_critical` → `capture_turn`，不受
+- **照常写** short_term（走 `capture_critical` → `capture_turn`，不受
   `coplay_echo` 影响，保证同一轮次内对话连续性）。
 
 游玩期间浓缩出的记忆改走 Brief 42 的 `game_log` 持久桶（按游戏分桶，非主记忆），
@@ -197,7 +197,7 @@ scheduler 主循环（固定 60 秒一次 tick，只推状态机，不发言）�
 ### `coplay_context` prompt 层
 
 `core/coplay/game_state.py::build_coplay_context_text()`，`active` 状态才非空，
-经 `core/pipeline.py::fetch_context()` 计算、`build_prompt()` 透传、
+经 `core/memory/reality_context.py::RealityContextReader.fetch()` 计算、`build_prompt()` 透传、
 `core/prompt_builder.py::build()` 注入（`_layer="coplay_context"`,
 `_drop_priority=85`，比 `5.5_lore` 更晚丢——内容很小，token 预算真正吃紧前
 基本不会被裁）。内容：游戏名 + 最近 3 条进度标记 + `observer.peek_moments()`

@@ -2,7 +2,7 @@
 tests/test_pipeline_event_log_source.py — Brief 79 §1
 
 post_process_critical() 把 web_echo / coplay_echo（调用方入参）与本地重新判定的
-dream_echo（core.pipeline._detect_dream_echo，只读，不消费
+dream_echo（core.post_process.turn_effects._detect_dream_echo，只读，不消费
 forced_impression_rounds_left）换算成 event_log 的 source 标记。
 
 覆盖：
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-import core.pipeline as _pipeline_mod
+from core.post_process import turn_effects as _pipeline_mod
 from core.pipeline import Pipeline
 from core.write_envelope import stamp_user_chat
 
@@ -36,7 +36,7 @@ async def test_web_echo_tags_source_web(sandbox, monkeypatch):
     monkeypatch.setattr(_pipeline_mod, "_detect_dream_echo", lambda *a, **kw: False)
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
 
-    await pipeline.post_process_critical(
+    await pipeline.effects.capture_critical(
         "uid_source_web", "帮我查下天气", "查到了，明天晴",
         envelope=stamp_user_chat(), web_echo=True,
     )
@@ -48,7 +48,7 @@ async def test_coplay_echo_tags_source_coplay(sandbox, monkeypatch):
     monkeypatch.setattr(_pipeline_mod, "_detect_dream_echo", lambda *a, **kw: False)
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
 
-    await pipeline.post_process_critical(
+    await pipeline.effects.capture_critical(
         "uid_source_coplay", "继续演", "（演出内容）",
         envelope=stamp_user_chat(), coplay_echo=True,
     )
@@ -60,7 +60,7 @@ async def test_dream_echo_tags_source_and_wins_over_web_and_coplay(sandbox, monk
     monkeypatch.setattr(_pipeline_mod, "_detect_dream_echo", lambda *a, **kw: True)
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
 
-    await pipeline.post_process_critical(
+    await pipeline.effects.capture_critical(
         "uid_source_dream", "你好", "（带着梦里的印象回应）",
         envelope=stamp_user_chat(), web_echo=True, coplay_echo=True,
     )
@@ -76,7 +76,7 @@ async def test_no_echo_flags_omits_source_field(sandbox, monkeypatch):
     monkeypatch.setattr(_pipeline_mod, "_detect_dream_echo", lambda *a, **kw: False)
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
 
-    await pipeline.post_process_critical(
+    await pipeline.effects.capture_critical(
         "uid_source_none", "普通对话", "普通回复",
         envelope=stamp_user_chat(),
     )

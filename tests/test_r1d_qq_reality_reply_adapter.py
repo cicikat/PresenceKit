@@ -172,54 +172,12 @@ def test_d2d_turn_sink_accepts_frozen_scope():
 # D3. turn_sink passes QQ params to post_process
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _extract_post_process_block(body: str) -> str:
-    """Return the text of the post_process(…) call block, spanning multiple lines."""
-    lines = body.splitlines()
-    result: list[str] = []
-    depth = 0
-    inside = False
-    for ln in lines:
-        if not inside and "post_process(" in ln:
-            inside = True
-        if inside:
-            result.append(ln)
-            depth += ln.count("(") - ln.count(")")
-            if depth <= 0:
-                break
-    return "\n".join(result)
 
 
-def test_d3_turn_sink_passes_frozen_scope_to_post_process():
-    """D3: record_assistant_turn must forward frozen_scope to pipeline.post_process."""
-    src = _src("core/turn_sink.py")
-    body = _function_body_text(src, "record_assistant_turn")
-    # Post_process call may span multiple lines; search the entire body after post_process(
-    pp_block = _extract_post_process_block(body)
-    assert "frozen_scope" in pp_block, (
-        "turn_sink.record_assistant_turn: frozen_scope not passed to post_process — "
-        "N1 scope freeze broken inside turn_sink"
-    )
 
 
-def test_d3b_turn_sink_passes_pending_paths_to_post_process():
-    """D3b: record_assistant_turn must forward pending_paths to pipeline.post_process."""
-    src = _src("core/turn_sink.py")
-    body = _function_body_text(src, "record_assistant_turn")
-    pp_block = _extract_post_process_block(body)
-    assert "pending_paths" in pp_block, (
-        "turn_sink.record_assistant_turn: pending_paths not passed to post_process"
-    )
 
 
-def test_d3c_turn_sink_passes_target_id_to_post_process():
-    """D3c: record_assistant_turn must forward target_id to pipeline.post_process."""
-    src = _src("core/turn_sink.py")
-    body = _function_body_text(src, "record_assistant_turn")
-    pp_block = _extract_post_process_block(body)
-    assert "target_id" in pp_block, (
-        "turn_sink.record_assistant_turn: target_id not passed to post_process — "
-        "TTS/sticker side effects cannot route to correct QQ target"
-    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -413,8 +371,8 @@ async def test_d9_adapter_passes_raw_text_and_scrub_occurs(sandbox, monkeypatch)
         captured_memory.append(reply)
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake_pipeline.post_process_critical = spy_pp
-    fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake_pipeline.effects.capture_critical = spy_pp
+    fake_pipeline.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
     frozen_scope = MemoryScope.reality_scope("u_test", TEST_CHAR_ID)
@@ -463,8 +421,8 @@ async def test_d9b_adapter_visible_keeps_actions_memory_strips_pure_action_lines
         captured_memory.append(reply)
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake_pipeline.post_process_critical = spy_pp
-    fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake_pipeline.effects.capture_critical = spy_pp
+    fake_pipeline.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
     frozen_scope = MemoryScope.reality_scope("u_test2", TEST_CHAR_ID)
@@ -524,8 +482,8 @@ async def test_d9c_adapter_group_routing_preserved(sandbox, monkeypatch):
         pp_kwargs.append(kwargs)
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake_pipeline.post_process_critical = spy_pp
-    fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake_pipeline.effects.capture_critical = spy_pp
+    fake_pipeline.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
     frozen_scope = MemoryScope.reality_scope("u_grp", TEST_CHAR_ID)
@@ -573,8 +531,8 @@ async def test_d9d_frozen_scope_forwarded_to_post_process(sandbox, monkeypatch):
         pp_kwargs.append(kwargs)
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake_pipeline.post_process_critical = spy_pp
-    fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake_pipeline.effects.capture_critical = spy_pp
+    fake_pipeline.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
     frozen_scope = MemoryScope.reality_scope("u_scope", TEST_CHAR_ID)

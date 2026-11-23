@@ -58,20 +58,19 @@ def test_event_evidence_requires_memory_scope(sandbox, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_avatar_push_is_expression_only_and_scoped(monkeypatch):
-    from core.pipeline import _maybe_push_avatar_directive
-    from core import pipeline_registry
+    from core.post_process.turn_effects import _maybe_push_avatar_directive
     from types import SimpleNamespace
     actions = []
     async def push(action):
         actions.append(action)
     monkeypatch.setattr('core.tools.devices_definitions._push_desktop_action', push)
-    monkeypatch.setattr(pipeline_registry, "get", lambda: SimpleNamespace(_active_character_id="companion"))
+    runtime = SimpleNamespace(_active_character_id="companion")
     state = {"current": "happy", "intensity": .6, "has_signal": True, "source_turn_id": "turn-a",
              "source_at": time.time(), "expires_at": time.time()+1800, "version": 12,
              "affect": {"dominant": "anger"}}
-    await _maybe_push_avatar_directive(state, "other")
+    await _maybe_push_avatar_directive(state, "other", runtime=runtime)
     assert actions == []
-    await _maybe_push_avatar_directive(state, "companion")
+    await _maybe_push_avatar_directive(state, "companion", runtime=runtime)
     action = actions[0]
     assert action["expression"] == "happy" and action["char_id"] == "companion"
     assert action["version"] == 12 and action["source_turn_id"] == "turn-a"

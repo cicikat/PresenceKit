@@ -4,7 +4,7 @@ tests/memeval/engine.py — 记忆质量评测引擎（Brief 44）
 不是新召回接口：只是把 case yaml 的种子数据落到 core.memory 各模块的公开/半公开写入点
 （episodic_memory._save_memories / user_profile.save / mid_term.append /
 event_log.get_recent_days monkeypatch），然后调用真实的
-Pipeline.fetch_context() + Pipeline.build_prompt()，对返回结果做确定性断言。
+Pipeline.context.fetch() + Pipeline.build_prompt()，对返回结果做确定性断言。
 
 test_memeval.py（pytest 收集）与 run_memeval.py（脚本单跑）共用本模块，
 两边只是提供不同的 sandbox / monkeypatch 载体。
@@ -354,7 +354,7 @@ async def _run_case_async(case: dict, monkeypatch, recall_mode: str, char_id: st
     from core.memory.scope import MemoryScope
     scope = MemoryScope.reality_scope(uid, char_id)
 
-    ctx = await pipeline.fetch_context(user_id=uid, content=case["query"], frozen_scope=scope)
+    ctx = await pipeline.context.fetch(user_id=uid, content=case["query"], frozen_scope=scope)
     _messages, debug_info = pipeline.build_prompt(
         user_id=uid, content=case["query"], context=ctx, char_id=char_id,
     )

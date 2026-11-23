@@ -90,7 +90,7 @@ speaker_id / content / timestamp / _turn_id / triggered_by
 
 - 每个 `speaker_id` 对应一个缓存的 `StageCharacterView`，显式加载自己的角色卡、LoreEngine 和
   `MemoryScope.reality_scope(owner_uid, speaker_id)`，不热切换全局 active character。
-- 角色自己的长期/近期记忆仍由现有 `Pipeline.fetch_context()` 读取；共享 transcript 通过
+- 角色自己的长期/近期记忆仍由现有 `RealityContextReader.fetch()` 读取；共享 transcript 通过
   `2.2_stage_presence` 与 `4.2_stage_transcript` 两个独立 prompt 层注入。
 - Stage 回复通过 `channels.registry.broadcast(..., char_id=speaker_id)` 发送，旧客户端仍可忽略字段。
 - 每轮完成后，未投影 transcript 按 roster 逐角色入 `summarize_to_midterm` slow queue；
@@ -282,7 +282,7 @@ async def run_owner_turn(
 ### `DreamStageCharacterView`（`core/stage/dream_views.py`）
 
 独立类，不在 `StageCharacterView` 上加 dream 分支（那两处 `RuntimeError` 保持原样守 reality
-侧）。`generate()` 不调用 `Pipeline.fetch_context()` / `build_prompt()`，直接调用
+侧）。`generate()` 不调用 `RealityContextReader.fetch()` / `build_prompt()`，直接调用
 `core.dream.dream_prompt.build_dream_prompt()` + `core.llm_client.chat()`，与单人 dream
 pipeline 同构：
 

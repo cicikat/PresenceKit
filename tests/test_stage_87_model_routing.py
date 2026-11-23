@@ -123,8 +123,8 @@ async def test_generate_phase_a_and_b_route_by_speaker_own_card(monkeypatch):
     async def _fake_fetch_context(uid, content, *, frozen_scope=None):
         return _empty_ctx()
 
-    view_claude.pipeline.fetch_context = _fake_fetch_context
-    view_ds.pipeline.fetch_context = _fake_fetch_context
+    view_claude.pipeline.context.fetch = _fake_fetch_context
+    view_ds.pipeline.context.fetch = _fake_fetch_context
 
     reply_a1 = await view_claude.generate(stage, transcript, "t1", triggered_by="owner")
     reply_a2 = await view_ds.generate(stage, transcript, "t2", triggered_by="owner")
@@ -185,7 +185,7 @@ async def test_generate_reaction_uses_same_preset_as_generate_no_downgrade(monke
     view_claude.pipeline.build_prompt = lambda uid, instruction, context, **kw: (
         [{"role": "user", "content": instruction}], {"token_estimate": 1}
     )
-    view_claude.pipeline.fetch_context = _fake_fetch_context
+    view_claude.pipeline.context.fetch = _fake_fetch_context
     _ = await view_claude.generate(stage, transcript, "t2", triggered_by="char-ds")
 
     reaction_calls = [c for c in seen if c[0] == "stage_reaction"]

@@ -122,7 +122,7 @@ def _apply_base_stubs(monkeypatch, *, event_log_mock=None, fallback_mock=None, d
 
 
 def _run_fetch(pipeline, user_id="u1", content="hello"):
-    return asyncio.run(pipeline.fetch_context(user_id=user_id, content=content))
+    return asyncio.run(pipeline.context.fetch(user_id=user_id, content=content))
 
 
 def test_midterm_receives_the_same_selected_history(chars_tree, monkeypatch, sandbox, registry):

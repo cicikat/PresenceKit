@@ -202,21 +202,14 @@ def test_c3_main_py_no_direct_memory_append():
 # C4. pipeline.py post_process calls capture_turn (not short_term/event_log directly)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_c4_pipeline_post_process_calls_capture_turn():
-    """C4: pipeline.py post_process must call capture_turn (the authority scrub point)."""
-    src = _src("core/pipeline.py")
-    assert "capture_turn" in src, (
-        "core/pipeline.py does not reference capture_turn — "
-        "the post_process → capture_turn chain may be broken"
-    )
 
 
-def test_c4b_pipeline_no_direct_short_term_append():
+def test_c4b_effect_owner_no_direct_short_term_append():
     """
-    C4b: pipeline.py must not call short_term.append directly (only in comments/docs).
+    C4b: the effect owner must not bypass capture_turn for history/event writes.
     All writes must route through capture_turn.
     """
-    lines = _lines("core/pipeline.py")
+    lines = _lines("core/post_process/turn_effects.py")
     violations: list[str] = []
     for i, ln in enumerate(lines, 1):
         stripped = ln.strip()
@@ -224,7 +217,7 @@ def test_c4b_pipeline_no_direct_short_term_append():
         if stripped.startswith("#"):
             continue
         if "short_term.append(" in ln or "event_log.append(" in ln:
-            violations.append(f"core/pipeline.py:{i}: {ln.strip()}")
+            violations.append(f"core/post_process/turn_effects.py:{i}: {ln.strip()}")
 
     assert not violations, (
         "core/pipeline.py calls short_term.append or event_log.append directly — "

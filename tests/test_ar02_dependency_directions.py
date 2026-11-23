@@ -333,6 +333,20 @@ def test_admin_activity_storage_uses_public_operations():
     )
 
 
+def test_t3_pipeline_compatibility_operations_are_retired():
+    """Transferred operations must be called on their domain owners."""
+    retired = {"fetch_context", "run_agentic_loop", "post_process_critical", "post_process_slow", "post_process"}
+    pipeline = ast.parse((ROOT / "core/pipeline.py").read_text(encoding="utf-8"))
+    cls = next(node for node in pipeline.body if isinstance(node, ast.ClassDef) and node.name == "Pipeline")
+    assert not [node.name for node in cls.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in retired]
+    references = []
+    for path in [*ROOT.glob("core/**/*.py"), *ROOT.glob("admin/**/*.py"), *ROOT.glob("channels/**/*.py"), ROOT / "main.py"]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        references.extend((str(path.relative_to(ROOT)), node.lineno, node.attr)
+                          for node in ast.walk(tree) if isinstance(node, ast.Attribute) and node.attr in retired)
+    assert not references, references
+
+
 def test_t2_conversation_activity_boundaries_are_zero():
     """All T2 state/identity dependencies are retired, regardless of old ledgers."""
     retired = {"scheduler-owner", "scheduler-state"}

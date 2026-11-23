@@ -31,7 +31,7 @@ def _make_pipeline(active_char_id: str, refresh_raises=None):
     fake.character.name = "TestChar"
     fake.author_note_extra = ""
     fake._active_character_id = active_char_id
-    fake.fetch_context = AsyncMock(return_value={})
+    fake.context.fetch = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
     fake.run_llm = AsyncMock(return_value="回复")
     fake.post_process = AsyncMock(

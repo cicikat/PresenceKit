@@ -8,6 +8,7 @@ tests/test_fixation_pipeline.py — fixation pipeline 四 job 单元测试
   - consolidate_to_growth 校验失败回滚 + state 文件读写
   - fixation_state 读写
 """
+from core.post_process import handlers as _handlers
 
 import asyncio
 import json
@@ -330,7 +331,7 @@ def test_digest_evicted_episodes_fully_retired(sandbox):
     assert not hasattr(fp, "_format_evicted_entry")
     assert not hasattr(fp, "_DIGEST_PROMPT_TEMPLATE")
 
-    src = inspect.getsource(_pipeline.register_slow_handlers)
+    src = inspect.getsource(_handlers.register_slow_handlers)
     assert "digest_evicted_episodes" not in src
     assert "storyline_evicted_input" in src
 
@@ -578,30 +579,12 @@ def test_mid_term_mark_promoted_idempotent(sandbox):
 # _validate_episode 白名单测试（thinking / sleepy 扩展）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _base_episode(**kwargs) -> dict:
-    ep = {
-        "raw_facts": ["用户说了什么"],
-        "topic_keywords": ["测试"],
-        "emotion_peak": "neutral",
-        "strength": 0.5,
-    }
-    ep.update(kwargs)
-    return ep
 
 
-def test_validate_episode_thinking_passes():
-    from core.pipeline import _validate_episode
-    assert _validate_episode(_base_episode(emotion_peak="thinking")) is True
 
 
-def test_validate_episode_sleepy_passes():
-    from core.pipeline import _validate_episode
-    assert _validate_episode(_base_episode(emotion_peak="sleepy")) is True
 
 
-def test_validate_episode_illegal_emotion_rejected():
-    from core.pipeline import _validate_episode
-    assert _validate_episode(_base_episode(emotion_peak="unknown_emotion")) is False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -436,8 +436,8 @@ ownership 不自动分配给未读过的角色。
 
 | 不变量 | 验收来源 |
 |---|---|
-| `pipeline.fetch_context()` 所有读路径均透传 `active_character_id` 作为 `char_id` | T-01 / test_pipeline_read_scope.py |
-| `pipeline.post_process_critical()` → `capture_turn()` 写 short_term + event_log 均使用 active char_id | T-02 / test_pipeline_write_scope.py |
+| `pipeline.context.fetch()` 所有读路径均透传 `active_character_id` 作为 `char_id` | T-01 / test_pipeline_read_scope.py |
+| `pipeline.effects.capture_critical()` → `capture_turn()` 写 short_term + event_log 均使用 active char_id | T-02 / test_pipeline_write_scope.py |
 | `slow_queue` payload 携带入队时的 char_id 快照；handler 透传至各 writer | T-03 / test_slow_queue_char_scope.py |
 | `mood_state.update/get_current` 均通过 active char_id 隔离，path 不含 uid | T-04 / test_mood_state_char_scope.py |
 | `impression_store` / `distill_impression` 读写均按 char_id 路由 | T-05 / test_impression_char_scope.py |
@@ -602,7 +602,7 @@ trigger_signal=)` 落盘：每次 run ≤3 条（超出截断）、同值跳过�
 | 中期记忆 | `data/runtime/memory/{char_id}/{uid}/mid_term.json` | 每轮慢队列压缩 | `mid_term` |
 | 情景记忆 | `data/runtime/memory/{char_id}/{uid}/episodic.json` | mid_term 显著情绪 eager 晋升，或 sweep 老化晋升 | 层6c |
 | 用户稳定行为模式 | `data/runtime/memory/{char_id}/{uid}/identity.yaml` | fixation pipeline 达阈值后固化更新 | 层6a |
-| 情绪状态 | `data/runtime/characters/{char_id}/inner/mood_state.json` | 每轮 post_process_slow（send 后异步）/ 工具触发 / 深夜调度（post_process_critical） | 层1内嵌软提示 |
+| 情绪状态 | `data/runtime/characters/{char_id}/inner/mood_state.json` | 每轮 run_deferred_effects（send 后异步）/ 工具触发 / 深夜调度（capture_critical） | 层1内嵌软提示 |
 | 用户隐性状态（Phase 6） | `data/runtime/memory/{char_id}/{uid}/hidden_state.json` | Reality-side integrator + WriteEnvelope；调度器 decay/consolidate tick；Dream exit afterglow 已接线（Phase 6：`wire_afterglow_from_summary()`） | Dream D4.5 tag-gated bucket 只读快照（body_intimate / physical_closeness；不含 float） |
 | Afterglow 残差（Phase 6/7） | `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json` | Dream exit 时 `wire_afterglow_from_summary()` 写入（`core/dream/dream_exit_afterglow.py`）；8h TTL | Phase 6 数值层：由 `integrate_afterglow_and_save()` 消费后影响 sensitivity.current / embodied_ease；Reality 文本层先由 summary 提供 0–5h 的 `6f_dream_afterglow`，随后由 residue 提供至 8h 的 `dream_afterglow_soft_hint`；两层互斥、只读、非现实事实；Dream 无直接写权限 |
 | 梦境预构种子 | `data/runtime/memory/{char_id}/{uid}/dream_seed.json` | Dream Seed activity close 后写入；12h TTL；下一次入梦一次性消费 | 仅拼入 Dream `context_snapshot.entry_reason`，不进入 Reality prompt / 主记忆链 |
@@ -636,7 +636,7 @@ trigger_signal=)` 落盘：每次 run ≤3 条（超出截断）、同值跳过�
 `memory.short_term_disk_rounds`，没有则回退 `memory.short_term_rounds`。
 
 **读写**：
-- 写：`post_process_critical`（send 前的关键段）内，每轮 `short_term.append()`
+- 写：`capture_critical`（send 前的关键段）内，每轮 `short_term.append()`
 - 读：`fetch_context` 里 `short_term.load_for_prompt()`，按 prompt 预算选择后传入层9
 
 ### prompt 选择策略（load_for_prompt）
@@ -653,7 +653,7 @@ trigger_signal=)` 落盘：每次 run ≤3 条（超出截断）、同值跳过�
 
 `core/reality_output_scrubber.py` — 现实 Chat 的统一出口清洗器，作用于所有出口：
 - `capture_turn` 写 short_term 前 + 写 event_log 前（不再保留原始动作描写）
-- `turn_sink.record_assistant_turn` 的 memory_text 传 post_process_critical 前
+- `turn_sink.record_assistant_turn` 的 memory_text 传 capture_critical 前
 - `_fanout` 向所有通道（含 desktop channel_message）发送前
 - `admin/routers/chat.py` 的 HTTP 响应 reply 字段返回前
 - `main.py` QQ 段落发送前
@@ -714,17 +714,17 @@ clamp 单测是弱断言（未验真截顶）；ShortTermMemory.append 类封装
 写入前会移除 `<say>` 等展示标签，event_log 保存纯文本。
 
 **写入顺序**（Brief 37 之后，注意有先后）：
-1. `post_process_critical`（send 前的关键段，只做毫秒级本地落盘）直接调用
+1. `capture_critical`（send 前的关键段，只做毫秒级本地落盘）直接调用
    `fixation_pipeline.capture_turn(uid, ..., emotion="neutral", char_id=_active_character_id)`——
    此处没有额外情绪模型调用，`emotion` 传的是占位值 `"neutral"`，事后不会
    回写修正。这是有意的取舍：event_log 的 `emotion` 字段只是标注，不参与任何下游
-   判断（mid_term eager reflect 消费的是 `post_process_slow` 里源回合明确表达的
+   判断（mid_term eager reflect 消费的是 `run_deferred_effects` 里源回合明确表达的
    emotion，不读这份占位值）。写入规则按 envelope 区分：
    - **用户对话**（`stamp_user_chat()`）：写 short_term user + assistant 两行，写 event_log user + assistant 两行（assistant 行含 emotion，所有行含 turn_id）。
    - **调度器触发器**（`stamp_trigger()`）：**不写 short_term**（trigger 不是用户说过的话，不得进入 history/prompt 上下文）；写 event_log assistant 行；另外追加 `trigger_audit_log` 一条（metadata + SHA256[:16] reply hash，不含完整回复文本）至 `data/event_log/{uid}/trigger_audit.jsonl`。
    - `envelope.can_write_memory=False`（默认 WriteEnvelope）：所有写入均跳过，用于无副作用 dry-run。
-   - `char_id` 由 `post_process_critical` 显式传入，决定写入哪个角色桶。
-2. send（channel fanout）完成后，`post_process_slow` 才异步提交源回合表达
+   - `char_id` 由 `capture_critical` 显式传入，决定写入哪个角色桶。
+2. send（channel fanout）完成后，`run_deferred_effects` 才异步提交源回合表达
    提交明确表达与事件认知评价；认知评价不进入 mid_term 或 event_log，原明确表达仍供旧整合策略使用。
 
 **写入格式（P1-1 speaker 字段化）**：每个对话块的各行之后加说话人元行：
@@ -734,7 +734,7 @@ clamp 单测是弱断言（未验真截顶）；ShortTermMemory.append 类封装
 **搜索**：`event_log.search(user_id, content, llm_client)` 异步执行，返回按行排列的第三人称事实卡。每张卡带明确的说话人归属和粗粒度时间标签，格式如下：
 
 `search()` / `get_recent_days()` 均接受可选 `since_ts` / `until_ts`（Brief 48，查询侧
-时间意图，`pipeline.fetch_context()` 解析出时间范围时透传）：非 None 时 `get_recent_days`
+时间意图，`pipeline.context.fetch()` 解析出时间范围时透传）：非 None 时 `get_recent_days`
 不再看 `days` 参数，只扫 `[since_ts, until_ts)` 范围内的日文件，顺带省 IO；块内容过滤/
 评分逻辑不变。
 
@@ -942,7 +942,7 @@ episodic_memories = retrieve(
 发生在关键词/语义候选之后、评分之前；过滤后为空则退化为"时间范围内全量记忆"参与
 评分，让"上周聊了什么"这类没有关键词的 time-only 查询也能召回；时间范围内确实
 没有任何记忆时按空结果 abstain，不越界兜底。`[since_ts, until_ts)` 为半开区间。
-调用方是 `pipeline.fetch_context()`：每轮开头调一次 `core.memory.temporal_query.
+调用方是 `pipeline.context.fetch()`：每轮开头调一次 `core.memory.temporal_query.
 parse_query_time_range(content, now)` 解析用户消息里的时间意图（纯规则，无 LLM；
 "昨天/前天/N天前/上周/上周末/上个月/周X（最近一个）/具体日期M月D日"；模糊表述如
 "之前/很久以前"保守返回 `None`，宁可不过滤也不误过滤），解析结果同时透传给
@@ -1091,7 +1091,7 @@ recall_trace `episodic_fallback_mode=disabled_for_chat`）；调度器主动开�
 
 ### 写入
 
-`post_process_slow`（send 后异步段）将 `summarize_to_midterm` 入慢队列，payload 中携带 `char_id`（入队时的角色快照），
+`run_deferred_effects`（send 后异步段）将 `summarize_to_midterm` 入慢队列，payload 中携带 `char_id`（入队时的角色快照），
 handler 内调 `llm_client.summarize_turn()` 压缩本轮对话并写入对应角色桶。
 payload 缺 `char_id` 时（DLQ 旧任务兼容）WARN fallback yexuan，不静默。
 LLM 异常时降级 warning，不阻塞主流程。
@@ -1106,7 +1106,7 @@ LLM 异常时降级 warning，不阻塞主流程。
 `is_trigger_turn=True` 一路透传到 `summarize_turn()` / `_rule_fallback()`：user_msg 此时
 是 scheduler/sensor 的种子旁白，不是真实用户发言，改用专门的系统 prompt +
 消息框定（"场景旁白（非用户发言，不代表已发生的事）:..."），阻止旁白被当成"已发生
-的事"概括进 mid_term。此前的泄漏路径是 `post_process_slow` 把 `content`（即触发器的
+的事"概括进 mid_term。此前的泄漏路径是 `run_deferred_effects` 把 `content`（即触发器的
 括号旁白文本）原样当 `user_content` 塞进 `summarize_to_midterm` payload，
 旧版压缩 prompt 又要求"主语用「用户」，只描述发生了什么"，两者叠加后
 LLM 会把旁白编成"已发生的事"（冷启动首轮典型产出："她收到日记分析提醒并回复了
@@ -1404,7 +1404,7 @@ episodic 上限裁剪淘汰的条目不再走 `consolidate_to_identity`/`reflect
 - **event_log**：`event_log.append(source=)` / `capture_turn(source=)` 把同一次判定
   写进 meta 行（`> ... source:web|dream_echo|coplay`），`dream_echo` 由
   `core/pipeline.py` `_detect_dream_echo()` 只读判定（不消费
-  `forced_impression_rounds_left`，那个计数器仍只在 `post_process_slow` 消费一次）。
+  `forced_impression_rounds_left`，那个计数器仍只在 `run_deferred_effects` 消费一次）。
 - **event_log_salvage 抢救链**：`_split_blocks` 出的块若 meta 带非空 `source:`，
   拼 LLM 输入前整块跳过（`_filter_salvageable_text`）——否则 27 天后这些外部信息会
   绕过固化隔离，经抢救直达 `important_facts`。
@@ -1463,9 +1463,9 @@ per-uid 锁（`uid_lock(uid)`）：保护关键写入和慢队列 handler 中按
 全局锁（`global_lock("mood_state")`）：保护跨 uid 共享的 mood_state 文件。
 
 两种锁均为 asyncio.Lock，在单线程事件循环内安全。
-`post_process_critical`（send 前的关键段）与 `post_process_slow`（send 后异步的慢段，
+`capture_critical`（send 前的关键段）与 `run_deferred_effects`（send 后异步的慢段，
 Brief 37）各自独立获取一次 uid 锁——不再是同一把锁贯穿整轮，capture_turn 落盘完就
-释放，`global_lock("mood_state")` 在 `post_process_slow`
+释放，`global_lock("mood_state")` 在 `run_deferred_effects`
 里获取。单用户连发时，critical 段的排队会拖慢 send（这正是它必须"只做毫秒级本地
 落盘"的原因），slow 段的排队完全在后台，不影响任何用户可见的响应延迟。
 
@@ -1480,9 +1480,9 @@ message_queue"的提案：诊断（两套串行机制=认知负债）成立，�
 |---|---|---|---|
 | `message_queue`（`core/message_queue.py`） | session_key（私聊=uid，群聊=group_id） | 同一会话的多条**原始消息**严格串行处理，不同会话并行 | QQ 消息入口（`main.py` 收到消息 → `message_queue.enqueue`） |
 | `conversation_lock`（`core/conversation_gate.py`） | uid（不区分 char_id） | 同一用户完整一轮对话（`fetch_context → build_prompt → run_llm → record_assistant_turn`）不被并行第二轮抢跑 | QQ `handle_message` / `_reply_with_tool_result` / `_handle_group_message`；desktop `admin/routers/chat.py`；scheduler `_pipeline_send`；`perceive_event`；stage `projection.py`/`runner.py`；admin dream 路由 |
-| `uid_lock`（`core/memory/locks.py`） | uid | `post_process_critical`（send 前）内关键写入的读-改-写（capture_turn / profile 条件判断等）；`post_process_slow`（send 后异步）内 mood_state 更新的读-改-写；以及慢队列 handler 里按 uid 分文件的读-改-写 | `pipeline.post_process_critical` / `pipeline.post_process_slow` 各自独立的临界区；慢队列各 handler |
+| `uid_lock`（`core/memory/locks.py`） | uid | `capture_critical`（send 前）内关键写入的读-改-写（capture_turn / profile 条件判断等）；`run_deferred_effects`（send 后异步）内 mood_state 更新的读-改-写；以及慢队列 handler 里按 uid 分文件的读-改-写 | `pipeline.effects.capture_critical` / `pipeline.effects.run_deferred_effects` 各自独立的临界区；慢队列各 handler |
 | self 文件锁（256 C） | `uid+char_id` 桶 | self 用户文件的读-改-写、move 双路径校验、revision CAS | `core/character_self.py` 每桶 `threading.RLock`；不得复用 workspace 锁或只靠字符串前缀。self 内容不自动进入 identity/episodic；若误入记忆链须 `provenance_log.append()` |
-| `global_lock("mood_state")`（`core/memory/locks.py`） | 全局单键 | 跨 uid 共享的 mood_state 文件（角色级，不分用户） | `post_process_slow` 内 mood_state.update（send 后异步，Brief 37）；源回合明确表达的余韵提交 |
+| `global_lock("mood_state")`（`core/memory/locks.py`） | 全局单键 | 跨 uid 共享的 mood_state 文件（角色级，不分用户） | `run_deferred_effects` 内 mood_state.update（send 后异步，Brief 37）；源回合明确表达的余韵提交 |
 | vector_store 单 worker executor（Brief 34 §2；Brief 36 收尾 episodic 一处遗留同步调用，2026-07-10） | 进程级单线程 | 同一 sqlite 向量库文件的读写不被默认线程池的多路并发撞 lock（无 WAL，rollback-journal 默认模式） | `vector_store.query_async` / `query_with_preview_async` / `upsert`（`_upsert_sync` 在 executor 内跑）；`fetch_context` 语义召回、`event_log.search` 语义相似度、`episodic_memory.retrieve` 的 X2 语义候选扩展（`fetch_context` 预取 `sem_hits` 传入，`retrieve()` 自身不再直接查库） |
 
 **层次关系**：`message_queue` 串行化的是"消息到达顺序"，`conversation_lock` 串行化的是
@@ -1502,7 +1502,7 @@ message_queue"的提案：诊断（两套串行机制=认知负债）成立，�
 |---|---|---|
 | 写入 | pipeline 桌面动作失败时 | 新建文件到根目录，consumed_at=null |
 | 原子抢占 | build_prompt 调 read_and_mark() | os.rename 移到 processing/ 子目录，并发时只有一个 task 成功 |
-| 删除 | post_process_critical 成功后 confirm_delivered() | 删除 processing/ 下的文件 |
+| 删除 | capture_critical 成功后 confirm_delivered() | 删除 processing/ 下的文件 |
 | 兜底清理 | 启动时 cleanup_stale() | 根目录超24h删除；processing/ 下 mtime 超1h删除 |
 
 竞态消除：两个并发 build_prompt 同时看到同一文件，os.rename 是原子操作，
@@ -1723,7 +1723,7 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 两条现实侧写入路径：
 
 **§1 对话侧（`core/memory/user_hidden_state_reality_signals.py::process_reality_turn`）**：
-接线点 `pipeline.post_process_slow` 的 源回合表达解析之后，判定全部用现成数据
+接线点 `pipeline.effects.run_deferred_effects` 的 源回合表达解析之后，判定全部用现成数据
 （tags / emotion / 现实轮 gap 快照 / 常量词表），零 LLM，fail-open。
 
 | 事件 | 判定 | 效果 |
@@ -1768,7 +1768,7 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 
 - 存储：per-user `vector_store.db`（sqlite-vec，派生数据，gitignore）
 - 接口：`embed()` in `core/memory/embedding.py`；`upsert/query/rebuild` in `core/memory/vector_store.py`
-- 挂接：episodic 落盘后异步 upsert；event_log 每轮 post_process_critical 后异步 upsert；fetch_context 并联语义召回
+- 挂接：episodic 落盘后异步 upsert；event_log 每轮 capture_critical 后异步 upsert；fetch_context 并联语义召回
 - fail-open：embedding 不可达时回退关键词路径，主回复不受影响。缺失连接字段或示例 YOUR_ / YOUR- 凭据在统一编码边界直接判为未配置，不发起网络重试；每次编码结束（含失败、取消）关闭客户端。
 
 ---

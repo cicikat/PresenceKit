@@ -106,7 +106,8 @@ async def test_post_process_payload_carries_active_char_id(
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),
     ):
-        await pipeline.post_process("u1", "你好", "在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '你好', '在的', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     payloads_with_char = [
         (t, p) for t, p in enqueued
@@ -149,7 +150,8 @@ async def test_payload_char_id_is_snapshot_not_current(
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_a"),
     ):
         # 第一次入队：yexuan
-        await pipeline.post_process("u1", "消息A", "回复A", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '消息A', '回复A', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '消息A', '回复A', critical_result=_critical_result, envelope=env)
 
     payload_a_char_ids = {p.get("char_id") for p in enqueued_a if p.get("char_id")}
     assert TEST_CHAR_ID in payload_a_char_ids, f"第一轮 payload char_id 应含 yexuan，实际: {payload_a_char_ids}"
@@ -171,7 +173,8 @@ async def test_payload_char_id_is_snapshot_not_current(
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_b"),
     ):
-        await pipeline.post_process("u1", "消息B", "回复B", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '消息B', '回复B', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '消息B', '回复B', critical_result=_critical_result, envelope=env)
 
     payload_b_char_ids = {p.get("char_id") for p in enqueued_b if p.get("char_id")}
     assert "character_b" in payload_b_char_ids, (
@@ -217,7 +220,7 @@ async def test_handler_reflect_to_episodic_passes_char_id(sandbox):
 async def test_handler_user_profile_update_passes_char_id(sandbox):
     """_handler_user_profile_update 必须把 payload['char_id'] 传给 extract_and_update。"""
     import core.memory.user_profile as _up
-    from core.pipeline import _handler_user_profile_update
+    from core.post_process.handlers import _handler_user_profile_update
 
     captured: list[str] = []
 
@@ -401,7 +404,7 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
 
     # --- _handler_user_profile_update (pipeline.py handler) ---
     caplog.clear()
-    from core.pipeline import _handler_user_profile_update
+    from core.post_process.handlers import _handler_user_profile_update
 
     up_captured: list[str] = []
 
@@ -456,7 +459,8 @@ async def test_post_process_invalid_active_does_not_enqueue(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with pytest.raises((ValueError, RuntimeError)):
-        await pipeline.post_process("u1", "你好", "在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '你好', '在的', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     assert enqueue_called == [], "active 非法时 slow_queue.enqueue 不应被调用"
 
@@ -594,7 +598,7 @@ def test_t01_regression_fetch_context_char_id(chars_tree, monkeypatch, sandbox, 
 
     monkeypatch.setattr(_st, "load_for_prompt", _spy_load)
 
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
 
     assert captured, "short_term.load_for_prompt 应被调用"
     assert captured[0] == "character_b", (

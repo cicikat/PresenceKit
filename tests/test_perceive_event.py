@@ -289,10 +289,11 @@ async def test_fanout_does_not_trigger_additional_llm(monkeypatch):
     llm_call_count: list[int] = [0]
 
     class _FakePipeline:
-        async def post_process_critical(self, uid, content, reply, **kwargs):
+        effects = property(lambda self: self)
+        async def capture_critical(self, uid, content, reply, **kwargs):
             return {"turn_id": "t-1", "critical_written": True, "emotion": "neutral"}
 
-        async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+        async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
             return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
         async def run_llm(self, messages):
@@ -359,9 +360,10 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     )
 
     class _FakePipeline:
+        context = property(lambda self: self)
         character = type("C", (), {"name": "Companion"})()
 
-        async def fetch_context(self, uid, message, *a, **kw):
+        async def fetch(self, uid, message, *a, **kw):
             return {}
 
         def build_prompt(self, uid, message, context, **kw):

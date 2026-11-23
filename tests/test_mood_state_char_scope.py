@@ -244,12 +244,8 @@ async def test_post_process_mood_update_passes_active_char_id(
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.user_relation.get_relation", return_value={"priority": 1}),
     ):
-        await pipeline.post_process(
-            user_id="u1",
-            content="你好",
-            reply="在的",
-            envelope=env,
-        )
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='你好', reply='在的', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='你好', reply='在的', envelope=env)
 
     assert captured_kwargs, "mood_state.update must be called when can_affect_mood=True"
     assert captured_kwargs[0]["char_id"] == "character_b", (
@@ -299,7 +295,8 @@ async def test_char_switch_mood_update_uses_new_char(
         patch("core.user_relation.get_relation", return_value={"priority": 1}),
     ):
         # First turn: yexuan
-        await pipeline.post_process(**common)
+        _critical_result = await pipeline.effects.capture_critical(**common)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, **common)
         assert captured_char_ids, "mood update must be called on first turn"
         assert captured_char_ids[-1] == TEST_CHAR_ID, (
             f"First turn must use yexuan, got {captured_char_ids[-1]!r}"
@@ -309,7 +306,8 @@ async def test_char_switch_mood_update_uses_new_char(
         _write_active(sandbox, "character_b")
 
         # Second turn: must use character_b
-        await pipeline.post_process(**common)
+        _critical_result = await pipeline.effects.capture_critical(**common)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, **common)
         assert captured_char_ids[-1] == "character_b", (
             f"After switch, mood update must use character_b, got {captured_char_ids[-1]!r}"
         )
@@ -343,12 +341,8 @@ async def test_invalid_active_does_not_update_mood(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=True)
 
     with pytest.raises((ValueError, RuntimeError)):
-        await pipeline.post_process(
-            user_id="u1",
-            content="你好",
-            reply="在的",
-            envelope=env,
-        )
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='你好', reply='在的', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='你好', reply='在的', envelope=env)
 
     assert mood_update_called == [], (
         "mood_state.update must not be called when active_character is invalid"

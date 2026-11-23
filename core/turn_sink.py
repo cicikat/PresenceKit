@@ -245,14 +245,13 @@ async def record_assistant_turn(
     user_text: Optional[str] = None,
     fanout: FanoutPolicy = "all",
     payload: Optional[dict] = None,
-    await_critical_post_process: bool = True,
     bypass_gate: bool = False,
     exclude_origin_channel: Optional[str] = None,
     durable_mobile_mirror: bool = True,
     pipeline=None,
     envelope=None,
     audit_extras: Optional[dict] = None,
-    # QQ-specific params: passed through to pipeline.post_process (R1-D)
+    # QQ metadata is passed to the effect owner (R1-D).
     target_id: str = "",
     is_group: bool = False,
     pending_paths: Optional[list] = None,
@@ -277,21 +276,20 @@ async def record_assistant_turn(
     """
     Record one completed assistant turn and deliver it to the requested channels.
 
-    capture_turn still owns disk writes through Pipeline.post_process_critical.
+    capture_turn owns disk writes through TurnEffects.capture_critical.
     source is retained here for validation and future audit; current persistence
     encodes non-user sources through trigger_name only.
     envelope 未传时默认零值（fail-closed）。
 
-    Brief 37：当 await_critical_post_process=True 时，只 await
-    post_process_critical()（毫秒级本地落盘），fanout 完成后再用
-    asyncio.create_task() 调度 post_process_slow()（expression / appraisal /
+    Brief 37：只 await capture_critical()（毫秒级本地落盘），fanout 完成后再用
+    asyncio.create_task() 调度 run_deferred_effects()（expression / appraisal /
     avatar / profile / slow_queue）——这些都是 LLM/网络往返或非关键写入，绝不能
     堵住 send。返回的 TurnResult.emotion 因此只是 critical 段的占位值
-    "neutral"，真实情绪要等 post_process_slow 异步跑完才落进 mood_state /
+    "neutral"，真实情绪要等 run_deferred_effects 异步跑完才落进 mood_state /
     mid_term，调用方不应假设它反映本轮真实检测结果。
 
     QQ 路径（R1-D）：传入 target_id / is_group / pending_paths / frozen_scope，
-    经由 post_process_critical/_slow 透传到 TTS/sticker side effects 和 scope
+    经由 TurnEffects 透传到 TTS/sticker side effects 和 scope
     freeze 链路。
     fanout=[] 时不执行 channel fanout（QQ visible send 由调用方在 adapter 内独立完成）。
     bypass_gate=True 时跳过 conversation_lock（QQ adapter 已在 conversation_lock 内）。
@@ -367,57 +365,30 @@ async def record_assistant_turn(
             if blocked:
                 return TurnResult(turn_id="", written_to_memory=False,
                     fanout_targets=[], suppression_reason=blocked)
-        if await_critical_post_process:
-            # Brief 37: send 前只 await 落盘（post_process_critical），不再等
-            # 认知评价等 LLM 往返。post_process_slow 在下面 fanout 完成后
-            # 才用 create_task 调度，emotion/mood/slow_queue 全挪到 send 之后。
-            post_info = await pipeline.post_process_critical(
-                uid,
-                memory_input,
-                memory_text,
-                target_id=target_id,
-                is_group=is_group,
-                pending_paths=pending_paths,
-                trigger_name=capture_trigger,
-                envelope=envelope,
-                audit_extras=audit_extras,
-                frozen_scope=frozen_scope,
-                web_echo=web_echo,
-                coplay_echo=coplay_echo,
-                provenance_source=provenance_source,
-                event_channel=ledger_channel,
-                event_source=source.value,
-                visible_reply=visible_text,
-                raw_user_text=raw_user_text,
-                media_refs=media_refs,
-                event_context=event_context,
-            )
-        else:
-            if schedule_slow:
-                asyncio.create_task(
-                    pipeline.post_process(
-                        uid,
-                        memory_input,
-                        memory_text,
-                        target_id=target_id,
-                        is_group=is_group,
-                        pending_paths=pending_paths,
-                        trigger_name=capture_trigger,
-                        envelope=envelope,
-                        audit_extras=audit_extras,
-                        frozen_scope=frozen_scope,
-                        web_echo=web_echo,
-                        coplay_echo=coplay_echo,
-                        loop_executed=loop_executed,
-                        provenance_source=provenance_source,
-                        event_channel=ledger_channel,
-                        event_source=source.value,
-                        visible_reply=visible_text,
-                        raw_user_text=raw_user_text,
-                        media_refs=media_refs,
-                    )
-                )
-                post_process_scheduled = True
+        # Brief 37: send 前只 await 落盘（post_process_critical），不再等
+        # 认知评价等 LLM 往返。post_process_slow 在下面 fanout 完成后
+        # 才用 create_task 调度，emotion/mood/slow_queue 全挪到 send 之后。
+        post_info = await pipeline.effects.capture_critical(
+            uid,
+            memory_input,
+            memory_text,
+            target_id=target_id,
+            is_group=is_group,
+            pending_paths=pending_paths,
+            trigger_name=capture_trigger,
+            envelope=envelope,
+            audit_extras=audit_extras,
+            frozen_scope=frozen_scope,
+            web_echo=web_echo,
+            coplay_echo=coplay_echo,
+            provenance_source=provenance_source,
+            event_channel=ledger_channel,
+            event_source=source.value,
+            visible_reply=visible_text,
+            raw_user_text=raw_user_text,
+            media_refs=media_refs,
+            event_context=event_context,
+        )
 
     # Canonical transport identity: prefer the persisted turn_id. When critical
     # post-process did not produce one, still mint an opaque id so mobile queue,
@@ -482,7 +453,7 @@ async def record_assistant_turn(
 
     # Brief 37: send（上面的 fanout）已经完成，慢段（expression / appraisal /
     # slow_queue 入队等）现在才调度，绝不 await——否则又把下一条消息的 send 堵住。
-    if await_critical_post_process and post_info is not None and schedule_slow:
+    if post_info is not None and schedule_slow:
         def _schedule_slow(call):
             if background_tasks is not None:
                 async def after_send():
@@ -491,7 +462,7 @@ async def record_assistant_turn(
             else:
                 asyncio.create_task(call())
         _schedule_slow(
-            partial(pipeline.post_process_slow,
+            partial(pipeline.effects.run_deferred_effects,
                 uid,
                 memory_input,
                 memory_text,

@@ -10,7 +10,7 @@ from core.llm_client import ChatTurn
 
 def _make_pipeline():
     from core.pipeline import Pipeline
-    return Pipeline.__new__(Pipeline)
+    return Pipeline(character=None, lore_engine=None)
 
 
 def _configure_loop(monkeypatch):
@@ -76,7 +76,7 @@ async def test_confirmation_emits_no_prelude(monkeypatch):
 
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
         tool_event_observer=observed.append,
     )
@@ -90,7 +90,7 @@ async def test_waiting_is_emitted_once_after_threshold(monkeypatch):
     _configure_loop(monkeypatch)
     _script_turns(monkeypatch, _one_tool_then_stop())
     _script_final(monkeypatch)
-    monkeypatch.setattr("core.pipeline._TOOL_EPHEMERAL_WAITING_AFTER_S", 0.001)
+    monkeypatch.setattr("core.owner_chat.tool_loop._TOOL_EPHEMERAL_WAITING_AFTER_S", 0.001)
     observed = []
 
     async def _execute(*args, tool_status_observer=None, **kwargs):
@@ -102,7 +102,7 @@ async def test_waiting_is_emitted_once_after_threshold(monkeypatch):
 
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
         tool_event_observer=observed.append,
     )
@@ -129,7 +129,7 @@ async def test_retry_updates_one_status_instance(monkeypatch):
 
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
-    await _make_pipeline().run_agentic_loop(
+    await _make_pipeline().tools.run(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
         tool_event_observer=observed.append,
     )
@@ -153,7 +153,7 @@ async def test_outcome_unknown_never_becomes_finished(monkeypatch):
 
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
-    await _make_pipeline().run_agentic_loop(
+    await _make_pipeline().tools.run(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
         tool_event_observer=observed.append,
     )
@@ -188,7 +188,7 @@ async def test_multiple_tools_keep_serial_index_and_final_reply(monkeypatch):
     memory_writes = []
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", lambda *args, **kwargs: memory_writes.append(args))
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "执行两项"}], uid="u1", char_id="c1", session_state=object(),
         tool_event_observer=observed.append,
     )

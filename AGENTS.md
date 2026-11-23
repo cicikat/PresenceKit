@@ -52,7 +52,7 @@
 | 功能 | 文件 |
 |---|---|
 | 消息处理主流程 | `main.py` |
-| Pipeline 四步骤 + tool loop（Brief 28 · Path C，`run_agentic_loop()`） | `core/pipeline.py` |
+| Reality 运行实例 / 检索 / tool loop / 后处理 | `core/pipeline.py`（角色、prompt、生成）；`core/memory/reality_context.py`；`core/owner_chat/tool_loop.py`；`core/post_process/turn_effects.py` |
 | Prompt 组装 | `core/prompt_builder.py` |
 | Prompt 层级消融开关（对比/消融测试，只过滤注入不短路检索） | `core/prompt_ablation.py` |
 | 话题标签规则 | `core/tag_rules.py` |
@@ -68,8 +68,8 @@
 | 多角色 Stage session / 共享 transcript / 回合仲裁 | `core/stage/models.py` / `core/stage/store.py` / `core/stage/arbiter.py` / `core/stage/runner.py` |
 | 群聊梦境（Dream Stage，Brief 100：仅 sandbox、零回流、hard_exit 绝对） | `core/stage/dream_runtime.py`（`run_dream_stage_turn()`）/ `core/stage/dream_views.py`（`DreamStageCharacterView`）/ `core/stage/dream_state.py` + `dream_store.py` + `dream_settings.py`；端点 `admin/routers/group_dream.py`；详见 `docs/stage.md` §六 |
 | 情景记忆 | `core/memory/episodic_memory.py` |
-| 查询侧时间意图解析（Brief 48：解析"上周/前天/N天前"等，供 episodic/event_log/向量预取按时间窗过滤召回，纯规则无 LLM） | `core/memory/temporal_query.py` → `parse_query_time_range()`；接线点 `core/pipeline.py::fetch_context()` |
-| Memory Event shadow recall（Brief 204：默认关闭、按 uid/char 灰度；并行 reality 事件账本评估只写 recall trace，不进 prompt；观测 `/observability/memory-event-shadow-recall`） | `core/memory/event_shadow_recall.py` → `run_shadow_recall()`；接线点 `core/pipeline.py::fetch_context()` |
+| 查询侧时间意图解析（Brief 48：解析"上周/前天/N天前"等，供 episodic/event_log/向量预取按时间窗过滤召回，纯规则无 LLM） | `core/memory/temporal_query.py` → `parse_query_time_range()`；接线点 `core/memory/reality_context.py::RealityContextReader.fetch()` |
+| Memory Event shadow recall（Brief 204：默认关闭、按 uid/char 灰度；并行 reality 事件账本评估只写 recall trace，不进 prompt；观测 `/observability/memory-event-shadow-recall`） | `core/memory/event_shadow_recall.py` → `run_shadow_recall()`；接线点 `core/memory/reality_context.py::RealityContextReader.fetch()` |
 | Memory Event 历史迁移与可逆遗忘（Brief 205：dry-run 默认、离线备份后小批次可重入导入；墓碑不物理删证据） | `core/memory/event_migration.py` / `scripts/migrate_memory_events.py`；墓碑 `core/memory/event_store.py::tombstone_event()`；观测 `/observability/memory-event-migration` |
 | 情景记忆淘汰暂存（遗忘=降级而非删除；上限裁剪批次存进 storyline_inbox，等周频聚合统一消费；原即时 digest 压缩已退役） | `core/memory/fixation_pipeline.py` → `handler_storyline_evicted_input()` |
 | storyline 叙事弧层（append-only 存储 + 写API open_arc/append_node/set_arc_status；周频聚合 storyline_weekly；tagged 召回层 6h_storyline，Brief 80） | `core/memory/storyline.py` / `core/scheduler/triggers/storyline_weekly.py` |
@@ -79,7 +79,7 @@
 | 用户稳定行为模式 | `core/memory/user_identity.py` |
 | 用户隐性状态 schema + primitives（Phase 3：apply_time_decay / reinforce_body_memory / consolidate_baselines 等已实现；source 类型守卫） | `core/memory/user_hidden_state.py` |
 | 用户隐性状态 integrator（中期层 integrate_event/impression + Phase 3 长期层 integrate_body_cue*；TypeError 类型守卫；_assert_not_long_term；Brief 88：RealityEventType 扩至 5 类，get_trigger_counts() 观测计数） | `core/memory/user_hidden_state_integrator.py` |
-| 用户隐性状态现实侧信号映射（Brief 88：对话侧五类事件判定 + body_memory cue 接线，挂 pipeline.post_process_slow） | `core/memory/user_hidden_state_reality_signals.py` |
+| 用户隐性状态现实侧信号映射（Brief 88：对话侧五类事件判定 + body_memory cue 接线，挂 pipeline.effects.run_deferred_effects） | `core/memory/user_hidden_state_reality_signals.py` |
 | 用户隐性状态持久化（load / save 原子写入；load_dream_snapshot 只读 bucket 快照） | `core/memory/user_hidden_state_store.py` |
 | 用户隐性状态衰减调度（12h decay tick + 7d consolidate tick，stamp_trigger，不发言；Brief 88：12h tick 内顺带 NO_INTERACTION 判定，逻辑日去重 stamp） | `core/scheduler/triggers/hidden_state_decay.py` |
 | Dream snapshot 接入（Phase 4：tag-gated D4.5 只读注入；tag_gate helper；fail-closed） | `core/dream/dream_context.py` + `core/dream/dream_prompt.py` |
@@ -125,16 +125,16 @@
 | user_identity 文件 | `data/user_identity/{uid}.yaml`（当前 prompt 层6a 主入口） |
 | toy 自主写入（自生长，走 post_process，非探针） | `core/post_process/toy_autogrow.py` → `handler_toy_autogrow`；配置 `toy_autogrow:` |
 | web 搜索沉淀（X3）：结果写入 vector_store source="web" | `core/tools/web_search.py` → `vector_store.upsert`；限频配置 `web_autosearch:` |
-| web 资料召回（X3）：semantic 召回 web 来源，注入 `web_recall` 层 | `core/pipeline.py` `fetch_context()` → `vector_store.query_with_preview(sources=["web"])` → `web_recall_result` → `prompt_builder.build(web_recall_result=)` |
+| web 资料召回（X3）：semantic 召回 web 来源，注入 `web_recall` 层 | `core/memory/reality_context.py` `RealityContextReader.fetch()` → `vector_store.query_with_preview(sources=["web"])` → `web_recall_result` → `prompt_builder.build(web_recall_result=)` |
 | web 与梦境来源同等隔离，不固化 | `web_recall_result` 非空时 `post_process` 携带 `web_echo=True`，`fixation_pipeline.handler_summarize_to_midterm` 与 dream_echo 同路跳过 mid_term/episodic/identity 写入；同一判定经 `event_log.append(source=)` 写入 event_log meta，`event_log_salvage` 抢救链按块过滤 `source:` 非空内容（Brief 79，见 `docs/memory.md` §三点八「来源隔离」） |
 | 工具探针（声明式） | `core/tool_runtime/exposure.py` → `get_probe_prompt()`；唯一 `_TOOL_REGISTRY` 在 `core/tool_runtime/state.py`，由 `registry.py` 组合；dispatcher 同对象导出 |
 | 工具已读指纹日志（P2，去重防重读） | `core/memory/tool_read_log.py`（`persist=True` 工具：read_diary / read_watch / read_toy_file / search_diary） |
 | 工具动作痕迹（Brief 27，跨轮"你最近做过的操作"，层 `10.5_action_trace`） | `core/memory/action_trace.py`（`execute_structured()` 收口埋点 + `event_log_echo` 经 `capture_turn` 回流） |
 | trusted_user_text / probe grounding | `main.py` `_trusted_user_text` 在 media merge 前捕获；`admin/routers/chat.py` `run_owner_chat_turn(trusted_user_text=)` |
 | execute_structured() origin 闸门 | `core/tool_runtime/policy.py` → `_EXECUTE_ALLOWED_ORIGINS`；`core/tool_dispatcher.py::execute_structured(origin=)` 为稳定入口 |
-| tool loop 多步工具执行器（Path C，function_calling 模型专用） | `core/tool_dispatcher.py` → `tool_loop_active(uid)`；`core/pipeline.py` → `run_agentic_loop()`；全局 `config.tool_loop.enabled` 默认关，活跃角色卡可用 `presence_ext.tool_loop: "on"|"off"` 覆盖；设置接口 `admin/routers/settings_tool_loop.py` |
+| tool loop 多步工具执行器（Path C，function_calling 模型专用） | `core/tool_dispatcher.py` → `tool_loop_active(uid)`；`core/owner_chat/tool_loop.py` → `ToolTurnRunner.run()`；全局 `config.tool_loop.enabled` 默认关，活跃角色卡可用 `presence_ext.tool_loop: "on"|"off"` 覆盖；设置接口 `admin/routers/settings_tool_loop.py` |
 | MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4，只接工具不接 resources/prompts/记忆库，默认关） | `core/mcp_client.py`（`init_mcp_servers()` / `shutdown_mcp_servers()`）；配置 `config.mcp_servers`；工具只经 tool loop 暴露 |
-| per-char 兼容钩子（Brief 29 · "本我"模式：注入过滤/路由/发言闸门/工具暴露面） | 角色卡 `presence_ext` 块 → `core/character_loader.py`（解析 + `is_proactive_disabled()`）；消费点分别在 `core/prompt_ablation.py` / `core/model_registry.py` / `core/scheduler/gating.py`+`execution.py` / `core/pipeline.py::run_agentic_loop()`；示例卡 `bundled/examples/benwo.example.json`（发行内置模板/示例统一位于 `bundled/`） |
+| per-char 兼容钩子（Brief 29 · "本我"模式：注入过滤/路由/发言闸门/工具暴露面） | 角色卡 `presence_ext` 块 → `core/character_loader.py`（解析 + `is_proactive_disabled()`）；消费点分别在 `core/prompt_ablation.py` / `core/model_registry.py` / `core/scheduler/gating.py`+`execution.py` / `core/owner_chat/tool_loop.py::ToolTurnRunner.run()`；示例卡 `bundled/examples/benwo.example.json`（发行内置模板/示例统一位于 `bundled/`） |
 | speaker-aware history + 风格脱敏 | `core/memory/short_term.py` → `speaker_id` / `_group_turns()` / `_sanitize_assistant_message()` |
 
 ---
@@ -176,8 +176,8 @@ python run_test.py
    字段白名单）、`tests/test_r3_scope_lint.py`（`char_id="yexuan"` 默认参数）。
 10. **新增 send 前 await 时，先判断是否为回复生成所必需。** 非回复生成依赖的后处理 LLM/网络调用必须
    挪到 send 之后异步执行；生成回复必需的模型与工具调用不在此限（Brief 37 的教训：`detect_emotion` 曾经堵在
-   `post_process` 里，每条消息多付一次 LLM 往返延迟）。`core/pipeline.py` 的
-   `post_process_critical`（send 前，只做毫秒级本地落盘）/ `post_process_slow`
+   `post_process` 里，每条消息多付一次 LLM 往返延迟）。`core/post_process/turn_effects.py` 的
+   `capture_critical`（send 前，只做毫秒级本地落盘）/ `run_deferred_effects`
    （send 后，`asyncio.create_task` 调度，装 detect_emotion / mood_state /
    slow_queue 等）是这个原则落地的参考实现，见 `core/turn_sink.py`
    `record_assistant_turn`。

@@ -156,7 +156,7 @@ signal-only 中继唤醒（仅含 `id` / `seq` / `user_id` / `timestamp` / `sign
 手机普通聊天使用 `/mobile/chat`，桌宠使用 `/desktop/chat`；两者复用同一个
 `run_owner_chat_turn()` 与
 经 `core/conversation_gate.py` 的 per-user 锁：同一用户的并发请求不会并行进入
-`fetch_context → LLM → post_process_critical`（Brief 37：只锁到落盘的关键段；`post_process_slow` 里的
+`fetch_context → LLM → capture_critical`（Brief 37：只锁到落盘的关键段；`run_deferred_effects` 里的
 `detect_emotion` / mood_state 更新是 send 后异步 `asyncio.create_task` 出去的，不占这把锁，
 下一条消息不需要等它跑完）。
 本端 reply 通过 HTTP response 返回；`exclude_origin_channel` 只排除实时来源，
@@ -448,11 +448,11 @@ HTTP /desktop/chat 触发 turn
    `channel_message` 的纯文本。
 3. `stream_end` 与 `channel_message` 之间存在毫秒级间隔（Brief 37 之前曾达秒级——
    `detect_emotion` 一次 LLM 往返曾挡在这里，最长 8s 超时；Brief 37 后已挪到 send
-   之后异步执行）：两者之间只会 `await pipeline.post_process_critical(...)`
+   之后异步执行）：两者之间只会 `await pipeline.effects.capture_critical(...)`
    （`record_assistant_turn` 的关键段，只做本地落盘写短期/事件记忆），这是正常
    时序，不代表连接异常或消息丢失。`channel_message` 发出（send）之后，
    `record_assistant_turn` 才用 `asyncio.create_task` 调度
-   `pipeline.post_process_slow(...)`（detect_emotion / mood_state / mid_term
+   `pipeline.effects.run_deferred_effects(...)`（detect_emotion / mood_state / mid_term
    等），不阻塞任何通道的收发。
 4. 触发器 / 主动发言（`TurnSource.TRIGGER`）没有流式帧，直接发 `channel_message`
    （+ 可选 `message_segments`），前端应把它当作一条完整新消息追加。`desktop_wake`

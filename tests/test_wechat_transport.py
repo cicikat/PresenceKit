@@ -166,9 +166,9 @@ async def test_wechat_uses_existing_tool_loop_and_turn_sink_with_canonical_ident
     message = event(text="现在几点")
     assert await service.admit(message, generation=0, owner_uid=_USER_ID)
     assert not await service.admit(message, generation=0, owner_uid=_USER_ID)
-    pipeline.fetch_context.assert_awaited_once()
+    pipeline.context.fetch.assert_awaited_once()
     assert pipeline.build_prompt.call_args.kwargs["channel"] == "wechat"
-    assert pipeline.run_agentic_loop.call_args.kwargs["uid"] == _USER_ID
+    assert pipeline.tools.run.call_args.kwargs["uid"] == _USER_ID
     record.assert_awaited_once()
     assert record.call_args.kwargs["envelope"].source.value == "wechat"
     assert record.call_args.kwargs["event_channel"] == "wechat"

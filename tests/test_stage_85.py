@@ -251,7 +251,8 @@ async def test_topic_seed_block_assembles_activity_topic_and_moment(sandbox, mon
     captured = {}
 
     class FakePipeline:
-        async def fetch_context(self, uid, content, *, frozen_scope):
+        context = property(lambda self: self)
+        async def fetch(self, uid, content, *, frozen_scope):
             raise AssertionError("topic seed must use the lightweight path")
 
         def build_prompt(self, uid, content, context, **kwargs):

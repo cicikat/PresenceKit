@@ -147,7 +147,7 @@ def test_fetch_context_calls_user_facts_format_for_prompt(chars_tree, sandbox, r
     _write_active(sandbox, TEST_CHAR_ID)
 
     asyncio.run(
-        pipeline.fetch_context("u99", "hello")
+        pipeline.context.fetch("u99", "hello")
     )
 
     assert calls == [("u99", TEST_CHAR_ID)], f"Expected format_for_prompt called once with 'u99', got {calls}"
@@ -163,7 +163,7 @@ def test_fetch_context_returns_user_facts_text_key(chars_tree, sandbox, registry
     _write_active(sandbox, TEST_CHAR_ID)
 
     ctx = asyncio.run(
-        pipeline.fetch_context("u1", "hello")
+        pipeline.context.fetch("u1", "hello")
     )
 
     assert "user_facts_text" in ctx

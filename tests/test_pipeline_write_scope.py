@@ -174,14 +174,8 @@ async def test_post_process_passes_active_char_id_to_capture_turn(
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process(
-            user_id="u1",
-            content="你好",
-            reply="在的",
-            envelope=env,
-            event_channel="desktop",
-            event_source="user_chat",
-        )
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='你好', reply='在的', envelope=env, event_channel='desktop', event_source='user_chat')
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='你好', reply='在的', envelope=env)
 
     assert captured_char_ids, "capture_turn must be called"
     assert captured_char_ids[0] == "character_b", (
@@ -230,7 +224,8 @@ async def test_post_process_uses_new_char_id_after_switch(
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
         # First turn: yexuan
-        await pipeline.post_process("u1", "你好", "在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '你好', '在的', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '你好', '在的', critical_result=_critical_result, envelope=env)
         assert captured_char_ids[-1] == TEST_CHAR_ID, (
             f"First turn must use yexuan, got {captured_char_ids[-1]!r}"
         )
@@ -239,7 +234,8 @@ async def test_post_process_uses_new_char_id_after_switch(
         _write_active(sandbox, "character_b")
 
         # Second turn: must now use character_b
-        await pipeline.post_process("u1", "今天怎样", "挺好的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '今天怎样', '挺好的', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '今天怎样', '挺好的', critical_result=_critical_result, envelope=env)
         assert captured_char_ids[-1] == "character_b", (
             f"After switch, post_process must use character_b, got {captured_char_ids[-1]!r}"
         )
@@ -285,7 +281,8 @@ async def test_post_process_invalid_active_does_not_write(
         patch.object(_el, "append", side_effect=_fail_el),
     ):
         with pytest.raises((ValueError, RuntimeError)):
-            await pipeline.post_process("u1", "你好", "在的", envelope=env)
+            _critical_result = await pipeline.effects.capture_critical('u1', '你好', '在的', envelope=env)
+            await pipeline.effects.run_deferred_effects('u1', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     assert st_called == [], "short_term.append must not be called on invalid active_character"
     assert el_called == [], "event_log.append must not be called on invalid active_character"
@@ -405,7 +402,7 @@ def test_fetch_context_t01_regression_char_id_still_passes(
 
     monkeypatch.setattr(_st, "load_for_prompt", _spy_load)
 
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
 
     assert captured, "short_term.load_for_prompt must be called"
     assert captured[0] == "character_b", (

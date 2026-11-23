@@ -65,7 +65,8 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
     # ── 调用 post_process ─────────────────────────────────────────────────────
     from core.write_envelope import stamp_user_chat
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
-    await pipeline.post_process(uid, "你好吗", reply, target_id="", is_group=False, envelope=stamp_user_chat())
+    _critical_result = await pipeline.effects.capture_critical(uid, '你好吗', reply, target_id='', is_group=False, envelope=stamp_user_chat())
+    await pipeline.effects.run_deferred_effects(uid, '你好吗', reply, critical_result=_critical_result, target_id='', is_group=False, envelope=stamp_user_chat())
 
     # 让 worker 有机会启动 handler（但 gate 关闭，marker 绝对未写入）
     await asyncio.sleep(0)
@@ -121,7 +122,7 @@ async def test_no_extra_emotion_model_for_reply(sandbox, monkeypatch):
     monkeypatch.setattr("core.affective_appraisal.evaluate", detector)
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda *a, **k: None)
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
-    result = await pipeline.post_process("owner", "hello", "<feel>很开心</feel><say>嗯</say>",
-                                         envelope=stamp_user_chat())
+    _critical_result = await pipeline.effects.capture_critical('owner', 'hello', '<feel>很开心</feel><say>嗯</say>', envelope=stamp_user_chat())
+    result = await pipeline.effects.run_deferred_effects('owner', 'hello', '<feel>很开心</feel><say>嗯</say>', critical_result=_critical_result, envelope=stamp_user_chat())
     assert result["emotion"] == "happy"
     detector.assert_not_called()

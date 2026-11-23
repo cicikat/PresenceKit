@@ -16,13 +16,14 @@ class _FakePipeline:
     前，conversation_gate 内 await）与 post_process_slow()（send 后 create_task，
     不 await）。critical 段承担原本 delay/active 计数语义，因为它是唯一被
     conversation_gate 包住、影响并发串行化断言的部分。"""
+    effects = property(lambda self: self)
 
     def __init__(self, delay: float = 0.0):
         self.delay = delay
         self.active = 0
         self.max_active = 0
 
-    async def post_process_critical(self, uid, content, reply, **kwargs):
+    async def capture_critical(self, uid, content, reply, **kwargs):
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         try:
@@ -40,7 +41,7 @@ class _FakePipeline:
         finally:
             self.active -= 1
 
-    async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+    async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
         return {"emotion": "gentle", "turn_id": critical_result["turn_id"]}
 
 
@@ -91,9 +92,10 @@ async def test_autonomy_rechecks_revocation_after_critical_write_wait(sandbox,mo
     allowed=[True]
     channel=_Channel("inbox")
     class WaitingPipeline(_FakePipeline):
-        async def post_process_critical(self,*args,**kwargs):
+        effects = property(lambda self: self)
+        async def capture_critical(self,*args,**kwargs):
             entered.set();await release.wait()
-            return await super().post_process_critical(*args,**kwargs)
+            return await super().capture_critical(*args,**kwargs)
     monkeypatch.setattr(registry,"_channels",{"inbox":channel})
     monkeypatch.setattr("core.pipeline_registry.get",lambda:WaitingPipeline())
     monkeypatch.setattr(talk_gate,"check",lambda *a,**k:("allow","ok") if allowed[0] else ("hard","permission_revoked"))
@@ -132,8 +134,8 @@ async def test_stale_desktop_activity_is_not_a_live_proactive_receiver(sandbox,m
     from channels import registry
     from unittest.mock import AsyncMock
     pipeline=_FakePipeline()
-    critical=AsyncMock(wraps=pipeline.post_process_critical)
-    pipeline.post_process_critical=critical
+    critical=AsyncMock(wraps=pipeline.effects.capture_critical)
+    pipeline.effects.capture_critical=critical
     monkeypatch.setattr(registry,"_channels",{"desktop":_Channel("desktop")})
     monkeypatch.setattr("channels.desktop_ws.is_connected",lambda:False)
     monkeypatch.setattr("core.pipeline_registry.get",lambda:pipeline)
@@ -177,30 +179,28 @@ async def test_running_autonomy_job_observes_talk_revocation_while_waiting(sandb
     assert store.load(uid,char_id)["delivery_receipts"][-1]["reason_code"]=="autonomy_talk_disabled"
 
 
-@pytest.mark.parametrize("critical,schedule", [(True, True), (True, False), (False, True), (False, False)])
-async def test_post_process_scheduled_reports_actual_background_work(sandbox, critical, schedule):
-    """R5: response flag matches admitted work for both capture modes."""
+@pytest.mark.parametrize("schedule", [True, False])
+async def test_post_process_scheduled_reports_actual_background_work(sandbox, schedule):
+    """The slow-work flag follows admission after the mandatory critical write."""
     from starlette.background import BackgroundTasks
     from core.turn_sink import record_assistant_turn
     calls = []
 
     class Pipeline(_FakePipeline):
-        async def post_process_slow(self, *args, **kwargs):
+        effects = property(lambda self: self)
+        async def run_deferred_effects(self, *args, **kwargs):
             calls.append("slow")
-
-        async def post_process(self, *args, **kwargs):
-            calls.append("combined")
 
     background = BackgroundTasks()
     result = await record_assistant_turn(
         pipeline=Pipeline(), uid="schedule-owner", assistant_text="reply",
         source="user_chat", user_text="hello", fanout=[],
-        await_critical_post_process=critical, schedule_slow=schedule,
+        schedule_slow=schedule,
         background_tasks=background,
     )
     await background()
     await asyncio.sleep(0)
-    assert calls == (["slow" if critical else "combined"] if schedule else [])
+    assert calls == (["slow"] if schedule else [])
     assert result.post_process_scheduled is schedule
 
 
@@ -434,6 +434,45 @@ async def test_capture_turn_failure_enqueues_retry(sandbox, monkeypatch):
     assert restored.turn_id == result.turn_id
 
 
+async def test_sink_forwards_frozen_scope_pending_files_and_target_to_effect_owner(sandbox):
+    """Retain QQ capture metadata while writing only the ingress-frozen bucket."""
+    from pathlib import Path
+    from types import SimpleNamespace
+    from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
+    from core.memory import pending_perception, short_term
+    from core.memory.scope import MemoryScope
+    from core.pipeline import Pipeline
+    from core.post_process.turn_effects import TurnEffects
+    from core.turn_sink import record_assistant_turn
+    from core.write_envelope import stamp_user_chat
+
+    runtime = Pipeline(SimpleNamespace(name="Fixture Companion"), None, active_character_id=TEST_CHAR_ID)
+    received = {}
+
+    class ObservedEffects(TurnEffects):
+        async def capture_critical(self, *args, **kwargs):
+            received.update(kwargs)
+            return await super().capture_critical(*args, **kwargs)
+
+    runtime.effects = ObservedEffects(runtime)
+    pending_perception.write("fixture perception")
+    _, pending = pending_perception.read_and_mark()
+    assert pending and all(Path(path).exists() for path in pending)
+    frozen = MemoryScope.reality_scope("capture-contract", TEST_PEER_CHAR_ID)
+    result = await record_assistant_turn(
+        uid=frozen.uid, assistant_text="reply", user_text="hello", source="user_chat",
+        pipeline=runtime, frozen_scope=frozen, char_id=TEST_PEER_CHAR_ID,
+        pending_paths=pending, target_id="fixture-target", envelope=stamp_user_chat(),
+        fanout=[], schedule_slow=False,
+    )
+    assert result.written_to_memory is True
+    assert received["frozen_scope"] == frozen
+    assert received["target_id"] == "fixture-target"
+    assert not any(Path(path).exists() for path in pending)
+    assert [row["content"] for row in short_term.load(frozen.uid, char_id=TEST_PEER_CHAR_ID)] == ["hello", "reply"]
+    assert short_term.load(frozen.uid, char_id=TEST_CHAR_ID) == []
+
+
 async def test_conversation_gate_serializes_concurrent_turns():
     from core.turn_sink import TurnSource, record_assistant_turn
 
@@ -629,12 +668,13 @@ async def test_mobile_fanout_queue_id_matches_turn_id(sandbox):
 
 
 class _PipelineWithoutTurnId(_FakePipeline):
-    async def post_process_critical(self, uid, content, reply, **kwargs):
-        result = await super().post_process_critical(uid, content, reply, **kwargs)
+    effects = property(lambda self: self)
+    async def capture_critical(self, uid, content, reply, **kwargs):
+        result = await super().capture_critical(uid, content, reply, **kwargs)
         result.pop("turn_id", None)
         return result
 
-    async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+    async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
         return {"emotion": "gentle", "turn_id": critical_result.get("turn_id", "")}
 
 

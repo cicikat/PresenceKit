@@ -35,15 +35,16 @@ class _Channel:
 
 class _CapturePipeline:
     """Records the reply text passed to post_process for assertions."""
+    effects = property(lambda self: self)
 
     def __init__(self):
         self.captured_reply: str | None = None
 
-    async def post_process_critical(self, uid, content, reply, **kwargs):
+    async def capture_critical(self, uid, content, reply, **kwargs):
         self.captured_reply = reply
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+    async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
         return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
 

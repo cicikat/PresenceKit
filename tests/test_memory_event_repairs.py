@@ -65,8 +65,8 @@ async def test_qq_adapter_forwards_raw_text_and_safe_media_refs(sandbox, monkeyp
 
     monkeypatch.setattr(text_output, "send", AsyncMock())
     pipeline = MagicMock()
-    pipeline.post_process_critical = AsyncMock(return_value={"turn_id": "t", "critical_written": True})
-    pipeline.post_process_slow = AsyncMock()
+    pipeline.effects.capture_critical = AsyncMock(return_value={"turn_id": "t", "critical_written": True})
+    pipeline.effects.run_deferred_effects = AsyncMock()
     monkeypatch.setattr(main, "_pipeline", pipeline)
 
     await main._qq_reality_reply_adapter(
@@ -76,7 +76,7 @@ async def test_qq_adapter_forwards_raw_text_and_safe_media_refs(sandbox, monkeyp
         media_refs=[{"kind": "image", "filename": "safe.png", "sha256": "a" * 64}],
     )
 
-    kwargs = pipeline.post_process_critical.await_args.kwargs
+    kwargs = pipeline.effects.capture_critical.await_args.kwargs
     assert kwargs["raw_user_text"] == "owner caption"
     assert kwargs["media_refs"] == [{"kind": "image", "filename": "safe.png", "sha256": "a" * 64}]
 

@@ -121,7 +121,7 @@ def test_dedupe_ignores_messages_not_matching_prefix():
 
 def _make_pipeline():
     from core.pipeline import Pipeline
-    return Pipeline.__new__(Pipeline)
+    return Pipeline(character=None, lore_engine=None)
 
 
 def _history_messages(contents: list[str], raw: dict[int, str] | None = None) -> list[dict]:

@@ -107,9 +107,8 @@ async def test_pipeline_schedules_sticker_without_qq_target(sandbox, monkeypatch
     monkeypatch.setattr("core.memory.mood_state.update", lambda *_args, **_kwargs: None)
 
     pipeline = Pipeline(_Character(), lore_engine=None)
-    await pipeline.post_process(
-        "desktop-owner", "你好", "<feel>很高兴</feel><say>见到你真好。</say>", target_id="", envelope=stamp_user_chat(),
-    )
+    _critical_result = await pipeline.effects.capture_critical('desktop-owner', '你好', '<feel>很高兴</feel><say>见到你真好。</say>', target_id='', envelope=stamp_user_chat())
+    await pipeline.effects.run_deferred_effects('desktop-owner', '你好', '<feel>很高兴</feel><say>见到你真好。</say>', critical_result=_critical_result, target_id='', envelope=stamp_user_chat())
     await asyncio.sleep(0)
 
     assert calls

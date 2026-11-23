@@ -32,10 +32,10 @@ def _make_pipeline(active_char_id: str, llm_reply: str = "回复", refresh_raise
     fake.run_llm = AsyncMock(return_value=llm_reply)
     # Brief 37: record_assistant_turn calls post_process_critical (awaited) then
     # post_process_slow (fire-and-forget after send) — both must exist.
-    fake.post_process_critical = AsyncMock(
+    fake.effects.capture_critical = AsyncMock(
         return_value={"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
     )
-    fake.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     if refresh_raises is not None:
         fake._refresh_character_if_needed = MagicMock(side_effect=refresh_raises)
     else:
@@ -263,7 +263,7 @@ async def test_output_governance_chain_intact(sandbox, monkeypatch):
     await asyncio.sleep(0.05)
 
     # post_process was called (memory write path intact)
-    fake.post_process_critical.assert_called_once()
+    fake.effects.capture_critical.assert_called_once()
 
     # QQ output has render tags stripped
     assert sent.call_count >= 1

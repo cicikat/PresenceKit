@@ -168,7 +168,7 @@
 鉴权/安全检查 → desktop 无鉴权；mobile 使用 `verify_token`。  
 事件是否被标准化 → 两者都进入 `run_owner_chat_turn(message, channel_name)`，但没有统一 envelope。  
 是否生成 AI 回复 → 是，`fetch_context()` → `build_prompt()` → `run_llm()`。  
-回复如何落库 → `record_assistant_turn(source=USER_CHAT, user_text=message)` → `pipeline.post_process()` → `capture_turn()`。  
+回复如何落库 → `record_assistant_turn(source=USER_CHAT, user_text=message)` → `TurnEffects.capture_critical() / run_deferred_effects()` → `capture_turn()`。
 是否写入记忆 → 是，写 short_term + event_log；慢队列写 mid_term，可能晋升 episodic/growth。  
 是否影响情绪 → 是，`detect_emotion()` 后 `mood_state.update(source="detect")`，yandere 关键词另触发。  
 是否影响花园 → 普通消息不直接影响；若探针命中 `water_garden`，会通过工具调用 `force_water()`。  
@@ -309,7 +309,7 @@
 
 | 问题 | 当前代码事实 |
 |---|---|
-| AI 回复最终在哪里落库 | 新主路径是 `record_assistant_turn()` → `Pipeline.post_process()` → `fixation_pipeline.capture_turn()`。QQ 主入口和若干旧 HTTP 入口仍直接 `pipeline.post_process()`。 |
+| AI 回复最终在哪里落库 | 新主路径是 `record_assistant_turn()` → `TurnEffects.capture_critical() / run_deferred_effects()` → `fixation_pipeline.capture_turn()`。QQ 主入口和若干旧 HTTP 入口仍直接 `TurnEffects.capture_critical() / run_deferred_effects()`。 |
 | 消息最终在哪里广播 | 新主路径是 `record_assistant_turn()` 内 `_fanout()` 调通道；也存在 `channels.registry.broadcast()`；QQ 主入口使用 `text_output.send()` 直接发 QQ。 |
 | 触发来源在哪里记录 | `capture_turn(trigger_name=...)` 在 scheduler assistant meta 写 `trigger`；普通用户消息无统一 source 字段；sensor/mobile behavior metadata 不会统一写入 event_log。 |
 | 并发/锁在哪里处理 | owner desktop/mobile 由 `conversation_lock(uid)` 包 `fetch_context → LLM → post_process`；关键记忆写入由 `uid_lock(uid)`；mood 由 `global_lock("mood_state")`；QQ 由 `message_queue` 按 session 串行，但不走 owner `conversation_lock`。 |

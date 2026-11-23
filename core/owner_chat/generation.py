@@ -117,7 +117,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
         _t_first_delta_ts = None
         try:
             if _loop_active:
-                _stream_source = await pipeline.run_agentic_loop(
+                _stream_source = await pipeline.tools.run(
                     messages, uid=user_id, char_id=_frozen_scope.character_id,
                     session_state=_loop_session_state, is_group=False, stream=True,
                     tool_event_observer=_tool_status_observer,
@@ -193,7 +193,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
         _stream_msg_id = None
         _t0 = time.monotonic()
         if _loop_active:
-            reply = await pipeline.run_agentic_loop(
+            reply = await pipeline.tools.run(
                 messages, uid=user_id, char_id=_frozen_scope.character_id,
                 session_state=_loop_session_state, is_group=False,
                 tool_event_observer=_tool_status_observer,

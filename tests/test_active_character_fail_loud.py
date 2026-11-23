@@ -477,7 +477,7 @@ def test_fetch_context_blocks_on_empty_active_character(
     monkeypatch.setattr(short_term, "load_for_prompt", _spy_load)
 
     with pytest.raises(ValueError, match="active_character"):
-        asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+        asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
 
     assert load_calls == [], (
         "short_term.load_for_prompt must not be called when active_character is invalid"
@@ -508,7 +508,7 @@ def test_fetch_context_blocks_on_unknown_active_character(
     monkeypatch.setattr(short_term, "load_for_prompt", _spy_load)
 
     with pytest.raises(ValueError):
-        asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+        asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
 
     assert load_calls == [], (
         "short_term.load_for_prompt must not be called when active_character is invalid"

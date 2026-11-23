@@ -62,7 +62,7 @@ async def send(
     from core.reality_output_scrubber import scrub_reality_output_text
     text = (scrub_reality_output_text(strip_render_tags(strip_control_markers(text))) or "").strip()
     if not text: return False, "empty_text"
-    # 工单 C1：autonomy 走 talk_owner 工具参数发言，不经 pipeline.run_agentic_loop
+    # 工单 C1：autonomy 走 talk_owner 工具参数发言，不经 pipeline.tools.run
     # 的发送前闸门；xml_fallback 解析失败时模型可能把工具目录描述当成了
     # talk_owner.text 的内容。这里不重试（没有生成上下文可追加 system 指令），
     # 命中直接拒绝本次发言，等待下一轮机会，而不是把泄漏文本发给用户。

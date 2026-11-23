@@ -131,12 +131,13 @@ async def test_turn_sink_fanout_uses_pipeline_active_char_id():
             self.char_id = char_id
 
     class Pipeline:
+        effects = property(lambda self: self)
         _active_character_id = TEST_THIRD_CHAR_ID
 
-        async def post_process_critical(self, uid, content, reply, **kwargs):
+        async def capture_critical(self, uid, content, reply, **kwargs):
             return {"turn_id": "turn-1", "critical_written": True}
 
-        async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+        async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
             return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
     from channels import registry

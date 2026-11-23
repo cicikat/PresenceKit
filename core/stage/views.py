@@ -84,7 +84,7 @@ class StageCharacterView:
             context = self._lightweight_context()
         else:
             scope = MemoryScope.reality_scope(stage.owner_uid, self.char_id)
-            context = await self.pipeline.fetch_context(
+            context = await self.pipeline.context.fetch(
                 stage.owner_uid,
                 latest,
                 frozen_scope=scope,

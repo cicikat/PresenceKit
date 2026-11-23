@@ -45,7 +45,7 @@ async def prepare_turn(turn: OwnerChatTurn, *, probe=None) -> PreparedTurn:
     async def _timed_ctx():
         nonlocal _t_ctx
         _t0 = time.monotonic()
-        result = await pipeline.fetch_context(user_id, message, frozen_scope=_frozen_scope)
+        result = await pipeline.context.fetch(user_id, message, frozen_scope=_frozen_scope)
         _t_ctx = time.monotonic() - _t0
         return result
 

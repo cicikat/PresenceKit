@@ -128,12 +128,16 @@ pipeline_registry.register()
 
 职责：
 
-- conversation processing
-- prompt construction
-- memory interaction
-- LLM execution coordination
+- 角色卡与世界书热切换，prompt construction 与 LLM 输出治理的实际实现
+- 创建并持有 RealityContextReader、ToolTurnRunner、TurnEffects 三个领域实例
+- 领域实现各自执行检索、工具回合、关键写入和发送后慢段；不经旧方法转发
 
-其他模块应通过 registry 访问 Pipeline，不要自行创建实例。
+T3 保留 `pipeline_registry` 为 main 创建的唯一进程级运行实例引用，不新增任意 service key 或另一套状态。
+已有 HTTP、后台任务和工具的进程入口继续从这里取得同一实例；回合内通过 OwnerChatTurn / Stage view / turn_sink 显式传递。
+Slow handler 在 main 注册时注入该实例，avatar 投影从 TurnEffects 的实例引用读取当前角色，不再反查全局注册表。
+完整调用者清单与保留边界见 [T3 报告](refactors/migration-cutover-t3.md)。
+
+进程入口可通过 registry 取得同一运行实例；回合与领域实现显式注入依赖，不自行创建第二个运行实例。
 
 ---
 

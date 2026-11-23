@@ -128,10 +128,11 @@ class _FakeChannel:
 
 
 class _FakePipeline:
-    async def post_process_critical(self, uid, content, reply, **kwargs):
+    effects = property(lambda self: self)
+    async def capture_critical(self, uid, content, reply, **kwargs):
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+    async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
         return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
 
@@ -505,14 +506,15 @@ async def test_all_action_reply_visible_kept_memory_skipped(enabled_client_chann
 
     class _FakePipelineWithCapture:
         """Lets us intercept what memory_text post_process receives."""
+        effects = property(lambda self: self)
         def __init__(self):
             self.received_reply = None
 
-        async def post_process_critical(self, uid, content, reply, **kwargs):
+        async def capture_critical(self, uid, content, reply, **kwargs):
             self.received_reply = reply
             return {"turn_id": "t2", "critical_written": False, "emotion": "neutral"}
 
-        async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+        async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
             return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
     pl = _FakePipelineWithCapture()

@@ -21,7 +21,7 @@
 副问题：
 
 - garden_bloom / harvest_expired / vase_wilted / handle_ask / handle_gift / handle_self 等花园事件，历史上曾被报告为“冷却名已登记但未真正节流”；当前 `garden_water.py` / `garden_daily.py` 已在事件执行前使用 `_is_ready()`，成功路径通过 `_mark()` / `would_mark` 记录。
-- 普通触发器的旧路径曾用 `asyncio.create_task` 不 await；当前 `record_assistant_turn` 会在 fanout 前 await `post_process_critical` 完成本地记忆落盘，`detect_emotion/mood_state` 等慢段在发送后异步执行。
+- 普通触发器的旧路径曾用 `asyncio.create_task` 不 await；当前 `record_assistant_turn` 会在 fanout 前 await `capture_critical` 完成本地记忆落盘，`detect_emotion/mood_state` 等慢段在发送后异步执行。
 
 ---
 
@@ -90,7 +90,6 @@ async def record_assistant_turn(
     user_text: Optional[str] = None,       # source == USER_CHAT 必填
     fanout: FanoutPolicy = "all",
     payload: Optional[dict] = None,        # 内部兼容壳；当前只读取 payload["behavior"]
-    await_critical_post_process: bool = True,
     bypass_gate: bool = False,             # 仅已持有外层 conversation_lock 的 adapter/兼容调用方使用
     pipeline=None,                          # 由调用方注入或从 pipeline_registry 取
 ) -> TurnResult:
@@ -106,7 +105,7 @@ async def record_assistant_turn(
    - `source != USER_CHAT` → 必须有 `trigger_name`、不能有 `user_text`
    - `assistant_text` 非空
 
-2. **记忆 `turn_id` 由 `capture_turn` / `post_process_critical` 产出**；sink 不再预先 mint 记忆 id。fanout 前优先使用 persisted `turn_id` 作为传输 `msg_id`；若 critical 未产出，则 `uuid4().hex` mint 不透明 transport id，**不依赖 desktop WS `is_connected()`**，也不把该 transport id 回写成旧日志 footer。
+2. **记忆 `turn_id` 由 `capture_turn` / `capture_critical` 产出**；sink 不再预先 mint 记忆 id。fanout 前优先使用 persisted `turn_id` 作为传输 `msg_id`；若 critical 未产出，则 `uuid4().hex` mint 不透明 transport id，**不依赖 desktop WS `is_connected()`**，也不把该 transport id 回写成旧日志 footer。
 
 3. **进入 `conversation_gate(uid)`**（per-uid lock，与 owner 入口共享）
    - `bypass_gate=True` 时跳过；仅供已经持有外层 `conversation_lock` 的 adapter/兼容调用方使用，`hr_critical` 只绕过状态机准入，不绕过此锁
@@ -127,7 +126,7 @@ async def record_assistant_turn(
 
 7. **post_process 慢队列触发**（与 owner 入口一致）
    - 入 slow_queue：`summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_identity` / `consistency_check` / `user_profile_update`
-   - `await_critical_post_process=True` 时只等待关键块（本地条件读取 + `capture_turn`）完成；`detect_emotion` / `mood_state.update` 在 fanout 后由 `post_process_slow` 异步执行
+   - 始终先等待关键块（本地条件读取 + `capture_turn`）完成；`detect_emotion` / `mood_state.update` 在 fanout 后由 `run_deferred_effects` 异步执行
    - TTS / 表情包等副作用保持 `asyncio.create_task` 模式，不接管
 
 8. **返回 `TurnResult`**
@@ -193,8 +192,8 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
    - `hr_critical` 的 `bypass_state_machine=True` 只绕过状态机准入，不绕过 conversation gate；`record_assistant_turn(bypass_gate=True)` 仅用于已持有外层锁的 adapter/兼容调用方。
 
 4. **post_process 是否 await 关键块**
-   - 当前实现：send 前只 await `post_process_critical` 的本地条件判断、`capture_turn` 和必要的状态快照；不在 send 前等待 LLM/网络调用。
-   - send/fanout 完成后再异步调度 `post_process_slow`，其中包含 `detect_emotion`、`mood_state`、avatar/profile 和 slow queue。
+   - 当前实现：send 前只 await `capture_critical` 的本地条件判断、`capture_turn` 和必要的状态快照；不在 send 前等待 LLM/网络调用。
+   - send/fanout 完成后再异步调度 `run_deferred_effects`，其中包含 `detect_emotion`、`mood_state`、avatar/profile 和 slow queue。
    - 这条与 #3 联动；“await emotion + mood + capture_turn”仅是历史设计稿表述，不是当前时序。
 
 5. **sleep_end 事件流（已解决）**
@@ -259,7 +258,7 @@ Phase 2 设计文档另开，预计文件名 `docs/trigger-decision-layer.md`。
 ## 九、落地记录（Phase 1 已完成）
 
 - `core/turn_sink.py` 已成为 owner、scheduler、sensor、QQ 等 reality assistant turn 的统一入口。
-- `post_process_critical` 在 fanout 前只做毫秒级本地捕获与状态写入；`post_process_slow` 在 fanout 后异步处理情绪、画像和慢队列。
+- `capture_critical` 在 fanout 前只做毫秒级本地捕获与状态写入；`run_deferred_effects` 在 fanout 后异步处理情绪、画像和慢队列。
 - `sensor_aware` 不再保留独立的桌面 WS 直推出口，当前由 autonomy `talk_owner` 走统一 sink，并按当前 fanout 策略投递。
 - `sleep_end` 已通过 `scheduler.on_watch_event` 接入统一事件流，使用 `WATCH` + `trigger_name="sleep_end"`。
 - garden 事件冷却已由 `garden_water.py` / `garden_daily.py` 的 `_is_ready`、`_mark` 和 `would_mark` 接入；它是独立于 turn sink 的触发器级闸门，后续只需补验收观测，不应再写成未实现。
@@ -315,7 +314,7 @@ turn_sink.record_assistant_turn（desktop/scheduler/sensor/wake）
 > **任何新的现实记忆写入路径必须走 `capture_turn` 或等价的权威 scrub 点。**
 > 
 > 不允许：直接调 `short_term.append` / `event_log.append` 而不经过 `capture_turn`。  
-> 允许（推荐）：把生成文本传给 `pipeline.post_process()`，后者调 `capture_turn`。  
+> 允许（推荐）：把生成文本传给 `TurnEffects.capture_critical() / run_deferred_effects()`，后者调 `capture_turn`。
 > 允许（备用）：直接调 `capture_turn()`，但必须确保 `reply` 已经过 `scrub_reality_output_text` 或由 `capture_turn` 内部 scrub（默认行为）。
 
 ---

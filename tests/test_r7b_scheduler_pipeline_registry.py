@@ -30,10 +30,11 @@ import pytest
 # ---------------------------------------------------------------------------
 
 class _FakePipeline:
+    context = property(lambda self: self)
     def __init__(self, name: str = "default"):
         self.name = name
 
-    async def fetch_context(self, uid, query, **kwargs):
+    async def fetch(self, uid, query, **kwargs):
         return {}
 
     def build_prompt(self, uid, prompt, context, **kwargs):

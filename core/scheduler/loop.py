@@ -532,7 +532,7 @@ async def _pipeline_send(
         # bypass_gate=True because we already hold conversation_lock here.
         from core.conversation_gate import conversation_lock as _conv_lock
         async with _conv_lock(oid):
-            context = await _pipeline.fetch_context(
+            context = await _pipeline.context.fetch(
                 oid, search_query or prompt, frozen_scope=_frozen_scope,
                 recall_policy=recall_policy, query_free_fallback=True,
             )
@@ -805,7 +805,7 @@ async def _compose_trigger_reply(
             return None
         from core.conversation_gate import conversation_lock as _conv_lock
         async with _conv_lock(oid):
-            context = await _pipeline.fetch_context(
+            context = await _pipeline.context.fetch(
                 oid, search_query or prompt, frozen_scope=_frozen_scope,
                 recall_policy=recall_policy, query_free_fallback=True,
             )
@@ -830,7 +830,7 @@ async def _compose_trigger_reply(
                     if spec.get("category") == "self"
                     or name in {"start_agent_task", "get_agent_task", "cancel_agent_task"}
                 )
-                reply = await _pipeline.run_agentic_loop(
+                reply = await _pipeline.tools.run(
                     messages, uid=oid, char_id=_frozen_scope.character_id,
                     session_state=SessionState(), is_proactive=True,
                     allowed_tool_names=allowed,

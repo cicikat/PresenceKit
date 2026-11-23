@@ -70,7 +70,7 @@ async def execute_prompt(
     char_id: str | None = None,
     behavior_factory: Optional[BehaviorFactory] = None,
     fanout="all",
-    recall_policy: str = "seed",   # C: "seed" | "anchored" | "none" — see pipeline.fetch_context()
+    recall_policy: str = "seed",   # C: "seed" | "anchored" | "none" — see pipeline.context.fetch()
     perceive_event=None,
     pipeline_outcome: dict | None = None,
     write_trigger_stub: bool = True,

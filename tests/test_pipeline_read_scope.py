@@ -93,7 +93,7 @@ def _write_active(sandbox, char_id: str):
 
 
 def _run_fetch(pipeline, user_id="u1", content="hello"):
-    return asyncio.run(pipeline.fetch_context(user_id=user_id, content=content))
+    return asyncio.run(pipeline.context.fetch(user_id=user_id, content=content))
 
 
 # ── Shared stub layer ─────────────────────────────────────────────────────────
@@ -479,7 +479,7 @@ def test_recall_policy_none_skips_episodic_event_search_and_web_recall(
     monkeypatch.setattr(_ui, "format_for_prompt", _spy_identity)
 
     context = asyncio.run(
-        pipeline.fetch_context(user_id="u1", content="今天", recall_policy="none")
+        pipeline.context.fetch(user_id="u1", content="今天", recall_policy="none")
     )
 
     assert retrieve_calls == [], "recall_policy=none 时 episodic_memory.retrieve 不应被调用"
@@ -508,7 +508,7 @@ def test_recall_policy_none_skips_event_shadow_recall(
         return {"enabled": True, "status": "ok"}
 
     monkeypatch.setattr(_shadow, "run_shadow_query", _shadow_spy)
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="今天", recall_policy="none"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="今天", recall_policy="none"))
 
     assert calls == []
 
@@ -537,7 +537,7 @@ def test_event_shadow_trace_stays_out_of_fetch_context_result(
 
     monkeypatch.setattr(_shadow, "run_shadow_query", _shadow_spy)
     monkeypatch.setattr(_trace, "write_trace", lambda _uid, _char_id, record: traces.append(record))
-    context = asyncio.run(pipeline.fetch_context(user_id="u1", content="具体话题"))
+    context = asyncio.run(pipeline.context.fetch(user_id="u1", content="具体话题"))
 
     assert "event_shadow_recall" not in context
     assert traces[-1]["event_shadow_recall"]["new_event_ids"] == ["event-a", "event-b"]
@@ -561,6 +561,6 @@ def test_recall_policy_seed_default_still_calls_episodic_retrieve(
 
     monkeypatch.setattr(_ep, "retrieve", _spy_retrieve)
 
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="今天心情不错"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="今天心情不错"))
 
     assert retrieve_calls == [1], "默认 recall_policy 不应跳过 episodic_memory.retrieve"
