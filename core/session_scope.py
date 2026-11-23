@@ -307,3 +307,15 @@ def reset_for_tests() -> None:
     _REQUEST_LOCKS.clear()
     _RUNNING.clear()
     _TRACE.clear()
+
+
+def owner_media_scope() -> tuple[str, str]:
+    from core.config_loader import get_config as _cfg
+    from core.data_paths import DEFAULT_CHAR_ID
+    from core import pipeline_registry
+
+    uid = str(_cfg().get("scheduler", {}).get("owner_id", "")).strip()
+    if not uid:
+        raise SessionScopeError(500, "owner_id not configured")
+    char_id = getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
+    return uid, char_id

@@ -262,3 +262,12 @@ def _read_vocab_or_none(path: Path) -> list[str] | None:
         return None
     except Exception:
         return None
+
+
+BUILTIN_WORLD_LAYERS = frozenset({"reality_derived", "abo", "vampire", "cat", "flower_bud", "custom"})
+
+
+def valid_world_layer_values() -> frozenset[str]:
+    """Built-in worlds plus discovered authored worlds and the reserved default."""
+    discovered = frozenset(discover_worlds())
+    return BUILTIN_WORLD_LAYERS | discovered | {"_default"}

@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from admin.routers import scheduler
+from core.owner_config import owner_status
 
 
 def test_put_owner_id_rejects_illegal_chars(monkeypatch):
@@ -69,13 +70,13 @@ def test_put_owner_birthday_accepts_valid_mm_dd(monkeypatch):
 
 
 def test_owner_status_reports_unconfigured_when_missing():
-    status = scheduler.owner_status({"scheduler": {}})
+    status = owner_status({"scheduler": {}})
     assert status["configured"] is False
     assert status["owner_birthday_set"] is False
 
 
 def test_owner_status_reports_configured_and_masks_invalid_birthday():
-    status = scheduler.owner_status({"scheduler": {"owner_id": "123456", "owner_birthday": "MM-DD"}})
+    status = owner_status({"scheduler": {"owner_id": "123456", "owner_birthday": "MM-DD"}})
     assert status["configured"] is True
     assert status["owner_id"] == "123456"
     assert status["owner_birthday"] == ""
@@ -83,5 +84,5 @@ def test_owner_status_reports_configured_and_masks_invalid_birthday():
 
 
 def test_owner_status_illegal_owner_id_is_not_configured():
-    status = scheduler.owner_status({"scheduler": {"owner_id": "张三"}})
+    status = owner_status({"scheduler": {"owner_id": "张三"}})
     assert status["configured"] is False

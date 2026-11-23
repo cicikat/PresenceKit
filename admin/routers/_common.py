@@ -11,31 +11,13 @@ resolve_requested_char_id()：请求显式 char_id 时校验可见角色；缺�
 """
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 
 from fastapi import HTTPException
 
-from core.sandbox import get_paths as _get_paths
+from core import character_context
 
 
-def active_char_id() -> str:
-    try:
-        raw = json.loads(_get_paths().active_prompt_assets().read_text(encoding="utf-8"))
-        cid = (raw.get("active_character") or "").strip()
-    except Exception:
-        raise HTTPException(status_code=503, detail="active character unavailable")
-
-    if not cid:
-        raise HTTPException(status_code=503, detail="active_character missing")
-
-    from core.asset_registry import get_registry
-    try:
-        get_registry().resolve(cid, "character")
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"unknown character id: {cid!r}")
-
-    return cid
 
 
 def requested_char_id(char_id: object | None = None) -> str | None:
@@ -72,3 +54,11 @@ def resolve_requested_char_id(
     if getattr(entry, "hidden", False):
         raise HTTPException(status_code=422, detail="character_unavailable")
     return cid
+
+
+def active_char_id() -> str:
+    """Map strict domain character-selection errors at the HTTP boundary."""
+    try:
+        return character_context.active_character_id()
+    except character_context.ActiveCharacterError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None

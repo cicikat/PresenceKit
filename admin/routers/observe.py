@@ -318,8 +318,8 @@ async def get_trigger_catalog(auth=Depends(require_scopes("memory.read"))):
 async def get_vector_overview(uid: str, source: str = "", limit: int = 100,
                               char_id: str = "", auth=Depends(require_scopes("memory.read"))):
     from core.memory import vector_store as vs
-    from admin.routers.provenance import _resolve_char_id
-    cid = _resolve_char_id(char_id)
+    from admin import observation_scope
+    cid = observation_scope.resolve_observation_character_id(char_id)
     lim = min(max(limit, 1), 500)
     return {
         "uid": uid, "char_id": cid,
@@ -355,9 +355,9 @@ async def get_recall_trace(uid: str, date: str = "", n: int = 5, char_id: str = 
     from datetime import datetime
     from core.memory.scope import MemoryScope
     from core.memory.path_resolver import resolve_path
-    from admin.routers.provenance import _resolve_char_id
+    from admin import observation_scope
 
-    resolved_char_id = _resolve_char_id(char_id)
+    resolved_char_id = observation_scope.resolve_observation_character_id(char_id)
     date_str = date or datetime.now().strftime("%Y-%m-%d")
 
     try:
@@ -387,8 +387,8 @@ async def search_vector(uid: str, q: str, k: int = 8, source: str = "",
                         char_id: str = "", auth=Depends(require_scopes("memory.read"))):
     from core.memory import vector_store as vs
     from core.memory import embedding
-    from admin.routers.provenance import _resolve_char_id
-    cid = _resolve_char_id(char_id)
+    from admin import observation_scope
+    cid = observation_scope.resolve_observation_character_id(char_id)
     if not q.strip():
         return {"uid": uid, "char_id": cid, "query": q, "results": []}
     try:

@@ -79,51 +79,12 @@ def _log_card_write(*, read_path: Path, canonical: Path, operation: str) -> None
 
 
 import logging as _logging
+from core import character_context, character_loader
 _char_logger = _logging.getLogger(__name__)
 
 
-def _active_character_id() -> str:
-    """Return the current active character id.
-
-    Priority: active_prompt_assets.json > config.yaml character.default.
-    """
-    import json as _json
-    from core.sandbox import get_paths as _get_paths
-    try:
-        active_id = _json.loads(
-            _get_paths().active_prompt_assets().read_text(encoding="utf-8")
-        ).get("active_character", "")
-        if active_id:
-            return active_id
-    except Exception:
-        pass
-    raw = get_config().get("character", {}).get("default", "")
-    if not raw:
-        return ""
-    return Path(raw).stem if "." in raw else raw
 
 
-def _reload_character(char_id: str) -> None:
-    """Hot-reload character on the running pipeline.
-
-    Fail-loud on unknown id / missing file — callers should catch and surface errors.
-    Silently skips when pipeline is not yet initialized (standalone admin mode).
-    """
-    from core import character_loader
-    from core.pipeline_registry import get as _get_pipeline
-
-    pipeline = _get_pipeline()
-    if pipeline is None:
-        return  # admin running standalone, no pipeline yet
-
-    new_char = character_loader.load(char_id)
-    pipeline.character = new_char
-    pipeline._active_character_id = char_id
-    if pipeline.lore_engine is not None:
-        pipeline.lore_engine.load()
-        if new_char.world_book:
-            pipeline.lore_engine.load_entries(new_char.world_book)
-    _char_logger.info(f"[character] hot-reloaded {char_id!r} ({new_char.name}) on pipeline")
 
 
 # ─── 路由（注意：精确路由必须在参数路由之前声明）────────────────────────────────
@@ -148,7 +109,7 @@ async def list_characters(auth=Depends(require_scopes("persona"))):
         {"id": e.id, "label": e.label, "filename": e.filename, "hidden": e.hidden}
         for e in sorted(entries, key=lambda e: e.id)
     ]
-    return {"characters": chars, "active_id": _active_character_id()}
+    return {"characters": chars, "active_id": character_context.configured_character_id()}
 
 
 @router.put("/characters/active", summary="切换当前活跃角色卡")
@@ -207,7 +168,7 @@ async def set_active_character(body: Dict[str, Any], auth=Depends(require_scopes
     from core import config_loader
     config_loader.reload_config()
     try:
-        _reload_character(char_id)
+        character_loader.reload_active_character(char_id)
     except Exception as _reload_exc:
         _char_logger.warning(f"[character] pipeline hot-reload failed (non-fatal): {_reload_exc}")
     reload_registry()
@@ -307,7 +268,7 @@ async def get_active_char_info(auth=Depends(require_scopes("persona"))):
     才知道该换哪个模型。tts_preset / sticker_pack 不放这里——那两个是后端内部
     合成/选图时用，前端不需要。字段读取失败一律静默给 null，不影响角色名display。
     """
-    active_id = _active_character_id()
+    active_id = character_context.configured_character_id()
     if not active_id:
         return {"char_id": "", "name": "(未配置)", "gender": "neutral", "live2d_model": None, "model_3d": None}
     try:
@@ -386,10 +347,10 @@ async def save_character(name: str, request: Request, _auth=Depends(require_scop
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存失败: {e}")
     # Reload the currently-active character (the saved file may or may not be active)
-    _active_id = _active_character_id()
+    _active_id = character_context.configured_character_id()
     if _active_id:
         try:
-            _reload_character(_active_id)
+            character_loader.reload_active_character(_active_id)
         except Exception as _e:
             _char_logger.warning(f"[character] save hot-reload failed (non-fatal): {_e}")
     reload_registry()
@@ -422,7 +383,7 @@ async def rename_character(name: str, body: Dict[str, Any], auth=Depends(require
     src.rename(dst)
     # 如果是当前活跃角色，同步更新 config.yaml（写新 id，不写 filename）
     new_id = Path(new_name).stem
-    current_id = _active_character_id()
+    current_id = character_context.configured_character_id()
     old_id = Path(name).stem
     if current_id == old_id:
         try:
@@ -527,10 +488,10 @@ async def set_character_model_routing(
     # 缓存边沿：character_loader.load() 每次都重读磁盘，下次路由解析即生效；
     # 若该卡恰好是当前活跃角色，顺带热重载 pipeline.character 保持一致。
     reload_registry()
-    _active_id = _active_character_id()
+    _active_id = character_context.configured_character_id()
     if _active_id:
         try:
-            _reload_character(_active_id)
+            character_loader.reload_active_character(_active_id)
         except Exception as _e:
             _char_logger.warning(f"[character] model-routing 保存后热重载失败（非致命）: {_e}")
 
@@ -660,10 +621,10 @@ async def set_character_asset_bindings(
         raise HTTPException(status_code=500, detail=f"保存角色卡失败: {e}")
 
     reload_registry()
-    _active_id = _active_character_id()
+    _active_id = character_context.configured_character_id()
     if _active_id:
         try:
-            _reload_character(_active_id)
+            character_loader.reload_active_character(_active_id)
         except Exception as _e:
             _char_logger.warning(f"[character] asset-bindings 保存后热重载失败（非致命）: {_e}")
 

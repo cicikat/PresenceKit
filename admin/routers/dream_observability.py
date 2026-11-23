@@ -2,13 +2,13 @@
 
 from admin.routers import dream_archives
 from admin.routers import dream_common
-from admin.routers import dream_presets
 
 import logging
 import json
 
 from fastapi import APIRouter, Depends, Query
 from admin.auth import require_scopes
+from core.dream.dream_settings import SCENARIO_INJECTION_MODES
 
 router = APIRouter()
 logger = logging.getLogger("admin.routers.dream")
@@ -63,7 +63,7 @@ async def dream_state_get(
     scenario_injection_mode = "strict_stage"
     if dream_mode == "scenario" and state.get("scenario_core"):
         scenario_injection_mode = state.get("scenario_injection_mode", "strict_stage")
-        if scenario_injection_mode not in dream_presets._VALID_SCENARIO_INJECTION_MODE:
+        if scenario_injection_mode not in SCENARIO_INJECTION_MODES:
             scenario_injection_mode = "strict_stage"
         _sc = state["scenario_core"]
         from core.dream.scenario_projection import scenario_projection_metadata

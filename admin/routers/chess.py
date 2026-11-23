@@ -20,7 +20,7 @@ import logging
 import re
 from typing import Optional
 
-from core.activity.continuity import reality_dialogue
+from admin.activity_dialogue import reality_dialogue
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel

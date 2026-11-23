@@ -32,7 +32,7 @@ def test_ambient_readback_rejects_other_credentials_and_expires(monkeypatch):
     monkeypatch.setattr(session_scope, "_SESSIONS", {})
     monkeypatch.setattr(session_scope, "_owner_id", lambda: "fixture-owner")
     monkeypatch.setattr(session_scope, "_validate_character", lambda value: value)
-    monkeypatch.setattr(chat, "_owner_media_scope", lambda: ("fixture-owner", "fixture-character"))
+    monkeypatch.setattr('admin.session_requests.owner_media_scope', lambda: ("fixture-owner", "fixture-character"))
     grant = session_scope.create_session(token_label="test-desktop", char_id="fixture-character")
     app = FastAPI()
     app.include_router(sensor.router)
@@ -56,9 +56,9 @@ def test_ambient_readback_rejects_other_credentials_and_expires(monkeypatch):
         assert client.get("/sensor/ambient?device=phone", headers=headers).json()["light"] == {
             "status": "unavailable",
         }
-        monkeypatch.setattr(chat, "_owner_media_scope", lambda: ("fixture-owner", "another-character"))
+        monkeypatch.setattr('admin.session_requests.owner_media_scope', lambda: ("fixture-owner", "another-character"))
         assert client.get("/sensor/ambient", headers=headers).json()["light"] == {"status": "unavailable"}
-        monkeypatch.setattr(chat, "_owner_media_scope", lambda: ("fixture-owner", "fixture-character"))
+        monkeypatch.setattr('admin.session_requests.owner_media_scope', lambda: ("fixture-owner", "fixture-character"))
 
         with monkeypatch.context() as expired:
             expired.setattr(ambient_state.time, "time", lambda: now + 121)

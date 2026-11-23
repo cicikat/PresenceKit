@@ -11,16 +11,6 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
-async def submit_garden_wake(body: dict[str, Any]) -> dict[str, Any]:
-    """Submit a Garden hint through the same durable ingress used by HTTP.
-
-    This deliberately has no scheduler, LLM, or turn-sink side effect. Keeping
-    the operation here lets the protected admin test action use the formal
-    Garden ingress semantics without reaching into ``WakeBridge`` directly.
-    """
-    from core.wake_bridge import WakeBridge
-
-    return (await WakeBridge().submit_garden_mapping(body)).to_dict()
 
 
 @router.get("/observability/wake-bridge", summary="读取 Wake Bridge 来源 checkpoint")
@@ -67,4 +57,5 @@ async def receive_garden_wake(
     _auth=Depends(require_scopes("integration.write")),
 ):
     """Durably receive a Garden state hint; scheduler tick performs any wake later."""
-    return await submit_garden_wake(body)
+    from core.wake_bridge import WakeBridge
+    return (await WakeBridge().submit_garden_mapping(body)).to_dict()

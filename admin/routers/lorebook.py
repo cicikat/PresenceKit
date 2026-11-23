@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.sandbox import get_paths
-from admin.routers.users import _resolve_char_id
+from admin import profile_scope
 from core.safe_write import safe_write_text
 
 router = APIRouter()
@@ -97,7 +97,7 @@ class LoreEntry(BaseModel):
 @router.get("/lorebook", summary="获取所有世界书条目")
 async def get_lorebook(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """读取 characters/reality/lorebook.yaml 并返回全部条目"""
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read_lorebook(char_id)
     return {"entries": data.get("entries", []), "char_id": char_id}
 
@@ -105,7 +105,7 @@ async def get_lorebook(char_id: str | None = None, auth=Depends(require_scopes("
 @router.post("/lorebook", summary="新增世界书条目")
 async def add_lore_entry(entry: LoreEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """在 lorebook.yaml 末尾追加一条新条目，并热重载世界书引擎"""
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read_lorebook(char_id)
     new_entry = {
         "id":              entry.id or _new_id(),
@@ -124,7 +124,7 @@ async def add_lore_entry(entry: LoreEntry, char_id: str | None = None, auth=Depe
 @router.put("/lorebook/{eid}", summary="修改世界书条目")
 async def update_lore_entry(eid: str, entry: LoreEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """按 id 修改 lorebook.yaml 中的条目，并热重载世界书引擎"""
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read_lorebook(char_id)
     entries = data.get("entries", [])
 
@@ -154,7 +154,7 @@ async def import_lorebook_txt(file: UploadFile = File(...), char_id: str | None 
       - 剩余行作为 content
     逐条追加到 lorebook.yaml 并热重载。
     """
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     if not (file.filename or "").lower().endswith(".txt"):
         raise HTTPException(status_code=422, detail="只接受 .txt 文件")
 
@@ -201,7 +201,7 @@ async def import_lorebook_txt(file: UploadFile = File(...), char_id: str | None 
 @router.delete("/lorebook/{eid}", summary="删除世界书条目")
 async def delete_lore_entry(eid: str, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """按 id 删除 lorebook.yaml 中的条目，并热重载世界书引擎"""
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read_lorebook(char_id)
     entries = data.get("entries", [])
     new_entries = [e for e in entries if e.get("id") != eid]
@@ -216,7 +216,7 @@ async def delete_lore_entry(eid: str, char_id: str | None = None, auth=Depends(r
 @router.get("/lorebook/export/json", summary="导出世界书为JSON")
 async def export_lorebook_json(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """导出完整lorebook.yaml为JSON格式"""
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read_lorebook(char_id)
     from fastapi.responses import JSONResponse
     import json
@@ -232,7 +232,7 @@ async def export_lorebook_json(char_id: str | None = None, auth=Depends(require_
 @router.post("/lorebook/import/json", summary="从JSON文件导入世界书条目")
 async def import_lorebook_json(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """读取上传的.json文件，合并到现有lorebook.yaml"""
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     if not (file.filename or "").lower().endswith(".json"):
         raise HTTPException(status_code=422, detail="只接受 .json 文件")
     raw = await file.read()

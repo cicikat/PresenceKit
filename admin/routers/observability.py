@@ -153,8 +153,8 @@ async def chat_turn_reasoning(
         raise HTTPException(422, "无效的回合编号")
     grant = None
     if x_presence_session:
-        from admin.routers.chat import _session_grant
-        grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+        from admin.session_requests import session_grant
+        grant = session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     try:
         from core.thinking import display_prefer_monologue
         entries = await asyncio.to_thread(
@@ -761,10 +761,10 @@ async def tool_trace_uids(
     char_id: str = "",
     _auth=Depends(require_scopes("memory.read")),
 ):
-    from admin.routers.provenance import _resolve_char_id
+    from admin import observation_scope
     from core.memory import action_trace
 
-    resolved_char_id = _resolve_char_id(char_id)
+    resolved_char_id = observation_scope.resolve_observation_character_id(char_id)
     return {"char_id": resolved_char_id, "uids": action_trace.list_uids(resolved_char_id)}
 
 
@@ -783,10 +783,10 @@ async def tool_traces(
     char_id: str = "",
     _auth=Depends(require_scopes("memory.read")),
 ):
-    from admin.routers.provenance import _resolve_char_id
+    from admin import observation_scope
     from core.memory import action_trace
 
-    resolved_char_id = _resolve_char_id(char_id)
+    resolved_char_id = observation_scope.resolve_observation_character_id(char_id)
     entries = action_trace.query(uid, resolved_char_id, category=category, limit=limit)
     all_entries = action_trace.query(uid, resolved_char_id, limit=30)
     categories: dict[str, int] = {}
@@ -813,10 +813,10 @@ async def tool_audit(
     limit: int = Query(50, ge=1, le=100),
     _auth=Depends(require_scopes("memory.read")),
 ):
-    from admin.routers.provenance import _resolve_char_id
+    from admin import observation_scope
     from core.tool_audit import query
 
-    resolved_char_id = _resolve_char_id(char_id)
+    resolved_char_id = observation_scope.resolve_observation_character_id(char_id)
     return {"uid": uid, "char_id": resolved_char_id,
             "entries": query(uid, resolved_char_id, time_range=time_range,
                              tool=tool, status=status, limit=limit)}

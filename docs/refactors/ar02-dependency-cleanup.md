@@ -932,9 +932,9 @@ Baseline and each stage are recorded below after execution. Full synthetic snaps
 | dispatcher `_TOOL_REGISTRY` | state; registry composes | settings_mcp/tools/misc, autonomy, character_permissions, action_trace, scheduler, pins, continuity, self-management/settings and recipes; same-object compatibility, no planned removal while externally used |
 | dispatcher public schema/probe/effect/loop/result/class/execute APIs, parse_tail_brace, resolve_action_target | runtime/domain/control_markers | Pipeline, pretool, settings, main, autonomy and extensions; public APIs remain |
 | register_send_callback and class forwarder | dispatcher | main initialization; retained public legacy registration API, never injected back into runtime |
-| dream `_valid_world_layer_values` | dream_presets | group_dream; retain until group adapter migrates |
+| dream `_valid_world_layer_values` | core.dream.world_loader.valid_world_layer_values (T1) | Private exports/wrappers retired in T1; solo/group consumers use domain owner |
 | dream endpoints and router | domain routers | admin_server and Python API callers; outward same-object exports remain |
-| chat run_owner_chat_turn | owner_chat.service | mobile, owner_turn and companion; outward same-object export remains |
+| chat run_owner_chat_turn | owner_chat.service | Router export retired in T1; chat/mobile/owner_turn/companion call domain service directly |
 
 The former `_is_tool_enabled`, `_INTIFACE_TOOL_NAMES`, `_phone_control_start_wrapper`
 and `_push_desktop_action` aliases were removed after migrating **all** repository

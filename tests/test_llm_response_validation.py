@@ -66,13 +66,13 @@ def test_desktop_chat_maps_an_incompatible_gateway_response_to_502(monkeypatch):
     import admin.routers.chat as chat
     from core.llm_client import UpstreamResponseFormatError
 
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda _uid: None)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda _uid: None)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner"}})
 
     async def fail_turn(*_args, **_kwargs):
         raise UpstreamResponseFormatError("bad completion")
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", fail_turn)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fail_turn)
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(chat.desktop_chat({"message": "hello"}, _auth="dummy"))
@@ -85,7 +85,7 @@ def test_desktop_chat_preserves_model_not_found_as_404(monkeypatch):
     import admin.routers.chat as chat
     from core.llm_client import UpstreamResponseFormatError
 
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda _uid: None)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda _uid: None)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner"}})
 
     async def fail_turn(*_args, **_kwargs):
@@ -93,7 +93,7 @@ def test_desktop_chat_preserves_model_not_found_as_404(monkeypatch):
             "upstream model missing", http_status=404, category="upstream_not_found",
         )
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", fail_turn)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fail_turn)
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(chat.desktop_chat({"message": "hello"}, _auth="dummy"))

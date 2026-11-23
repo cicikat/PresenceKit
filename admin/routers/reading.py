@@ -29,7 +29,7 @@ import uuid
 from pathlib import Path
 from typing import Literal, Optional
 
-from core.activity.continuity import reality_dialogue
+from admin.activity_dialogue import reality_dialogue
 import asyncio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel

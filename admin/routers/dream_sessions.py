@@ -1,7 +1,6 @@
 """Dream sessions API responsibilities; legacy names re-exported by dream.py."""
 
 from admin.routers import dream_common
-from admin.routers import dream_presets
 
 from core.dream import session_control
 
@@ -10,6 +9,7 @@ import logging
 from fastapi import APIRouter, Body, Depends, HTTPException
 from admin.auth import require_scopes
 from admin.routers._common import resolve_requested_char_id
+from core.dream.dream_state import VALID_DREAM_MODES
 
 router = APIRouter()
 logger = logging.getLogger("admin.routers.dream")
@@ -27,10 +27,10 @@ async def dream_enter(body: dict = {}, _auth=Depends(require_scopes("activity"))
     dream_mode = (body.get("dream_mode") or "sandbox").strip()
     script_id = (body.get("script_id") or "").strip() or None
 
-    if dream_mode not in dream_presets._VALID_DREAM_MODE:
+    if dream_mode not in VALID_DREAM_MODES:
         raise HTTPException(
             status_code=422,
-            detail=f"dream_mode={dream_mode!r} 非法，有效值：{sorted(dream_presets._VALID_DREAM_MODE)}",
+            detail=f"dream_mode={dream_mode!r} 非法，有效值：{sorted(VALID_DREAM_MODES)}",
         )
 
     from core.pipeline_registry import get as _get_pipeline

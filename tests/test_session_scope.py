@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.owner_chat.service import run_owner_chat_turn
 import asyncio
 from types import SimpleNamespace
 
@@ -221,7 +222,7 @@ async def test_owner_chat_passes_frozen_character_to_non_stream_llm(monkeypatch)
         )
 
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", sink)
-    result = await chat.run_owner_chat_turn(
+    result = await run_owner_chat_turn(
         "hello", "mobile", live_origin_channel="mobile", frozen_scope=scope,
         request_id="request-b",
     )
@@ -345,6 +346,6 @@ async def test_context_failure_stops_sibling_probe_before_retry(monkeypatch):
     monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', probe)
     monkeypatch.setattr("core.pipeline_registry.get", lambda: Pipeline())
     with pytest.raises(RuntimeError, match="context unavailable"):
-        await chat.run_owner_chat_turn("hello", "mobile",
+        await run_owner_chat_turn("hello", "mobile",
             frozen_scope=MemoryScope.reality_scope("owner", "character_a"))
     assert stopped.is_set()

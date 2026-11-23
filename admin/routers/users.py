@@ -2,13 +2,13 @@
 用户管理路由
 """
 
-import json as _json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
+from admin import profile_scope
 
 router = APIRouter()
 
@@ -49,35 +49,6 @@ def _get_known_users() -> list[str]:
     return sorted(valid_ids)
 
 
-def _resolve_char_id(char_id: str | None) -> str:
-    """Resolve and validate a char_id for profile operations.
-
-    If char_id is None, reads active_character from active_prompt_assets.json.
-    Raises HTTP 503 if active_character is missing or empty.
-    Raises HTTP 422 if the resolved or supplied char_id is not a known character.
-    Never falls back to a hardcoded character.
-    """
-    from core.sandbox import get_paths
-    from core.asset_registry import get_registry
-
-    if char_id is None:
-        try:
-            data = _json.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
-            char_id = (data.get("active_character") or "").strip()
-        except Exception as e:
-            raise HTTPException(status_code=503, detail=f"读取 active_prompt_assets.json 失败: {e}")
-        if not char_id:
-            raise HTTPException(
-                status_code=503,
-                detail="active_prompt_assets.json 中 active_character 为空，请先设置活跃角色",
-            )
-
-    try:
-        get_registry().resolve(char_id, "character")
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    return char_id
 
 
 # ── 接口 ─────────────────────────────────────────────────────────────────────
@@ -100,7 +71,7 @@ async def get_user_profile(
     char_id 为空时使用当前 active_character；非法 char_id 返回错误，不默认 yexuan。
     """
     from core.memory import user_profile
-    resolved = _resolve_char_id(char_id)
+    resolved = profile_scope.resolve_profile_character_id(char_id)
     profile = user_profile.load(user_id, char_id=resolved)
     return {"user_id": user_id, "char_id": resolved, "profile": profile}
 
@@ -117,7 +88,7 @@ async def update_user_profile(
     char_id 为空时使用当前 active_character；非法 char_id 返回错误，不默认 yexuan。
     """
     from core.memory import user_profile
-    resolved = _resolve_char_id(char_id)
+    resolved = profile_scope.resolve_profile_character_id(char_id)
     profile = user_profile.load(user_id, char_id=resolved)
     # 允许直接覆盖所有字段（包括未来新增字段）
     for k, v in body.items():
@@ -146,7 +117,7 @@ async def update_user_profile(
 async def get_user_pronoun(user_id: str, char_id: str | None = None, auth=Depends(require_scopes("admin"))):
     """返回该用户的第三人称称谓（她/他/祂/TA/它）。"""
     from core.memory.user_facts import get_user_pronoun as _get_pronoun
-    return {"user_id": user_id, "pronoun": _get_pronoun(user_id, char_id=_resolve_char_id(char_id))}
+    return {"user_id": user_id, "pronoun": _get_pronoun(user_id, char_id=profile_scope.resolve_profile_character_id(char_id))}
 
 
 @router.get("/{user_id}/facts", summary="获取角色用户信息（只读）")
@@ -157,7 +128,7 @@ async def get_user_facts(user_id: str, char_id: str | None = None, auth=Depends(
     写入仍走 update_user_facts（pronoun PATCH 或固化链分流），此端点不提供写。
     """
     from core.memory.user_facts import load_user_facts
-    return {"user_id": user_id, "facts": load_user_facts(user_id, char_id=_resolve_char_id(char_id))}
+    return {"user_id": user_id, "facts": load_user_facts(user_id, char_id=profile_scope.resolve_profile_character_id(char_id))}
 
 
 class _PronounBody(BaseModel):
@@ -175,7 +146,7 @@ async def set_user_pronoun(
     from core.memory.user_facts import update_user_facts, _VALID_PRONOUNS
     if body.pronoun not in _VALID_PRONOUNS:
         raise HTTPException(status_code=422, detail=f"非法称谓值 {body.pronoun!r}，允许：{sorted(_VALID_PRONOUNS)}")
-    updated, rejected = update_user_facts(user_id, {"pronoun": body.pronoun}, char_id=_resolve_char_id(char_id))
+    updated, rejected = update_user_facts(user_id, {"pronoun": body.pronoun}, char_id=profile_scope.resolve_profile_character_id(char_id))
     if rejected:
         raise HTTPException(status_code=422, detail=f"字段被拒绝: {rejected}")
     return {"user_id": user_id, "pronoun": updated.get("pronoun", body.pronoun)}
@@ -193,7 +164,7 @@ async def delete_user_memory(
     """
     from core.memory import short_term, user_profile
 
-    resolved = _resolve_char_id(char_id)
+    resolved = profile_scope.resolve_profile_character_id(char_id)
     short_term.clear(user_id, char_id=resolved)
     user_profile.clear(user_id, char_id=resolved)
 

@@ -33,6 +33,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.owner_chat import service as owner_chat_service
 from admin.routers.chat import router as chat_router
 from admin.routers.dream import router as dream_router
 from admin.routers.system import router as system_router
@@ -60,7 +61,7 @@ def _patch_secret(monkeypatch):
 def _patch_internals(monkeypatch):
     """Stub out all side-effectful internals so tests are unit-scoped."""
     import admin.routers.chat as chat_mod
-    monkeypatch.setattr(chat_mod, "run_owner_chat_turn", AsyncMock(return_value={"reply": "ok"}))
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', AsyncMock(return_value={"reply": "ok"}))
 
     # channel registry
     try:
@@ -122,15 +123,15 @@ class TestDesktopWake:
 
     def test_no_token_does_not_call_llm(self, no_token):
         import admin.routers.chat as chat_mod
-        chat_mod.run_owner_chat_turn.reset_mock()
+        owner_chat_service.run_owner_chat_turn.reset_mock()
         no_token.post("/desktop/wake", json={})
-        chat_mod.run_owner_chat_turn.assert_not_called()
+        owner_chat_service.run_owner_chat_turn.assert_not_called()
 
     def test_wrong_token_does_not_call_llm(self, wrong_token):
         import admin.routers.chat as chat_mod
-        chat_mod.run_owner_chat_turn.reset_mock()
+        owner_chat_service.run_owner_chat_turn.reset_mock()
         wrong_token.post("/desktop/wake", json={})
-        chat_mod.run_owner_chat_turn.assert_not_called()
+        owner_chat_service.run_owner_chat_turn.assert_not_called()
 
     def test_token_not_in_error_response(self, wrong_token):
         resp = wrong_token.post("/desktop/wake", json={})

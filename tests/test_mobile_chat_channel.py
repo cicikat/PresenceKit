@@ -1,5 +1,6 @@
 """Contract tests for the separate mobile reality-chat endpoint."""
 
+from core.owner_chat.service import run_owner_chat_turn
 import inspect
 from types import SimpleNamespace
 
@@ -16,8 +17,8 @@ async def test_mobile_chat_uses_mobile_provenance_and_durable_mirror(monkeypatch
         calls.append((message, provenance_channel, kwargs))
         return {"reply": "收到", "turn_id": "turn-mobile", "msg_id": "turn-mobile"}
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", fake_owner_turn)
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda uid: None)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fake_owner_turn)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda uid: None)
     monkeypatch.setattr(
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "owner"}},
@@ -56,8 +57,8 @@ async def test_desktop_chat_keeps_desktop_provenance(monkeypatch):
         calls.append((message, provenance_channel, kwargs))
         return {"reply": "收到"}
 
-    monkeypatch.setattr(chat, "run_owner_chat_turn", fake_owner_turn)
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda uid: None)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fake_owner_turn)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda uid: None)
     monkeypatch.setattr(
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "owner"}},
@@ -157,7 +158,7 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
     )
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_sink)
     monkeypatch.setattr("core.coplay.session.is_active", lambda *_args, **_kwargs: False)
-    result = await chat.run_owner_chat_turn(
+    result = await run_owner_chat_turn(
         "你好",
         "mobile",
         live_origin_channel="mobile",
@@ -292,7 +293,7 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "owner"}},
     )
-    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda _uid: None)
+    monkeypatch.setattr('admin.reality_admission.require_reality_turn', lambda _uid: None)
     monkeypatch.setattr("core.scheduler.loop.mark_user_active", lambda: None)
     monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda _uid: None)
     monkeypatch.setattr("core.scheduler.proactive_ledger.record_user_message", lambda _uid: None)

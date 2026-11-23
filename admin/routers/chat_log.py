@@ -191,8 +191,8 @@ async def list_dates(
     auth=Depends(require_scopes("memory.read")),
 ):
     if x_presence_session:
-        from admin.routers.chat import _session_grant
-        grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+        from admin.session_requests import session_grant
+        grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
         if char_id is not None and char_id != grant.char_id:
             raise HTTPException(status_code=403, detail="character_not_authorized")
         char_id = grant.char_id
@@ -222,8 +222,8 @@ async def calendar_stats(
     """自然日数据；周从周一开始。显式起止日期最多 366 天，含首尾。"""
     from core.conversation_stats import query
     if x_presence_session:
-        from admin.routers.chat import _session_grant
-        grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+        from admin.session_requests import session_grant
+        grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
         if char_id is not None and char_id != grant.char_id:
             raise HTTPException(status_code=403, detail="character_not_authorized")
         char_id = grant.char_id
@@ -302,8 +302,8 @@ async def get_day(
     if not _DATE_RE.match(date):
         raise HTTPException(status_code=422, detail="date format must be YYYY-MM-DD")
     if x_presence_session:
-        from admin.routers.chat import _session_grant
-        grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+        from admin.session_requests import session_grant
+        grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
         if char_id is not None and char_id != grant.char_id:
             raise HTTPException(status_code=403, detail="character_not_authorized")
         char_id = grant.char_id

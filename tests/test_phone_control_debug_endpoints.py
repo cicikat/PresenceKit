@@ -32,7 +32,7 @@ def _patch_default_exposure(monkeypatch):
 async def test_status_reports_enabled_when_category_present(monkeypatch):
     _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
+        "core.character_context.configured_character_id", lambda: TEST_CHAR_ID,
     )
     monkeypatch.setattr(
         "core.character_loader.load",
@@ -57,7 +57,7 @@ async def test_status_reports_enabled_when_category_present(monkeypatch):
 async def test_status_reports_disabled_when_category_missing(monkeypatch):
     _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
+        "core.character_context.configured_character_id", lambda: TEST_CHAR_ID,
     )
     monkeypatch.setattr(
         "core.character_loader.load",
@@ -82,7 +82,7 @@ async def test_status_reports_disabled_when_category_missing(monkeypatch):
 async def test_status_handles_character_load_failure(monkeypatch):
     _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
+        "core.character_context.configured_character_id", lambda: TEST_CHAR_ID,
     )
 
     def _raise(char_id):
@@ -103,7 +103,7 @@ async def test_status_handles_character_load_failure(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_status_uses_path_c_global_exposure_when_character_has_no_legacy_field(monkeypatch):
-    monkeypatch.setattr("admin.routers.character._active_character_id", lambda: "character")
+    monkeypatch.setattr("core.character_context.configured_character_id", lambda: "character")
     monkeypatch.setattr("core.character_loader.load", lambda _char_id: _FakeChar({}))
     monkeypatch.setattr(
         "core.config_loader.get_config",
@@ -137,7 +137,7 @@ async def test_debug_start_calls_real_wrapper_in_danger_mode(monkeypatch):
     import core.tool_dispatcher as td
 
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
+        "core.character_context.configured_character_id", lambda: TEST_CHAR_ID,
     )
 
     captured = {}
@@ -162,7 +162,7 @@ async def test_debug_start_falls_back_to_owner_id_when_missing(monkeypatch):
     import core.tool_dispatcher as td
 
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
+        "core.character_context.configured_character_id", lambda: TEST_CHAR_ID,
     )
     monkeypatch.setattr(
         "core.config_loader.get_config",

@@ -47,6 +47,7 @@ from core.stage.dream_state import (
 from core.stage.dream_store import archive_dream_transcript, clear_dream_transcript, load_dream_transcript
 from core.stage.models import Stage
 from core.stage.store import load_stage
+from core.dream.world_loader import valid_world_layer_values
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -92,9 +93,6 @@ def _require_reality_stage(group_id: str) -> Stage:
     return stage
 
 
-def _valid_world_layer_values() -> frozenset[str]:
-    from admin.routers.dream import _valid_world_layer_values as _solo_valid_world_layer_values
-    return _solo_valid_world_layer_values()
 
 
 # ── enter ────────────────────────────────────────────────────────────────────
@@ -364,7 +362,7 @@ async def group_dream_settings_patch(group_id: str, body: dict, _auth=Depends(re
         errors.append(f"boundary_level={updates['boundary_level']!r} 非法，有效值：{sorted(_VALID_BOUNDARY_LEVEL)}")
 
     if "world_layer" in updates:
-        valid_worlds = _valid_world_layer_values()
+        valid_worlds = valid_world_layer_values()
         if updates["world_layer"] not in valid_worlds:
             errors.append(f"world_layer={updates['world_layer']!r} 非法，有效值：{sorted(valid_worlds)}")
 

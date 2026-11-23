@@ -150,7 +150,7 @@ async def test_companion_service_freezes_context_and_disables_tools_and_fanout(
     monkeypatch.setattr(service, "_guard_allows", lambda uid: True)
     monkeypatch.setattr(service, "_is_proactive_disabled", lambda char_id: False)
     monkeypatch.setattr("core.pipeline_registry.get", lambda: FakePipeline())
-    monkeypatch.setattr("admin.routers.chat.run_owner_chat_turn", fake_owner_turn)
+    monkeypatch.setattr("core.owner_chat.service.run_owner_chat_turn", fake_owner_turn)
     monkeypatch.setattr("core.perceive_event.receive_perceive_event", fake_perceive)
     monkeypatch.setattr("core.perceive_event.record_perceive_result", lambda event, result: None)
     monkeypatch.setattr(

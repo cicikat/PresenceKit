@@ -21,10 +21,20 @@ logger = logging.getLogger(__name__)
 _MAX_BUFFER = 500  # cap on in-memory lines while loading
 
 
-def _path(char_id: str, uid: str, activity_type: str, session_id: str) -> Path:
+def path_for_session(char_id: str, uid: str, activity_type: str, session_id: str) -> Path:
+    """Resolve the canonical transcript path for Core storage consumers."""
     return get_paths().activity_session_dir(
         char_id=char_id, uid=uid, activity_type=activity_type, session_id=session_id,
     ) / "transcript.jsonl"
+
+
+def count_lines(char_id: str, uid: str, activity_type: str, session_id: str) -> int:
+    """Count physical lines, including blank/malformed JSON lines; absent is zero."""
+    path = path_for_session(char_id, uid, activity_type, session_id)
+    if not path.exists():
+        return 0
+    with path.open(encoding="utf-8") as stream:
+        return sum(1 for _ in stream)
 
 
 def now_iso() -> str:
@@ -39,7 +49,7 @@ def append_entry(
     entry: dict,
 ) -> None:
     """Append one JSON entry to transcript.jsonl (creates parent dirs if needed)."""
-    p = _path(char_id, uid, activity_type, session_id)
+    p = path_for_session(char_id, uid, activity_type, session_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
         line = json.dumps(entry, ensure_ascii=False)
@@ -59,7 +69,7 @@ def load_recent(
     limit: int = 6,
 ) -> list[dict]:
     """Return the last *limit* entries from transcript.jsonl (oldest-first)."""
-    p = _path(char_id, uid, activity_type, session_id)
+    p = path_for_session(char_id, uid, activity_type, session_id)
     if not p.exists():
         return []
     if activity_type in ("reading", "gomoku", "chess", "minecraft") and (p.parent / "dialogue_receipts").exists():

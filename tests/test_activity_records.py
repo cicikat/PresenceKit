@@ -44,7 +44,7 @@ def test_withdrawal_blocks_local_recall_and_invalidates_projection(sandbox, monk
     value = store.create_session("owner", "companion", "chess")
     transcript.append_entry("companion", "owner", "chess", value.session_id,
                             {"type": "user_chat", "text": "private phrase"})
-    root = transcript._path("companion", "owner", "chess", value.session_id).parent
+    root = transcript.path_for_session("companion", "owner", "chess", value.session_id).parent
     receipts = root / "dialogue_receipts"
     receipts.mkdir()
     (receipts / "request.json").write_text(json.dumps({"status": "completed", "turn_id": "turn",

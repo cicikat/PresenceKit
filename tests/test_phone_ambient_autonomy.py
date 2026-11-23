@@ -33,7 +33,7 @@ def phone(sandbox, monkeypatch):
     monkeypatch.setattr(session_scope,"_SESSIONS",{})
     monkeypatch.setattr(session_scope,"_owner_id",lambda:"fixture-owner")
     monkeypatch.setattr(session_scope,"_validate_character",lambda value:value)
-    monkeypatch.setattr(chat,"_owner_media_scope",lambda:("fixture-owner","fixture-character"))
+    monkeypatch.setattr('admin.session_requests.owner_media_scope',lambda:("fixture-owner","fixture-character"))
     monkeypatch.setattr(autonomy,"_scope",lambda:("fixture-owner","fixture-character"))
     grant=session_scope.create_session(token_label="synthetic-mobile",char_id="fixture-character")
     headers={"Authorization":"Bearer synthetic-mobile","X-Presence-Session":grant.session_id}

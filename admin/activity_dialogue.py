@@ -1,0 +1,123 @@
+"""HTTP activity dialogue orchestration: admission, signatures and receipts."""
+from __future__ import annotations
+
+import asyncio
+import functools
+import hashlib
+import json
+import uuid
+import inspect
+import typing
+
+from fastapi import HTTPException, BackgroundTasks
+from core.activity import records
+from core.activity.continuity import refresh_projection
+from admin.routers import _common
+from core.config_loader import get_config
+from core.conversation_gate import conversation_lock
+from core.event_context import EventContext
+from core.memory.scope import MemoryScope
+from core.safe_write import safe_write_json
+from core.sandbox import get_paths
+from core.turn_sink import record_assistant_turn, TurnSource
+from core.write_envelope import stamp_user_chat
+
+
+def reality_dialogue(kind, *, assistant_only=False):
+    def decorate(function):
+        @functools.wraps(function)
+        async def wrapped(body, auth=None, background_tasks=None):
+            uid = str(get_config().get("scheduler", {}).get("owner_id") or "")
+            char_id = _common.active_char_id()
+            if not uid:
+                raise HTTPException(503, "owner not configured")
+            requested = str(getattr(body, "uid", "") or "").strip()
+            if requested and requested != uid:
+                raise HTTPException(403, "activity owner mismatch")
+            if hasattr(body, "uid"):
+                body = body.model_copy(update={"uid": uid})
+            if kind == "minecraft":
+                from core.activity.minecraft import get_service
+                binding = get_service().binding
+                if binding is None or binding.uid != uid or binding.char_id != char_id:
+                    raise HTTPException(409, "Minecraft session scope unavailable")
+                sid = binding.session_id
+            else:
+                sid = body.session_id
+            try:
+                value = records.session(uid, char_id, kind, sid)
+                from core.activity.store import is_session_stale
+                if is_session_stale(value):
+                    raise HTTPException(409, "activity session expired")
+            except LookupError:
+                raise HTTPException(404, "activity source unavailable")
+            request_id = str(getattr(body, "request_id", "") or uuid.uuid4().hex)
+            if len(request_id) > 128:
+                raise HTTPException(422, "request identity too long")
+            text = "" if assistant_only else str(getattr(body, "message", getattr(body, "text", "")))
+            key = hashlib.sha256(request_id.encode()).hexdigest()
+            directory = get_paths().activity_session_dir(char_id=char_id, uid=uid,
+                                                         activity_type=kind, session_id=sid)
+            receipt_path = directory / "dialogue_receipts" / f"{key}.json"
+            async with conversation_lock(uid):
+                if _common.active_char_id() != char_id:
+                    raise HTTPException(409, "character changed; retry in current scope")
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8")) if receipt_path.exists() else None
+                if receipt and receipt["input_hash"] != hashlib.sha256(text.encode()).hexdigest():
+                    raise HTTPException(409, "request identity conflict")
+                if receipt and receipt.get("status") == "completed":
+                    from core.memory.event_query import get_event
+                    for role in ("assistant",) if assistant_only else ("user", "assistant"):
+                        event = get_event(MemoryScope.reality_scope(uid, char_id), f"{receipt['response']['turn_id']}:{role}")
+                        if event and event.get("tombstoned"):
+                            raise HTTPException(410, "activity dialogue withdrawn")
+                    return receipt["response"]
+                if receipt is None:
+                    from core.activity import transcript
+                    entry_start = transcript.count_lines(char_id, uid, kind, sid)
+                    response = await function(body, auth=auth)
+                    if assistant_only and not response.get("comment"):
+                        return response
+                    receipt = {"status": "pending", "response": response, "request_id": request_id,
+                               "entry_start": entry_start,
+                               "entry_end": transcript.count_lines(char_id, uid, kind, sid),
+                               "input_hash": hashlib.sha256(text.encode()).hexdigest(),
+                               "turn_id": uuid.uuid4().hex}
+                    if not safe_write_json(receipt_path, receipt):
+                        raise HTTPException(503, "activity receipt persistence failed")
+                context = EventContext.from_ingress(
+                    uid=uid, char_id=char_id, ingress_event_id=f"activity:{kind}:{sid}:{key}",
+                    dedupe_key=key, source="user_chat", channel=f"activity:{kind}",
+                    kind="trigger" if assistant_only else "user_message", actor="assistant" if assistant_only else "user").with_turn(receipt["turn_id"])
+                result = await record_assistant_turn(
+                    assistant_text=receipt["response"]["comment" if assistant_only else "reply"],
+                    user_text=None if assistant_only else text,
+                    trigger_name=f"activity_comment:{kind}" if assistant_only else None,
+                    uid=uid, char_id=char_id, source=TurnSource.TRIGGER if assistant_only else TurnSource.USER_CHAT,
+                    envelope=stamp_user_chat(), frozen_scope=MemoryScope.reality_scope(uid, char_id),
+                    bypass_gate=True, fanout=[], durable_mobile_mirror=False,
+                    event_channel=f"activity:{kind}", provenance_source=f"activity:{kind}",
+                    event_context=context, request_id=request_id,
+                    background_tasks=background_tasks,
+                    media_refs=[{"kind": "activity_record", "source_ref": f"activity:{kind}:{sid}:dialogue"}])
+                if not result.written_to_memory:
+                    raise HTTPException(503, "activity history persistence pending")
+                response = receipt["response"] | {"turn_id": result.turn_id, "msg_id": result.msg_id,
+                                                    "request_id": request_id,
+                                                    "source_ref": f"activity:{kind}:{sid}:dialogue"}
+                receipt.update(status="completed", response=response)
+                if not safe_write_json(receipt_path, receipt):
+                    raise HTTPException(503, "activity receipt persistence failed")
+                if background_tasks is not None:
+                    background_tasks.add_task(refresh_projection, uid, char_id, kind, sid)
+                else:
+                    asyncio.create_task(refresh_projection(uid, char_id, kind, sid))
+                return response
+        hints = typing.get_type_hints(function)
+        original = inspect.signature(function)
+        wrapped.__signature__ = original.replace(parameters=[
+            parameter.replace(annotation=hints.get(name, parameter.annotation))
+            for name, parameter in original.parameters.items()] + [
+                inspect.Parameter("background_tasks", inspect.Parameter.KEYWORD_ONLY, annotation=BackgroundTasks)])
+        return wrapped
+    return decorate

@@ -86,12 +86,12 @@ async def phone_control_status(auth=Depends(require_scopes("chat"))):
     - vision_configured：screen 路由主连接（core/phone_control/vision_client.phone_vision_chain()）
       的 base_url + model 是否都非空（不检查 api_key 是否真的有效，只检查有没有填）。
     """
-    from admin.routers.character import _active_character_id
+    from core import character_context
     from core.phone_control.vision_client import phone_vision_chain
 
     path_a_enabled = False
     path_c_enabled = False
-    active_id = _active_character_id()
+    active_id = character_context.configured_character_id()
     if active_id:
         try:
             from core.tool_exposure import resolve as resolve_exposure
@@ -145,8 +145,8 @@ async def phone_control_debug_start(body: dict = Body(...), auth=Depends(require
         from core.config_loader import get_config
         user_id = str(get_config().get("scheduler", {}).get("owner_id", ""))
 
-    from admin.routers.character import _active_character_id
-    char_id = str(body.get("char_id") or "").strip() or _active_character_id()
+    from core import character_context
+    char_id = str(body.get("char_id") or "").strip() or character_context.configured_character_id()
 
     message = await _phone_control_start_wrapper(task, user_id=user_id, char_id=char_id)
     return {"ok": True, "message": message}

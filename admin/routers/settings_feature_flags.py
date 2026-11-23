@@ -100,7 +100,7 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             )
             item["description"] = "默认关闭；逐消息热生效，关闭后不处理对应输入；开启不代表多用户状态已完全隔离。"
         elif name == "wechat":
-            from admin.routers.wechat import operational_state
+            from core.wechat_service import operational_state
             item["effective_state"] = operational_state(enabled=enabled)["effective_state"]
             item["description"] = "默认关闭；需绑定 owner 和连接凭据，关闭即停止微信收发；详见运行配置"
         elif name == "device_file_agent":

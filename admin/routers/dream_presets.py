@@ -11,6 +11,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from admin.auth import require_scopes
 from admin.routers._common import resolve_requested_char_id
+from core.dream.world_loader import valid_world_layer_values
+from core.dream.dream_settings import SCENARIO_INJECTION_MODES
+from core.asset_registry import reload_registry
 
 router = APIRouter()
 logger = logging.getLogger("admin.routers.dream")
@@ -21,23 +24,20 @@ _VALID_MEMORY_ACCESS = frozenset({"card_only", "relationship_summary", "full_sna
 _VALID_BOUNDARY_LEVEL = frozenset({"vague", "body_perceptible", "numbers_visible", "threshold_break"})
 
 
-_VALID_WORLD_LAYER_BUILTIN = frozenset({"reality_derived", "abo", "vampire", "cat", "flower_bud", "custom"})
 
 
 _VALID_LUCID_MODE = frozenset({"lucid_shared", "non_lucid"})
 
 
-_VALID_DREAM_MODE = frozenset({"sandbox", "scenario", "mirror", "rpg"})
 
 
-_VALID_SCENARIO_INJECTION_MODE = frozenset({"strict_stage", "full_script"})
 
 
 _ENUM_VALIDATORS: dict[str, frozenset] = {
     "memory_access": _VALID_MEMORY_ACCESS,
     "boundary_level": _VALID_BOUNDARY_LEVEL,
     "lucid_mode": _VALID_LUCID_MODE,
-    "scenario_injection_mode": _VALID_SCENARIO_INJECTION_MODE,
+    "scenario_injection_mode": SCENARIO_INJECTION_MODES,
 }
 
 
@@ -48,19 +48,6 @@ _PATCH_ALLOWED = frozenset({
 })
 
 
-def _valid_world_layer_values() -> frozenset[str]:
-    """内建六个世界 ∪ 磁盘上实际发现的世界（含面板新建的自定义世界）∪ _default。
-
-    _default 是保留兜底世界（Brief 96 §1）：删除当前世界时设置回退到它。
-
-    直接扫描 sandbox.get_paths().dream_worlds_dir()（与本文件世界管理端点用的是同一个
-    accessor），不经 core.dream.world_loader.discover_worlds() —— 后者用的是
-    模块级裸 Path("characters/dream_worlds")，不随 sandbox 测试夹具重定向，
-    生产模式下两者指向同一目录、行为等价，但测试夹具下会读到不一致的目录。
-    """
-    from core.dream.world_loader import discover_worlds
-    discovered = frozenset(discover_worlds())
-    return _VALID_WORLD_LAYER_BUILTIN | discovered | {"_default"}
 
 
 @router.get("/dream/presets", summary="列出可用破限预设名（只读，供群聊梦境 per-char 选择器，Brief 100 §3）")
@@ -107,10 +94,6 @@ def _preset_write_path(preset: str) -> Path:
     return sandbox.get_paths().dream_preset_write_path(preset)
 
 
-def _reload_dream_preset_registry() -> None:
-    """Make authoring changes visible to the next dream without a restart."""
-    from core.asset_registry import reload_registry
-    reload_registry()
 
 
 @router.get("/dream/presets/{preset}", summary="读取独立梦境破限预设")
@@ -139,7 +122,7 @@ async def create_standalone_dream_preset(
         raise HTTPException(status_code=409, detail=f"预设 {preset} 已存在")
     world_authoring.write_preset(path, content)
     dream_common._log_dream_write(kind="dream_preset", read_path=path, canonical=path, source="user")
-    _reload_dream_preset_registry()
+    reload_registry()
     return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
 
 
@@ -158,7 +141,7 @@ async def put_standalone_dream_preset(
     path = _preset_write_path(preset)
     dream_common._log_dream_write(kind="dream_preset", read_path=read_path, canonical=path)
     world_authoring.write_preset(path, content)
-    _reload_dream_preset_registry()
+    reload_registry()
     return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
 
 
@@ -182,7 +165,7 @@ async def delete_standalone_dream_preset(
     if path != canonical:
         raise HTTPException(status_code=409, detail="legacy fallback Dream 预设为只读，不能删除")
     world_authoring.delete_preset(path)
-    _reload_dream_preset_registry()
+    reload_registry()
     legacy_reappeared = (sandbox.get_paths().legacy_dream_presets_dir() / path.name).is_file()
     return {"ok": True, "deleted": preset, "legacy_fallback_reappeared": legacy_reappeared}
 
@@ -228,7 +211,7 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
             if val not in valid_set:
                 errors.append(f"{key}={val!r} 非法，有效值：{sorted(valid_set)}")
     if "world_layer" in updates:
-        valid_worlds = _valid_world_layer_values()
+        valid_worlds = valid_world_layer_values()
         if updates["world_layer"] not in valid_worlds:
             errors.append(f"world_layer={updates['world_layer']!r} 非法，有效值：{sorted(valid_worlds)}")
     if "enable_dream_lorebook" in updates and not isinstance(updates["enable_dream_lorebook"], bool):

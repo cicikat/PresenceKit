@@ -52,7 +52,7 @@ def test_admin_read_and_edit_scopes(sandbox,monkeypatch):
     from admin.routers import quote_notebook as routes
     seed()
     quote_id=store.save('u','c','t:user')['quote_id']
-    monkeypatch.setattr(routes,'scope',lambda char_id:('u',char_id))
+    monkeypatch.setattr('admin.food_requests.food_owner_scope',lambda char_id:('u',char_id))
     monkeypatch.setattr(auth,'resolve_token',lambda token:auth.TokenInfo('fixture',frozenset({token})))
     app=FastAPI();app.include_router(routes.router);client=TestClient(app)
     assert client.get('/observability/quotes?char_id=c',headers={'Authorization':'Bearer state.read'}).status_code==403

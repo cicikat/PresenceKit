@@ -325,7 +325,7 @@ async def test_audio_upload_reaches_chat_without_tone_on_failure(configured, mon
     from admin.routers import chat
     async def turn(message, channel, **kwargs):
         return {"message": message, "hint": audio.prompt_hint()}
-    monkeypatch.setattr(chat, "run_owner_chat_turn", turn)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', turn)
     monkeypatch.setattr(audio, "_request", AsyncMock(side_effect=TimeoutError()))
     response = await chat.upload_ingest(
         file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.sandbox import get_paths
-from admin.routers.users import _resolve_char_id
+from admin import profile_scope
 from core.safe_write import safe_write_text
 
 router = APIRouter()
@@ -75,13 +75,13 @@ class JbEntry(BaseModel):
 
 @router.get("/jailbreak-entries", summary="获取所有破限条目")
 async def get_entries(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     return {**_read(char_id), "char_id": char_id}
 
 
 @router.get("/jailbreak-entries/export/json", summary="导出破限条目JSON")
 async def export_entries(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     p = get_paths().jailbreak_entries(char_id=char_id)
     content = p.read_text(encoding="utf-8") if p.exists() else '{"entries":[]}'
     return Response(content=content, media_type="application/json",
@@ -90,7 +90,7 @@ async def export_entries(char_id: str | None = None, auth=Depends(require_scopes
 
 @router.post("/jailbreak-entries/import/json", summary="导入破限条目JSON")
 async def import_entries_json(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona"))):
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     raw = await file.read()
     try:
         incoming = json.loads(raw.decode("utf-8"))
@@ -110,7 +110,7 @@ async def import_entries_json(file: UploadFile = File(...), char_id: str | None 
 
 @router.post("/jailbreak-entries/import/txt", summary="导入破限预设txt")
 async def import_entries_txt(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona"))):
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     if not (file.filename or "").endswith(".txt"):
         raise HTTPException(status_code=422, detail="只接受.txt文件")
     raw = await file.read()
@@ -132,7 +132,7 @@ async def import_entries_txt(file: UploadFile = File(...), char_id: str | None =
 
 @router.post("/jailbreak-entries", summary="新增破限条目")
 async def add_entry(entry: JbEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read(char_id)
     data["entries"].append({
         "id":      _new_id(),
@@ -147,7 +147,7 @@ async def add_entry(entry: JbEntry, char_id: str | None = None, auth=Depends(req
 
 @router.put("/jailbreak-entries/{eid}", summary="修改破限条目")
 async def update_entry(eid: str, entry: JbEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read(char_id)
     for e in data["entries"]:
         if e["id"] == eid:
@@ -160,7 +160,7 @@ async def update_entry(eid: str, entry: JbEntry, char_id: str | None = None, aut
 
 @router.delete("/jailbreak-entries/{eid}", summary="删除破限条目")
 async def delete_entry(eid: str, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
-    char_id = _resolve_char_id(char_id)
+    char_id = profile_scope.resolve_profile_character_id(char_id)
     data = _read(char_id)
     data["entries"] = [e for e in data["entries"] if e["id"] != eid]
     _write(data, char_id)

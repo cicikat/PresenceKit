@@ -186,7 +186,7 @@ def test_upload_ingest_omits_stored_paths(sandbox, monkeypatch):
         return {"reply": "ok", "turn_id": "t1", "msg_id": "t1"}
 
     monkeypatch.setattr("core.media_processor.ingest_image_bytes", _fake_ingest)
-    monkeypatch.setattr(chat_router, "run_owner_chat_turn", _fake_turn)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', _fake_turn)
     client = _client(monkeypatch)
     _scoped(sandbox, "emt_chat", ["chat"])
     response = client.post(
@@ -211,7 +211,7 @@ def test_upload_ingest_returns_typed_media_error(sandbox, monkeypatch):
         raise MediaIngestError("dependency_unavailable", "缺少运行依赖 pillow，无法处理图片。请按完整依赖清单重新安装。")
 
     monkeypatch.setattr("core.media_processor.ingest_image_bytes", _fail_ingest)
-    monkeypatch.setattr(chat_router, "run_owner_chat_turn", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', lambda *_args, **_kwargs: None)
     client = _client(monkeypatch)
     _scoped(sandbox, "emt_chat", ["chat"])
     response = client.post(
@@ -234,7 +234,7 @@ def test_upload_ingest_word_parse_failure_is_typed(sandbox, monkeypatch):
         raise MediaIngestError("file_parse_failed", f"Word 文件解析失败: {filename}")
 
     monkeypatch.setattr("core.media_processor.ingest_file_bytes", _fail_file)
-    monkeypatch.setattr(chat_router, "run_owner_chat_turn", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', lambda *_args, **_kwargs: None)
     client = _client(monkeypatch)
     _scoped(sandbox, "emt_chat", ["chat"])
     response = client.post(

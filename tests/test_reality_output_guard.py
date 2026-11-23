@@ -1,3 +1,4 @@
+from core.owner_chat.service import run_owner_chat_turn
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_reality_output_guard.py — P2.2 shared reality output guard
@@ -297,7 +298,7 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     import channels.registry as _cr
     monkeypatch.setattr(_cr, "get", lambda name: None)
 
-    result = await _chat.run_owner_chat_turn("你好", "desktop")
+    result = await run_owner_chat_turn("你好", "desktop")
 
     assert len(captured_assistant_text) == 1
     # Guard must have removed the "Companion：" prefix before record_assistant_turn

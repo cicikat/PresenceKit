@@ -951,10 +951,10 @@ async def enter_dream(
     dream_mode: "sandbox" | "scenario" | "mirror" — frozen for session lifetime.
     script_id: required when dream_mode == "scenario"; the scenario script to load.
     """
-    from core.dream.dream_state import read_state, write_state, DreamStatus, _VALID_DREAM_MODES
+    from core.dream.dream_state import read_state, write_state, DreamStatus, VALID_DREAM_MODES
     from core.dream.dream_context import build_snapshot
 
-    if dream_mode not in _VALID_DREAM_MODES:
+    if dream_mode not in VALID_DREAM_MODES:
         return {"ok": False, "error": f"invalid dream_mode={dream_mode!r}"}
 
     # Brief 100 §3 reverse mutual exclusion: a group dream (Dream Stage) owned by

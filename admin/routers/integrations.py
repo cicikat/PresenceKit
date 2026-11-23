@@ -128,13 +128,13 @@ async def send_garden_test_wake(_auth=Depends(require_scopes("admin"))):
     if not uid or not char_id:
         raise HTTPException(status_code=503, detail="Garden test wake requires configured owner and active character")
 
-    from admin.routers.wake_bridge import submit_garden_wake
+    from core.wake_bridge import WakeBridge
 
-    return await submit_garden_wake({
+    return (await WakeBridge().submit_garden_mapping({
         "provider": _GARDEN_PROVIDER,
         "reason": _MANUAL_TEST_REASON,
         "message": _MANUAL_TEST_MESSAGE,
         "received_at": datetime.now(timezone.utc).isoformat(),
         "uid": uid,
         "char_id": char_id,
-    })
+    })).to_dict()

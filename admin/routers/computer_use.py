@@ -12,7 +12,7 @@ from starlette.requests import ClientDisconnect
 
 from admin.auth import require_scopes
 from admin.config_control import read_config_file, write_config_file
-from admin.routers.screen_observation import identity
+from admin.device_identity import require_device_identity
 from core import config_loader
 from core.agent_runtime import agent_sessions
 from core.agent_runtime import computer_use as service
@@ -67,7 +67,7 @@ async def agent_session_status(session_id: str = "", auth=Depends(require_scopes
 async def agent_session_control(body: SessionControl, request: Request, auth=Depends(_desktop)):
     actor = service.principal()
     device = service.bound_device(actor.uid, actor.char_id) if actor else None
-    if device is None or device.identity != identity(request, auth, "desktop"):
+    if device is None or device.identity != require_device_identity(request, auth, "desktop"):
         raise HTTPException(403, "agent_session_device_denied")
     return agent_sessions.control(actor, body.session_id, body.action, instruction=body.instruction,
                                   request_id=body.request_id)
@@ -75,12 +75,12 @@ async def agent_session_control(body: SessionControl, request: Request, auth=Dep
 
 @router.post("/poll")
 async def poll(body: Poll, request: Request, auth=Depends(_desktop)):
-    return service.poll(identity(request, auth, "desktop"), body)
+    return service.poll(require_device_identity(request, auth, "desktop"), body)
 
 
 @router.post("/result")
 async def result(body: Result, request: Request, auth=Depends(_desktop)):
-    if not service.accept(identity(request, auth, "desktop"), body):
+    if not service.accept(require_device_identity(request, auth, "desktop"), body):
         raise HTTPException(409, "stale_step")
     return {"accepted": True}
 
@@ -119,7 +119,7 @@ async def _read_jpeg(request: Request) -> bytes:
                     "description": "JSON VisionRequest containing the delivery reference, frame version and target index"}]})
 async def locate(request: Request, auth=Depends(_desktop)):
     try:
-        device_identity = identity(request, auth, "desktop")
+        device_identity = require_device_identity(request, auth, "desktop")
     except HTTPException:
         return _vision_error("vision_device_denied", 403)
     try:
