@@ -143,7 +143,7 @@ async def test_chess_non_key_probability_fails_no_comment(sandbox, monkeypatch):
     comment, grounding = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessNK1", state)
     assert comment is None
     assert llm.calls["n"] == 0
-    p = TR._path(TEST_CHAR_ID, "user1", "chess", "sessNK1")
+    p = TR.path_for_session(TEST_CHAR_ID, "user1", "chess", "sessNK1")
     assert not p.exists()
 
 
@@ -211,7 +211,7 @@ async def test_chess_comment_writes_proactive_entry_only(sandbox, monkeypatch):
     assert comment is not None
 
     import json
-    p = TR._path(TEST_CHAR_ID, "user1", "chess", "sessProactive")
+    p = TR.path_for_session(TEST_CHAR_ID, "user1", "chess", "sessProactive")
     lines = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert len(lines) == 1, "only assistant_chat should be written, no user_chat"
     entry = lines[0]
