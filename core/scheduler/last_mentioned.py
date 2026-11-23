@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from core import character_context
 from core.error_handler import log_error
 from core.safe_write import safe_write_json
 from core.sandbox import get_paths, safe_user_id
@@ -107,17 +108,6 @@ class _Turn:
     raw: str
 
 
-def _active_char_id_or_none() -> str | None:
-    """Return the active character id from active_prompt_assets.json, or None if unavailable."""
-    try:
-        import json as _j
-        data = _j.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
-        cid = (data.get("active_character") or "").strip()
-        return cid or None
-    except Exception:
-        return None
-
-
 def recall_last_mentioned(
     user_id: str,
     *,
@@ -130,7 +120,7 @@ def recall_last_mentioned(
 
     char_id 未传时尝试读 active_prompt_assets.json；仍无则返回 None（不 fallback yexuan）。
     """
-    resolved = char_id or _active_char_id_or_none()
+    resolved = char_id or character_context.selected_character_id_or_none()
     if not resolved:
         return None
 
