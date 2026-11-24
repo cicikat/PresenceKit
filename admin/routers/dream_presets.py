@@ -1,4 +1,6 @@
 """Dream presets API responsibilities; legacy names re-exported by dream.py."""
+from admin.character_dependencies import require_character_reader
+from functools import partial as _bind_character_reader
 
 from admin.routers import dream_common
 from core import sandbox
@@ -149,6 +151,8 @@ async def put_standalone_dream_preset(
 async def delete_standalone_dream_preset(
     preset: str,
     _auth=Depends(require_scopes("activity")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     path = _preset_asset_path(preset)
     if not path.is_file():
@@ -158,7 +162,7 @@ async def delete_standalone_dream_preset(
         raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
 
     from core.dream.dream_settings import load as _load_settings
-    if preset in (_load_settings(dream_common._owner_uid(), char_id=dream_common._active_dream_char_id()).get("jailbreak_presets") or []):
+    if preset in (_load_settings(dream_common._owner_uid(), char_id=dream_common._active_dream_char_id(read_character=read_character)).get("jailbreak_presets") or []):
         raise HTTPException(status_code=409, detail="该预设正在下一场梦的选用列表中，请先取消选用")
 
     canonical = _preset_write_path(preset)
@@ -174,15 +178,19 @@ async def delete_standalone_dream_preset(
 async def dream_settings_get(
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     """Read-only: returns all dream settings fields with defaults applied."""
     uid = dream_common._owner_uid()
     from core.dream.dream_settings import load as _load
-    return _load(uid, char_id=dream_common._validated_live_char_id(char_id))
+    return _load(uid, char_id=dream_common._validated_live_char_id(char_id, read_character=read_character))
 
 
 @router.patch("/dream/settings", summary="部分更新梦境设置（校验枚举值；仅影响下一场梦）")
-async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activity"))):
+async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     """
     Partial update for dream settings. Validates enum values before writing.
 
@@ -196,7 +204,7 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
     """
     uid = dream_common._owner_uid()
     char_id = resolve_requested_char_id(
-        body.get("char_id"), fallback=dream_common._active_dream_char_id,
+        body.get("char_id"), fallback=_bind_character_reader(dream_common._active_dream_char_id, read_character=read_character),
     )
     from core.dream.dream_settings import load as _load, save as _save
 

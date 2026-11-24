@@ -11,6 +11,7 @@ Covers:
   ⑦ DELETE 保留名拒绝；DELETE 时若正在被进行中的梦引用则拒绝
   ⑧ PATCH /dream/settings world_layer 动态校验：新建的自定义世界可选，未知名仍被拒
 """
+from tests.fixtures.runtime_capabilities import read_registered_character
 
 import asyncio
 
@@ -96,9 +97,9 @@ def test_rename_world_keeps_independent_preset_and_syncs_settings(sandbox):
     with _as(_UID):
         _run(create_dream_world({"world": "rename_src"}))
         _run(put_dream_preset("rename_src", {"content": "hello preset"}))
-        _run(dream_settings_patch({"world_layer": "rename_src"}))
+        _run(dream_settings_patch({"world_layer": "rename_src"}, read_character=read_registered_character))
 
-        result = _run(rename_dream_world("rename_src", {"new_name": "rename_dst"}))
+        result = _run(rename_dream_world("rename_src", {"new_name": "rename_dst"}, read_character=read_registered_character))
         assert result["world"] == "rename_dst"
 
         settings = load_settings(_UID)
@@ -121,7 +122,7 @@ def test_rename_world_missing_source_404(sandbox):
 
     with _as(_UID):
         with pytest.raises(HTTPException) as exc:
-            _run(rename_dream_world("does_not_exist", {"new_name": "whatever"}))
+            _run(rename_dream_world("does_not_exist", {"new_name": "whatever"}, read_character=read_registered_character))
     assert exc.value.status_code == 404
 
 
@@ -132,7 +133,7 @@ def test_rename_world_target_exists_409(sandbox):
         _run(create_dream_world({"world": "src_world"}))
         _run(create_dream_world({"world": "dst_world"}))
         with pytest.raises(HTTPException) as exc:
-            _run(rename_dream_world("src_world", {"new_name": "dst_world"}))
+            _run(rename_dream_world("src_world", {"new_name": "dst_world"}, read_character=read_registered_character))
     assert exc.value.status_code == 409
 
 
@@ -142,7 +143,7 @@ def test_rename_world_rejects_reserved_target(sandbox):
     with _as(_UID):
         _run(create_dream_world({"world": "src_world2"}))
         with pytest.raises(HTTPException) as exc:
-            _run(rename_dream_world("src_world2", {"new_name": "_default"}))
+            _run(rename_dream_world("src_world2", {"new_name": "_default"}, read_character=read_registered_character))
     assert exc.value.status_code == 422
 
 
@@ -151,7 +152,7 @@ def test_rename_world_rejects_reserved_source(sandbox):
 
     with _as(_UID):
         with pytest.raises(HTTPException) as exc:
-            _run(rename_dream_world("reality_derived", {"new_name": "whatever"}))
+            _run(rename_dream_world("reality_derived", {"new_name": "whatever"}, read_character=read_registered_character))
     assert exc.value.status_code == 422
 
 
@@ -171,12 +172,12 @@ def test_rename_world_blocked_while_dream_active(sandbox):
             "dream_id": "d1",
         })
         with pytest.raises(HTTPException) as exc:
-            _run(rename_dream_world("active_world", {"new_name": "renamed_world"}))
+            _run(rename_dream_world("active_world", {"new_name": "renamed_world"}, read_character=read_registered_character))
         assert exc.value.status_code == 409
 
         # positive control: after dream ends, rename succeeds
         write_state(_UID, {"status": DreamStatus.REALITY_CHAT.value})
-        result = _run(rename_dream_world("active_world", {"new_name": "renamed_world"}))
+        result = _run(rename_dream_world("active_world", {"new_name": "renamed_world"}, read_character=read_registered_character))
         assert result["world"] == "renamed_world"
 
 
@@ -191,9 +192,9 @@ def test_delete_world_keeps_independent_preset_and_resets_settings(sandbox):
     with _as(_UID):
         _run(create_dream_world({"world": "delete_me"}))
         _run(put_dream_preset("delete_me", {"content": "will be orphaned"}))
-        _run(dream_settings_patch({"world_layer": "delete_me"}))
+        _run(dream_settings_patch({"world_layer": "delete_me"}, read_character=read_registered_character))
 
-        result = _run(delete_dream_world("delete_me"))
+        result = _run(delete_dream_world("delete_me", read_character=read_registered_character))
         assert result["deleted"] == "delete_me"
 
         settings = load_settings(_UID)
@@ -224,15 +225,15 @@ def test_standalone_preset_can_be_created_edited_and_selected_without_world(sand
         _run(put_standalone_dream_preset("unbound_preset", {"content": "edited"}))
         assert _run(get_standalone_dream_preset("unbound_preset"))["content"] == "edited"
 
-        settings = _run(dream_settings_patch({"jailbreak_presets": ["unbound_preset"]}))
+        settings = _run(dream_settings_patch({"jailbreak_presets": ["unbound_preset"]}, read_character=read_registered_character))
         assert settings["settings"]["jailbreak_presets"] == ["unbound_preset"]
 
         with pytest.raises(HTTPException) as exc:
-            _run(delete_standalone_dream_preset("unbound_preset"))
+            _run(delete_standalone_dream_preset("unbound_preset", read_character=read_registered_character))
         assert exc.value.status_code == 409
 
-        _run(dream_settings_patch({"jailbreak_presets": ["default"]}))
-        assert _run(delete_standalone_dream_preset("unbound_preset"))["deleted"] == "unbound_preset"
+        _run(dream_settings_patch({"jailbreak_presets": ["default"]}, read_character=read_registered_character))
+        assert _run(delete_standalone_dream_preset("unbound_preset", read_character=read_registered_character))["deleted"] == "unbound_preset"
 
     assert not (sandbox.dream_presets_dir() / "unbound_preset.md").exists()
 
@@ -253,7 +254,7 @@ def test_delete_world_rejects_reserved(sandbox, reserved):
 
     with _as(_UID):
         with pytest.raises(HTTPException) as exc:
-            _run(delete_dream_world(reserved))
+            _run(delete_dream_world(reserved, read_character=read_registered_character))
     assert exc.value.status_code == 422
 
 
@@ -269,7 +270,7 @@ def test_delete_world_blocked_while_dream_active(sandbox):
             "dream_id": "d2",
         })
         with pytest.raises(HTTPException) as exc:
-            _run(delete_dream_world("active_delete_world"))
+            _run(delete_dream_world("active_delete_world", read_character=read_registered_character))
         assert exc.value.status_code == 409
 
         # positive control: not referenced by the active dream → deletable
@@ -278,7 +279,7 @@ def test_delete_world_blocked_while_dream_active(sandbox):
             "frozen_world": "some_other_world",
             "dream_id": "d3",
         })
-        result = _run(delete_dream_world("active_delete_world"))
+        result = _run(delete_dream_world("active_delete_world", read_character=read_registered_character))
         assert result["ok"] is True
 
 
@@ -291,7 +292,7 @@ def test_patch_world_layer_accepts_custom_created_world(sandbox):
 
     with _as(_UID):
         _run(create_dream_world({"world": "patchable_world"}))
-        result = _run(dream_settings_patch({"world_layer": "patchable_world"}))
+        result = _run(dream_settings_patch({"world_layer": "patchable_world"}, read_character=read_registered_character))
         assert result["settings"]["world_layer"] == "patchable_world"
 
 
@@ -300,7 +301,7 @@ def test_patch_world_layer_still_rejects_unknown_name(sandbox):
 
     with _as(_UID):
         with pytest.raises(HTTPException) as exc:
-            _run(dream_settings_patch({"world_layer": "totally_made_up_world"}))
+            _run(dream_settings_patch({"world_layer": "totally_made_up_world"}, read_character=read_registered_character))
     assert exc.value.status_code == 422
 
 
@@ -309,5 +310,5 @@ def test_patch_world_layer_accepts_builtin_names_even_without_folder(sandbox):
     from admin.routers.dream import dream_settings_patch
 
     with _as(_UID):
-        result = _run(dream_settings_patch({"world_layer": "abo"}))
+        result = _run(dream_settings_patch({"world_layer": "abo"}, read_character=read_registered_character))
         assert result["settings"]["world_layer"] == "abo"

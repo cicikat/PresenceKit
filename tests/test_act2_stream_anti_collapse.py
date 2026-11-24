@@ -112,7 +112,7 @@ async def test_stream_collapse_hit_does_not_interrupt_output(monkeypatch, sandbo
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
     pieces = await _collect(
-        pipeline.run_llm_stream(messages, char_id=TEST_CHAR_ID, user_id=uid)
+        pipeline.generation.run_llm_stream(messages, char_id=TEST_CHAR_ID, user_id=uid)
     )
 
     assert "".join(pieces) == "嗯。这次还是这样开头"
@@ -134,7 +134,7 @@ async def test_stream_no_collapse_writes_no_signal(monkeypatch, sandbox):
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
     pieces = await _collect(
-        pipeline.run_llm_stream(messages, char_id=TEST_CHAR_ID, user_id=uid)
+        pipeline.generation.run_llm_stream(messages, char_id=TEST_CHAR_ID, user_id=uid)
     )
     assert "".join(pieces) == "全新的开口方式"
 
@@ -153,7 +153,7 @@ async def test_stream_without_user_id_skips_detection(monkeypatch, sandbox):
 
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
-    pieces = await _collect(pipeline.run_llm_stream(messages, char_id=TEST_CHAR_ID))
+    pieces = await _collect(pipeline.generation.run_llm_stream(messages, char_id=TEST_CHAR_ID))
     assert "".join(pieces) == "嗯。还是这样开头"
 
 

@@ -76,7 +76,7 @@ async def test_push_segments_fires_only_when_desktop_in_fanout(monkeypatch, enab
         source="trigger",
         trigger_name="morning_greeting",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     # channel_message 发出一次
@@ -351,7 +351,7 @@ async def test_push_segments_fires_for_user_chat(monkeypatch, enabled_client_cha
         source="user_chat",
         user_text="你好",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     # 普通 chat 时 push_segments 应发出一次

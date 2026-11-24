@@ -215,7 +215,7 @@ def test_pipeline_refresh_swaps_character(chars_tree, monkeypatch, sandbox):
     )
 
     # Trigger refresh
-    pipeline._refresh_character_if_needed()
+    pipeline.character_state.refresh()
 
     assert pipeline._active_character_id == "character_b"
     assert pipeline.character.name == "DemoUser", (
@@ -242,7 +242,7 @@ def test_pipeline_refresh_no_swap_when_same(chars_tree, monkeypatch, sandbox):
         encoding="utf-8",
     )
 
-    pipeline._refresh_character_if_needed()
+    pipeline.character_state.refresh()
 
     assert pipeline.character is original_char, "Character object must not change when id unchanged"
 
@@ -307,7 +307,7 @@ def test_empty_active_character_raises_in_pipeline(
     )
 
     with pytest.raises(ValueError, match="active_character"):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     # Pipeline character must not have changed
     assert pipeline.character.name == "Companion", "Character must remain unchanged on empty active_character"
@@ -343,7 +343,7 @@ def test_pipeline_refresh_fail_loud_on_unknown_id(chars_tree, monkeypatch, sandb
     )
 
     with pytest.raises(ValueError):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     # Pipeline must not have swapped to AI fallback or yexuan-override
     assert pipeline.character.name != "AI", (

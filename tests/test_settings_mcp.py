@@ -1,5 +1,6 @@
 """Brief 110: MCP 管理 API 不接真实网络，覆盖导入、白名单与热重载。"""
 from __future__ import annotations
+from tests.fixtures.runtime_capabilities import read_registered_character
 
 import asyncio
 
@@ -109,7 +110,7 @@ def test_metadata_mapping_override_and_selector_round_trip_and_can_be_removed(tm
             ),
         ),
         _auth=None,
-    ))
+     read_character=read_registered_character))
 
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
     assert stored["metadata_mapping"]["namespace"] == "io.any/tool"
@@ -127,7 +128,7 @@ def test_metadata_mapping_override_and_selector_round_trip_and_can_be_removed(tm
             metadata_mapping=None, metadata_overrides=None, domain_selector=None,
         ),
         _auth=None,
-    ))
+     read_character=read_registered_character))
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
     assert "metadata_mapping" not in stored
     assert "metadata_overrides" not in stored
@@ -154,7 +155,7 @@ def test_import_tests_before_write_and_hot_reloads(tmp_path, monkeypatch):
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
     monkeypatch.setattr(mcp_client, "server_runtime", lambda name: {"connected": True, "tools": []})
 
-    result = asyncio.run(mod.import_mcp_server(_draft(), _auth=None))
+    result = asyncio.run(mod.import_mcp_server(_draft(), _auth=None, read_character=read_registered_character))
 
     assert result["tools"][0]["name"] == "toy_status"
     assert result["server"]["headers"]["Authorization"] == "Bearer ${CEDAR_TOY_TOKEN}"
@@ -175,7 +176,7 @@ def test_import_rejects_unknown_whitelist_without_writing(tmp_path, monkeypatch)
 
     monkeypatch.setattr(mcp_client, "test_server_config", probe)
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(mod.import_mcp_server(_draft(allow_tools=["unknown"]), _auth=None))
+        asyncio.run(mod.import_mcp_server(_draft(allow_tools=["unknown"]), _auth=None, read_character=read_registered_character))
     assert exc.value.status_code == 422
     assert path.read_text(encoding="utf-8") == before
 
@@ -211,7 +212,7 @@ def test_reimport_preserves_explicit_policy_and_fills_new_tool_default(tmp_path,
     })
     result = asyncio.run(mod.import_mcp_server(
         _draft(allow_tools=["toy_status", "send_message"]), _auth=None,
-    ))
+     read_character=read_registered_character))
 
     states = {item["name"]: item for item in result["server"]["tool_states"]}
     assert states["toy_status"]["policy_status"] == "confirmed"
@@ -251,7 +252,7 @@ def test_reenable_disconnected_legacy_allowlist_backfills_policy_before_strict_r
 
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(enabled=True), _auth=None,
-    ))
+     read_character=read_registered_character))
 
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
     assert stored["tool_policy"] == {
@@ -278,7 +279,7 @@ def test_existing_explicit_policy_is_read_as_confirmed_without_config_migration(
         "connected": True,
         "tools": [{"name": "toy_status", "description": "status"}],
     })
-    result = asyncio.run(mod.get_mcp_settings(_auth=None))
+    result = asyncio.run(mod.get_mcp_settings(_auth=None, read_character=read_registered_character))
 
     state = result["servers"][0]["tool_states"][0]
     assert state["policy_status"] == "confirmed"
@@ -303,7 +304,7 @@ def test_strict_import_fills_default_policy_for_each_allowlisted_tool(tmp_path, 
         "connected": True,
         "tools": [{"name": "toy_status", "description": "status"}],
     })
-    result = asyncio.run(mod.import_mcp_server(_draft(), _auth=None))
+    result = asyncio.run(mod.import_mcp_server(_draft(), _auth=None, read_character=read_registered_character))
 
     assert result["reload_status"] == "reloaded"
     assert result["server"]["tool_states"][0]["policy_status"] == "confirmed"
@@ -331,7 +332,7 @@ def test_strict_import_defaults_unknown_tool_to_direct_write(tmp_path, monkeypat
         "tools": [{"name": "request_access", "description": ""}],
     })
 
-    result = asyncio.run(mod.import_mcp_server(_draft(allow_tools=["request_access"]), _auth=None))
+    result = asyncio.run(mod.import_mcp_server(_draft(allow_tools=["request_access"]), _auth=None, read_character=read_registered_character))
 
     assert result["server"]["tool_states"][0]["policy_status"] == "confirmed"
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -351,7 +352,7 @@ def test_global_toggle_writes_config_and_hot_syncs(tmp_path, monkeypatch):
         calls.append(("sync", wait))
 
     monkeypatch.setattr(mcp_client, "sync_mcp_servers", sync)
-    result = asyncio.run(mod.update_mcp_settings(mod.McpSettingsUpdate(enabled=True), _auth=None))
+    result = asyncio.run(mod.update_mcp_settings(mod.McpSettingsUpdate(enabled=True), _auth=None, read_character=read_registered_character))
     assert result["enabled"] is True
     assert calls == [("sync", False)]
     assert "重启" not in result["message"]
@@ -385,7 +386,7 @@ def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeyp
     monkeypatch.setattr(mcp_client, "server_runtime", lambda name: {"connected": False, "tools": []})
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(allow_tools=["toy_status"], use_proxy=True), _auth=None,
-    ))
+     read_character=read_registered_character))
     assert result["server"]["allow_tools"] == ["toy_status"]
     assert result["server"]["use_proxy"] is True
     assert calls == ["cedar_toy"]
@@ -405,7 +406,7 @@ def test_update_server_persists_per_tool_timeout_and_returns_it(tmp_path, monkey
     monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(tool_timeouts_s={"hardware_sequence": 660}), _auth=None,
-    ))
+     read_character=read_registered_character))
 
     assert result["server"]["tool_timeouts_s"] == {"hardware_sequence": 660.0}
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -430,7 +431,7 @@ def test_update_server_reports_connection_failed_when_owner_reload_returns_false
     monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(enabled=False), _auth=None,
-    ))
+     read_character=read_registered_character))
     assert result["reload_status"] == "connection_failed"
     assert "未能连接" in result["message"]
     assert "重启" not in result["message"]
@@ -461,7 +462,7 @@ def test_strict_policy_whitelist_update_preserves_confirmed_entries_and_fills_ne
     })
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(allow_tools=["toy_status", "delete_thread"]), _auth=None,
-    ))
+     read_character=read_registered_character))
     states = {item["name"]: item for item in result["server"]["tool_states"]}
     assert states["toy_status"]["policy_status"] == "confirmed"
     assert states["delete_thread"]["policy_status"] == "confirmed"
@@ -499,7 +500,7 @@ def test_bulk_default_authorization_uses_runtime_snapshot_and_preserves_explicit
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
-    ))
+     read_character=read_registered_character))
 
     assert result["action"] == "default"
     assert result["processed_count"] == 2
@@ -536,7 +537,7 @@ def test_bulk_unrestricted_authorization_overrides_all_policy_once(tmp_path, mon
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(bulk_authorize="unrestricted"), _auth=None,
-    ))
+     read_character=read_registered_character))
 
     expected = {
         "read_tool": {"effect": "unrestricted", "idempotent": True, "require_confirm": False},
@@ -565,7 +566,7 @@ def test_bulk_authorization_rejects_disconnected_server_without_writing(tmp_path
     with pytest.raises(HTTPException) as exc:
         asyncio.run(mod.update_mcp_server(
             "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
-        ))
+         read_character=read_registered_character))
 
     assert exc.value.status_code == 409
     assert path.read_text(encoding="utf-8") == before
@@ -587,7 +588,7 @@ def test_bulk_authorization_rejects_empty_runtime_directory_without_writing(tmp_
     with pytest.raises(HTTPException) as exc:
         asyncio.run(mod.update_mcp_server(
             "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
-        ))
+         read_character=read_registered_character))
 
     assert exc.value.status_code == 409
     assert path.read_text(encoding="utf-8") == before
@@ -613,7 +614,7 @@ def test_bulk_authorization_reports_connection_failed_after_reload_returns_false
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
-    ))
+     read_character=read_registered_character))
 
     assert result["reload_status"] == "connection_failed"
     assert result["processed_count"] == 1
@@ -634,7 +635,7 @@ def test_update_server_reports_restart_required_when_reload_returns_none(tmp_pat
     monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(enabled=True), _auth=None,
-    ))
+     read_character=read_registered_character))
     assert result["reload_status"] == "restart_required"
     assert "重启" in result["message"]
 
@@ -657,7 +658,7 @@ def test_reconnect_server_reuses_hot_reload_and_reports_connection_failed(tmp_pa
     monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
         "connected": False, "tools": [], "last_init_error": "handshake timeout",
     })
-    result = asyncio.run(mod.reconnect_mcp_server("cedar_toy", _auth=None))
+    result = asyncio.run(mod.reconnect_mcp_server("cedar_toy", _auth=None, read_character=read_registered_character))
     assert calls == ["cedar_toy"]
     assert result["reload_status"] == "connection_failed"
     assert "未能连上" in result["message"]
@@ -670,7 +671,7 @@ def test_reconnect_missing_server_is_404(tmp_path, monkeypatch):
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers: []\n")
     _patch_config(monkeypatch, path)
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(mod.reconnect_mcp_server("missing", _auth=None))
+        asyncio.run(mod.reconnect_mcp_server("missing", _auth=None, read_character=read_registered_character))
     assert exc.value.status_code == 404
 
 
@@ -702,7 +703,7 @@ def test_strict_policy_accepts_complete_whitelist_and_policy(tmp_path, monkeypat
             },
         ),
         _auth=None,
-    ))
+     read_character=read_registered_character))
 
     assert result["server"]["tool_policy"]["delete_thread"] == {"effect": "write"}
     assert calls == ["cedar_toy"]
@@ -732,7 +733,7 @@ def test_tool_policy_ui_label_is_persisted_and_returned(tmp_path, monkeypatch):
             "toy_status": mod.McpToolPolicy(effect="read", ui_label="查看设备状态"),
         }),
         _auth=None,
-    ))
+     read_character=read_registered_character))
 
     assert result["server"]["tool_policy"]["toy_status"] == {
         "effect": "read", "ui_label": "查看设备状态",
@@ -754,7 +755,7 @@ def test_selecting_named_tool_preset_updates_runtime_allowlist(tmp_path, monkeyp
     monkeypatch.setattr(mcp_client, "server_runtime", lambda name: {"connected": True, "tools": []})
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(active_tool_preset="对局"), _auth=None,
-    ))
+     read_character=read_registered_character))
 
     assert result["server"]["active_tool_preset"] == "对局"
     assert result["server"]["allow_tools"] == ["toy_status", "play"]

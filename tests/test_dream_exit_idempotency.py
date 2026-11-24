@@ -75,12 +75,7 @@ async def test_continuation_uses_reality_pipeline_and_marks_after_send(sandbox, 
         "last_dream_id": dream_id,
         "char_id": "dreamer",
     })
-    pipeline = SimpleNamespace(
-        context=SimpleNamespace(fetch=AsyncMock(return_value={"history": [], "profile": {}, "relation": {}, "group_context": "", "user_identity_text": "", "user_facts_text": "", "event_search_result": "", "lore_entries": []})),
-        build_prompt=MagicMock(return_value=([{"role": "user", "content": "safe"}], {})),
-        run_llm=AsyncMock(return_value="现实侧的一句回应"),
-        _active_character_id="dreamer",
-    )
+    pipeline = SimpleNamespace(effects=object(),context=SimpleNamespace(fetch=AsyncMock(return_value={"history": [], "profile": {}, "relation": {}, "group_context": "", "user_identity_text": "", "user_facts_text": "", "event_search_result": "", "lore_entries": []})),build_prompt=MagicMock(return_value=([{"role": "user", "content": "safe"}], {})),_active_character_id="dreamer",generation=SimpleNamespace(run_llm=AsyncMock(return_value="现实侧的一句回应")))
     sent = AsyncMock(return_value=SimpleNamespace())
     monkeypatch.setattr("core.pipeline_registry.get", lambda: pipeline)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", sent)
@@ -90,7 +85,7 @@ async def test_continuation_uses_reality_pipeline_and_marks_after_send(sandbox, 
     await task
 
     assert pipeline.context.fetch.await_count == 1
-    assert pipeline.run_llm.await_count == 1
+    assert pipeline.generation.run_llm.await_count == 1
     assert "梦" in pipeline.context.fetch.await_args.args[1]
     assert "archive" not in pipeline.context.fetch.await_args.args[1]
     sent.assert_awaited_once()

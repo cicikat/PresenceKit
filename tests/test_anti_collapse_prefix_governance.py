@@ -147,7 +147,7 @@ async def test_prefix_retry_not_triggered_when_reply_does_not_match(monkeypatch)
         return "完全不同的开口"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._anti_collapse_prefix_retry(messages, "完全不一样的回复开头")
+    result = await pipeline.generation._anti_collapse_prefix_retry(messages, "完全不一样的回复开头")
     assert result == "完全不一样的回复开头"
     assert called["chat"] == 0  # 未命中前缀，不重试
 
@@ -161,7 +161,7 @@ async def test_prefix_retry_strips_filler_prefix_on_second_hit(monkeypatch):
         return "嗯。这次还是这样开头"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._anti_collapse_prefix_retry(messages, "嗯。原始回复也这样开头")
+    result = await pipeline.generation._anti_collapse_prefix_retry(messages, "嗯。原始回复也这样开头")
     assert result == "这次还是这样开头"
 
 
@@ -174,7 +174,7 @@ async def test_prefix_retry_accepts_retry_result_when_prefix_gone(monkeypatch):
         return "换了个开头说话"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._anti_collapse_prefix_retry(messages, "嗯。原始回复")
+    result = await pipeline.generation._anti_collapse_prefix_retry(messages, "嗯。原始回复")
     assert result == "换了个开头说话"
 
 
@@ -192,5 +192,5 @@ async def test_prefix_retry_disabled_by_config(monkeypatch):
         raise AssertionError("不应该重试")
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._anti_collapse_prefix_retry(messages, "嗯。原始回复")
+    result = await pipeline.generation._anti_collapse_prefix_retry(messages, "嗯。原始回复")
     assert result == "嗯。原始回复"

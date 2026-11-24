@@ -9,6 +9,7 @@ Asset identity contract:
 - Hidden/template/example assets are excluded from UI lists.
 - PATCH with a label or filename will be rejected with a clear error.
 """
+from admin.character_dependencies import require_character_reader, require_character_reloader
 
 import json
 import logging
@@ -95,10 +96,11 @@ def _load_world_cards() -> list[dict]:
     return result
 
 
-def _reload_lore_engine():
+def _reload_lore_engine(
+    *, read_character,
+):
     try:
-        from core.pipeline_registry import get as _get_pipeline
-        pipeline = _get_pipeline()
+        pipeline = read_character()
         if pipeline is not None and hasattr(pipeline, "lore_engine"):
             pipeline.lore_engine.load()
     except Exception:
@@ -268,7 +270,9 @@ class PromptAssetsUpdate(BaseModel):
 
 
 @router.patch("/settings/prompt-assets", summary="部分更新 Prompt 资产激活配置")
-async def patch_prompt_assets(body: PromptAssetsUpdate, auth=Depends(require_scopes("persona"))):
+async def patch_prompt_assets(body: PromptAssetsUpdate, auth=Depends(require_scopes("persona")),
+    *, read_character=Depends(require_character_reader), reload_character=Depends(require_character_reloader),
+):
     """Partial update for active prompt-asset config. All values must be asset ids.
 
     Rejects labels ("叶瑄"), filenames ("yexuan.json"), and unknown ids.
@@ -301,23 +305,13 @@ async def patch_prompt_assets(body: PromptAssetsUpdate, auth=Depends(require_sco
 
 
     if body.enabled_lorebooks is not None:
-        _reload_lore_engine()
+        _reload_lore_engine(read_character=read_character)
     if body.active_character is not None:
         reload_registry()
         # Hot-swap character on the running pipeline
         try:
-            from core import character_loader as _cl
-            from core.pipeline_registry import get as _get_pipeline
-            pipeline = _get_pipeline()
-            if pipeline is not None:
-                new_char = _cl.load(body.active_character)
-                pipeline.character = new_char
-                pipeline._active_character_id = body.active_character
-                pipeline.author_note_extra = ""
-                if pipeline.lore_engine is not None:
-                    pipeline.lore_engine.load()
-                    if new_char.world_book:
-                        pipeline.lore_engine.load_entries(new_char.world_book)
+            new_char = reload_character(body.active_character, clear_note=True)
+            if new_char is not None:
                 logger.info(
                     f"[settings/prompt-assets] character hot-swapped to "
                     f"{body.active_character!r} ({new_char.name})"

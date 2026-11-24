@@ -98,7 +98,7 @@ def test_missing_active_character_field_raises(chars_tree, monkeypatch, sandbox,
     )
 
     with pytest.raises(ValueError, match="active_character"):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     assert pipeline.character.name == "Companion", "character must remain unchanged"
     assert pipeline._active_character_id == TEST_CHAR_ID
@@ -114,7 +114,7 @@ def test_empty_active_character_field_raises(chars_tree, monkeypatch, sandbox, r
     )
 
     with pytest.raises(ValueError, match="active_character"):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     assert pipeline.character.name == "Companion"
     assert pipeline._active_character_id == TEST_CHAR_ID
@@ -220,7 +220,7 @@ def test_unknown_active_character_raises_valueerror(chars_tree, monkeypatch, san
     )
 
     with pytest.raises(ValueError):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     # Must not have swapped to AI fallback
     assert pipeline.character.name != "AI"
@@ -243,7 +243,7 @@ def test_unknown_active_character_no_ai_fallback(chars_tree, monkeypatch, sandbo
     )
 
     with pytest.raises(ValueError):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     assert pipeline.character.name != "AI"
     assert pipeline.character.name == "DemoUser", "must keep character_b, not fallback to AI"
@@ -261,7 +261,7 @@ def test_unknown_active_character_no_yexuan_fallback(chars_tree, monkeypatch, sa
     )
 
     with pytest.raises(ValueError):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     assert pipeline.character.name == "DemoUser", f'must stay as character_b, no fallback to {TEST_CHAR_ID}'
     assert pipeline._active_character_id == "character_b"
@@ -410,7 +410,7 @@ def test_active_overrides_config_default_at_pipeline_refresh(
 
     # config says yexuan (mock)
     with patch("core.config_loader.get_config", return_value={"character": {"default": TEST_CHAR_ID}}):
-        pipeline._refresh_character_if_needed()
+        pipeline.character_state.refresh()
 
     assert pipeline.character.name == "DemoUser", (
         f'Pipeline must use active_prompt_assets (character_b), not config.default ({TEST_CHAR_ID})'

@@ -289,6 +289,7 @@ async def test_fanout_does_not_trigger_additional_llm(monkeypatch):
     llm_call_count: list[int] = [0]
 
     class _FakePipeline:
+        generation = property(lambda self: self)
         effects = property(lambda self: self)
         async def capture_critical(self, uid, content, reply, **kwargs):
             return {"turn_id": "t-1", "critical_written": True, "emotion": "neutral"}
@@ -317,14 +318,14 @@ async def test_fanout_does_not_trigger_additional_llm(monkeypatch):
     from core.turn_sink import TurnSource, record_assistant_turn
 
     # Simulate: LLM called once outside, then record_assistant_turn with fanout="all"
-    reply = await _FakePipeline().run_llm([])
+    reply = await _FakePipeline().generation.run_llm([])
     await record_assistant_turn(
         assistant_text=reply,
         uid="u8",
         source=TurnSource.TRIGGER,
         trigger_name="test_trigger",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert llm_call_count[0] == 1, (
@@ -360,6 +361,9 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     )
 
     class _FakePipeline:
+        effects = property(lambda self: self)
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         character = type("C", (), {"name": "Companion"})()
 
@@ -372,10 +376,10 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
         async def run_llm(self, messages):
             return "好呀"
 
-        def _current_reality_scope(self, uid):
+        def reality_scope(self, uid):
             return type("Scope", (), {"character_id": TEST_CHAR_ID})()
 
-        def _refresh_character_if_needed(self):
+        def refresh(self):
             pass
 
         _active_character_id = TEST_CHAR_ID

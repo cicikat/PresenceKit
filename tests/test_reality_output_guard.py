@@ -155,6 +155,7 @@ async def test_desktop_guard_removes_character_prefix_before_record():
     received: list[str] = []
 
     class _FakePipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         effects = property(lambda self: self)
         class character:
@@ -232,11 +233,13 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
         name = "Companion"
 
     class _FakePipeline:
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         effects = property(lambda self: self)
         character = _FakeCharacter()
 
-        def _current_reality_scope(self, uid):
+        def reality_scope(self, uid):
             return type("Scope", (), {"character_id": TEST_CHAR_ID})()
 
         async def fetch(self, uid, message, group_id=None, **kwargs):

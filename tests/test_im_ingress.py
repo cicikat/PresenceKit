@@ -58,6 +58,7 @@ async def test_reply_keeps_external_address_out_of_qq_media_and_records_first(mo
     import main
     import core.turn_sink as sink
     import core.output.text_output as output
+    monkeypatch.setattr(main, "_pipeline", MagicMock())
     order = []
     async def record(**kwargs):
         order.append("record")

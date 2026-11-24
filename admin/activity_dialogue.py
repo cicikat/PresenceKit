@@ -9,7 +9,7 @@ import uuid
 import inspect
 import typing
 
-from fastapi import HTTPException, BackgroundTasks
+from fastapi import HTTPException, BackgroundTasks, Depends
 from core.activity import records
 from core.activity.continuity import refresh_projection
 from admin.routers import _common
@@ -21,12 +21,18 @@ from core.safe_write import safe_write_json
 from core.sandbox import get_paths
 from core.turn_sink import record_assistant_turn, TurnSource
 from core.write_envelope import stamp_user_chat
+from core.post_process.turn_effects import TurnEffects
+
+
+def require_turn_effects() -> TurnEffects:
+    """Bound by application startup; standalone/uninitialized hosts fail loudly."""
+    raise RuntimeError("Activity turn effects are not bound by application startup")
 
 
 def reality_dialogue(kind, *, assistant_only=False):
     def decorate(function):
         @functools.wraps(function)
-        async def wrapped(body, auth=None, background_tasks=None):
+        async def wrapped(body, auth=None, background_tasks=None, turn_effects=Depends(require_turn_effects)):
             uid = str(get_config().get("scheduler", {}).get("owner_id") or "")
             char_id = _common.active_char_id()
             if not uid:
@@ -90,6 +96,7 @@ def reality_dialogue(kind, *, assistant_only=False):
                     dedupe_key=key, source="user_chat", channel=f"activity:{kind}",
                     kind="trigger" if assistant_only else "user_message", actor="assistant" if assistant_only else "user").with_turn(receipt["turn_id"])
                 result = await record_assistant_turn(
+                    effects=turn_effects,
                     assistant_text=receipt["response"]["comment" if assistant_only else "reply"],
                     user_text=None if assistant_only else text,
                     trigger_name=f"activity_comment:{kind}" if assistant_only else None,
@@ -118,6 +125,8 @@ def reality_dialogue(kind, *, assistant_only=False):
         wrapped.__signature__ = original.replace(parameters=[
             parameter.replace(annotation=hints.get(name, parameter.annotation))
             for name, parameter in original.parameters.items()] + [
-                inspect.Parameter("background_tasks", inspect.Parameter.KEYWORD_ONLY, annotation=BackgroundTasks)])
+                inspect.Parameter("background_tasks", inspect.Parameter.KEYWORD_ONLY, annotation=BackgroundTasks),
+                inspect.Parameter("turn_effects", inspect.Parameter.KEYWORD_ONLY,
+                                  default=Depends(require_turn_effects), annotation=TurnEffects)])
         return wrapped
     return decorate

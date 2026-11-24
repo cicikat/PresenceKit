@@ -193,7 +193,7 @@ async def test_post_process_scheduled_reports_actual_background_work(sandbox, sc
 
     background = BackgroundTasks()
     result = await record_assistant_turn(
-        pipeline=Pipeline(), uid="schedule-owner", assistant_text="reply",
+        effects=Pipeline().effects, uid="schedule-owner", assistant_text="reply",
         source="user_chat", user_text="hello", fanout=[],
         schedule_slow=schedule,
         background_tasks=background,
@@ -249,7 +249,7 @@ async def test_record_assistant_turn_sources_success(
         trigger_name=trigger_name,
         user_text=user_text,
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert result.written_to_memory is True
@@ -282,7 +282,7 @@ async def test_proactive_turn_does_not_queue_to_desktop_file_when_disconnected(m
         source=TurnSource.TRIGGER,
         trigger_name="morning_greeting",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert "desktop" not in result.fanout_targets
@@ -305,7 +305,7 @@ async def test_fanout_failure_does_not_block_other_channels():
         trigger_name="weather_alert",
         fanout="all",
         payload={"behavior": {"action_type": "notify", "params": {"text": "x"}}},
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert ok.sent == [
@@ -376,7 +376,7 @@ async def test_mobile_durable_failure_reaches_turn_result(
         user_text="hello" if source == "user_chat" else None,
         trigger_name="reminder" if source == "trigger" else None,
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert result.written_to_memory is True
@@ -418,7 +418,7 @@ async def test_capture_turn_failure_enqueues_retry(sandbox, monkeypatch):
         source=TurnSource.TRIGGER,
         trigger_name="night_reminder",
         fanout=[],
-        pipeline=pipeline,
+        effects=pipeline.effects,
         envelope=stamp_trigger(),
         char_id="companion",
         frozen_scope=MemoryScope.reality_scope("uid3", "companion"),
@@ -454,14 +454,15 @@ async def test_sink_forwards_frozen_scope_pending_files_and_target_to_effect_own
             received.update(kwargs)
             return await super().capture_critical(*args, **kwargs)
 
-    runtime.effects = ObservedEffects(runtime)
+    runtime.effects = ObservedEffects(resolve_scope=runtime.character_state.reality_scope,
+                                      is_active_character=runtime.character_state.is_active_character)
     pending_perception.write("fixture perception")
     _, pending = pending_perception.read_and_mark()
     assert pending and all(Path(path).exists() for path in pending)
     frozen = MemoryScope.reality_scope("capture-contract", TEST_PEER_CHAR_ID)
     result = await record_assistant_turn(
         uid=frozen.uid, assistant_text="reply", user_text="hello", source="user_chat",
-        pipeline=runtime, frozen_scope=frozen, char_id=TEST_PEER_CHAR_ID,
+        effects=runtime.effects, frozen_scope=frozen, char_id=TEST_PEER_CHAR_ID,
         pending_paths=pending, target_id="fixture-target", envelope=stamp_user_chat(),
         fanout=[], schedule_slow=False,
     )
@@ -484,7 +485,7 @@ async def test_conversation_gate_serializes_concurrent_turns():
             source=TurnSource.TRIGGER,
             trigger_name="random_message",
             fanout=[],
-            pipeline=pipeline,
+            effects=pipeline.effects,
         ),
         record_assistant_turn(
             assistant_text="二",
@@ -492,7 +493,7 @@ async def test_conversation_gate_serializes_concurrent_turns():
             source=TurnSource.TRIGGER,
             trigger_name="weather_alert",
             fanout=[],
-            pipeline=pipeline,
+            effects=pipeline.effects,
         ),
     )
 
@@ -511,7 +512,7 @@ async def test_bypass_gate_skips_conversation_gate():
             trigger_name="hr_critical",
             fanout=[],
             bypass_gate=True,
-            pipeline=pipeline,
+            effects=pipeline.effects,
         ),
         record_assistant_turn(
             assistant_text="二",
@@ -520,7 +521,7 @@ async def test_bypass_gate_skips_conversation_gate():
             trigger_name="hr_critical",
             fanout=[],
             bypass_gate=True,
-            pipeline=pipeline,
+            effects=pipeline.effects,
         ),
     )
 
@@ -548,7 +549,7 @@ async def test_fanout_excludes_origin_channel():
         fanout="all",
         bypass_gate=True,
         exclude_origin_channel="desktop",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert "mobile" in result.fanout_targets
@@ -575,7 +576,7 @@ async def test_fanout_all_without_exclude_sends_to_all():
         fanout="all",
         bypass_gate=True,
         exclude_origin_channel=None,
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert set(result.fanout_targets) == {"desktop", "mobile"}
@@ -606,7 +607,7 @@ async def test_user_chat_reaches_offline_mobile_queue(sandbox):
         user_text="你在吗",
         fanout="all",
         bypass_gate=True,
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert "mobile" in result.fanout_targets
@@ -634,7 +635,7 @@ async def test_mobile_live_origin_keeps_durable_mirror_and_desktop_fanout(sandbo
         bypass_gate=True,
         exclude_origin_channel="mobile",
         durable_mobile_mirror=True,
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
@@ -659,7 +660,7 @@ async def test_mobile_fanout_queue_id_matches_turn_id(sandbox):
         source=TurnSource.TRIGGER,
         trigger_name="scheduler_message",
         fanout="mobile",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
@@ -696,7 +697,7 @@ async def test_mobile_fanout_mints_transport_id_without_turn_id_or_desktop(monke
         source=TurnSource.TRIGGER,
         trigger_name="scheduler_message",
         fanout="mobile",
-        pipeline=_PipelineWithoutTurnId(),
+        effects=_PipelineWithoutTurnId().effects,
     )
 
     queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
@@ -759,7 +760,7 @@ async def test_fanout_exclude_does_not_affect_named_fanout():
         fanout="desktop",
         bypass_gate=True,
         exclude_origin_channel="desktop",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     # fanout 指定的是具体 channel 名称（非 "all"），exclude 不过滤
@@ -783,7 +784,7 @@ async def test_message_segments_fanout_with_say(desktop_wire):
         source="user_chat",
         user_text="hello",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     message, = [frame for frame in desktop_wire if frame["type"] == "channel_message"]
@@ -821,7 +822,7 @@ async def test_message_segments_exception_does_not_block_main_flow(monkeypatch, 
         source="user_chat",
         user_text="test",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     # Original channel_message was delivered
@@ -844,7 +845,7 @@ async def test_message_segments_plain_text(desktop_wire):
         source="user_chat",
         user_text="hi",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     seg, = [frame for frame in desktop_wire if frame["type"] == "message_segments"]

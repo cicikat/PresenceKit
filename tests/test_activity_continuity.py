@@ -67,7 +67,7 @@ async def test_real_sink_canonical_history_reference_and_retry(sandbox, monkeypa
         name = "Companion"
     pipeline = Pipeline(Character(), lore_engine=None)
     async def sink(**kwargs):
-        return await record_assistant_turn(pipeline=pipeline, schedule_slow=False, **kwargs)
+        return await record_assistant_turn(schedule_slow=False, **(kwargs | {"effects": pipeline.effects}))
     monkeypatch.setattr(continuity, "record_assistant_turn", sink)
     value = store.create_session("owner", "companion", "chess")
     @continuity.reality_dialogue("chess")

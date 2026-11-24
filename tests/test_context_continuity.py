@@ -175,7 +175,7 @@ async def test_failed_generation_does_not_consume_pending(configured, monkeypatc
     life_records.sync('owner-test', 'device', record(), char_id='char-test')
     pipeline = Pipeline(character=None, lore_engine=None)
     with pytest.raises(RuntimeError):
-        await pipeline.run_llm(continuity.messages('owner-test', 'char-test'), char_id='char-test')
+        await pipeline.generation.run_llm(continuity.messages('owner-test', 'char-test'), char_id='char-test')
     assert pending(continuity.messages('owner-test', 'char-test'))
 
 

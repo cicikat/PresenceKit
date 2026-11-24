@@ -52,7 +52,7 @@
 | 功能 | 文件 |
 |---|---|
 | 消息处理主流程 | `main.py` |
-| Reality 运行实例 / 检索 / tool loop / 后处理 | `core/pipeline.py`（角色、prompt、生成）；`core/memory/reality_context.py`；`core/owner_chat/tool_loop.py`；`core/post_process/turn_effects.py` |
+| Reality 运行实例 / 角色 / 生成 / 检索 / tool loop / 后处理 | `core/pipeline.py`（组合与 prompt）；`core/character_session.py`；`core/owner_chat/reply_generation.py`；`core/memory/reality_context.py`；`core/owner_chat/tool_loop.py`；`core/post_process/turn_effects.py` |
 | Prompt 组装 | `core/prompt_builder.py` |
 | Prompt 层级消融开关（对比/消融测试，只过滤注入不短路检索） | `core/prompt_ablation.py` |
 | 话题标签规则 | `core/tag_rules.py` |

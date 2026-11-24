@@ -29,7 +29,7 @@ def _make_pipeline(active_char_id: str, llm_reply: str = "回复", refresh_raise
     fake.author_note_extra = ""
     fake._active_character_id = active_char_id
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value=llm_reply)
+    fake.generation.run_llm = AsyncMock(return_value=llm_reply)
     # Brief 37: record_assistant_turn calls post_process_critical (awaited) then
     # post_process_slow (fire-and-forget after send) — both must exist.
     fake.effects.capture_critical = AsyncMock(
@@ -37,9 +37,9 @@ def _make_pipeline(active_char_id: str, llm_reply: str = "回复", refresh_raise
     )
     fake.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     if refresh_raises is not None:
-        fake._refresh_character_if_needed = MagicMock(side_effect=refresh_raises)
+        fake.character_state.refresh = MagicMock(side_effect=refresh_raises)
     else:
-        fake._refresh_character_if_needed = MagicMock()
+        fake.character_state.refresh = MagicMock()
     return fake
 
 

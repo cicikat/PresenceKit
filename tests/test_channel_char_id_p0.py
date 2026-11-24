@@ -117,7 +117,7 @@ async def test_turn_sink_fanout_passes_explicit_char_id():
     assert channel.char_id == TEST_THIRD_CHAR_ID
 
 
-async def test_turn_sink_fanout_uses_pipeline_active_char_id():
+async def test_turn_sink_fanout_uses_explicit_character_id():
     from core.turn_sink import TurnSource, record_assistant_turn
 
     class Channel:
@@ -152,7 +152,8 @@ async def test_turn_sink_fanout_uses_pipeline_active_char_id():
         source=TurnSource.TRIGGER,
         trigger_name="test",
         fanout="all",
-        pipeline=Pipeline(),
+        effects=Pipeline().effects,
+        char_id=TEST_THIRD_CHAR_ID,
     )
 
     assert channel.char_id == TEST_THIRD_CHAR_ID

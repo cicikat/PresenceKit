@@ -1,4 +1,5 @@
 """Dream worlds API responsibilities; legacy names re-exported by dream.py."""
+from admin.character_dependencies import require_character_reader
 
 from admin.routers import dream_common
 from core import sandbox
@@ -84,11 +85,13 @@ def _dream_active_referencing_world(world: str) -> bool:
     return state.get("status") in active_statuses and state.get("frozen_world") == world
 
 
-def _reset_world_layer_setting_if(match_world: str, reset_to: str) -> None:
+def _reset_world_layer_setting_if(match_world: str, reset_to: str,
+    *, read_character,
+) -> None:
     """若当前 dream_settings.world_layer == match_world，改写为 reset_to。"""
     from core.dream.dream_settings import load as _load_settings, save as _save_settings
     uid = dream_common._owner_uid()
-    char_id = dream_common._active_dream_char_id()
+    char_id = dream_common._active_dream_char_id(read_character=read_character)
     settings = _load_settings(uid, char_id=char_id)
     if settings.get("world_layer") == match_world:
         settings["world_layer"] = reset_to
@@ -142,7 +145,9 @@ async def create_dream_world(body: dict, _auth=Depends(require_scopes("activity"
 
 
 @router.put("/dream/worlds/{world}/rename", summary="重命名梦境世界文件夹")
-async def rename_dream_world(world: str, body: dict, _auth=Depends(require_scopes("activity"))):
+async def rename_dream_world(world: str, body: dict, _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     """重命名世界文件夹，并同步世界选择引用：
 
     - dream_settings.world_layer 若正指向旧名，改写为新名。
@@ -169,13 +174,15 @@ async def rename_dream_world(world: str, body: dict, _auth=Depends(require_scope
         raise HTTPException(status_code=409, detail="legacy fallback Dream 世界为只读，不能重命名")
     world_authoring.rename_world(src, dst)
 
-    _reset_world_layer_setting_if(world, new_name)
+    _reset_world_layer_setting_if(world, new_name, read_character=read_character)
 
     return {"ok": True, "world": new_name}
 
 
 @router.delete("/dream/worlds/{world}", summary="删除梦境世界文件夹")
-async def delete_dream_world(world: str, _auth=Depends(require_scopes("activity"))):
+async def delete_dream_world(world: str, _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     """删除世界文件夹（二次确认由前端做）。
 
     - _default / reality_derived 拒删。
@@ -199,7 +206,7 @@ async def delete_dream_world(world: str, _auth=Depends(require_scopes("activity"
         raise HTTPException(status_code=409, detail="该世界正被进行中的梦境使用，梦醒后再删除")
     world_authoring.delete_world(target)
 
-    _reset_world_layer_setting_if(world, "_default")
+    _reset_world_layer_setting_if(world, "_default", read_character=read_character)
 
     legacy_reappeared = (sandbox.get_paths().legacy_dream_worlds_dir() / world).is_dir()
     return {"ok": True, "deleted": world, "legacy_fallback_reappeared": legacy_reappeared}

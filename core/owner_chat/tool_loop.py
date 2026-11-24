@@ -34,8 +34,17 @@ from core.llm_turn_route import scoped_tool_turn
 
 
 class ToolTurnRunner:
-    def __init__(self, generator):
-        self.generator = generator
+    def __init__(self, *, run_llm, run_llm_stream, guard_tool_meta_leak,
+                 guard_unverified_claim, anti_collapse_prefix_retry):
+        callbacks = (run_llm, run_llm_stream, guard_tool_meta_leak,
+                     guard_unverified_claim, anti_collapse_prefix_retry)
+        if not all(callable(callback) for callback in callbacks):
+            raise TypeError("ToolTurnRunner requires all five generation capabilities")
+        self._run_llm = run_llm
+        self._run_llm_stream = run_llm_stream
+        self._guard_tool_meta_leak = guard_tool_meta_leak
+        self._guard_unverified_claim = guard_unverified_claim
+        self._anti_collapse_prefix_retry = anti_collapse_prefix_retry
         self.waiting_after_s = _TOOL_EPHEMERAL_WAITING_AFTER_S
 
     @display_chain
@@ -67,11 +76,11 @@ class ToolTurnRunner:
         is_proactive: 本次是否 scheduler 主动消息（Brief 32）。
         tool_event_observer: 可选 UI-only 瞬态状态观察者，不进入 turn sink 或任何记忆路径。
         """
-        run_llm = self.generator.run_llm
-        run_llm_stream = self.generator.run_llm_stream
-        guard_tool_meta_leak = self.generator._guard_tool_meta_leak
-        guard_unverified_claim = self.generator._guard_unverified_claim
-        anti_collapse_prefix_retry = self.generator._anti_collapse_prefix_retry
+        run_llm = self._run_llm
+        run_llm_stream = self._run_llm_stream
+        guard_tool_meta_leak = self._guard_tool_meta_leak
+        guard_unverified_claim = self._guard_unverified_claim
+        anti_collapse_prefix_retry = self._anti_collapse_prefix_retry
         waiting_after_s = self.waiting_after_s
         from core import llm_client, thinking
         from core.config_loader import get_config

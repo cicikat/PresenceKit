@@ -293,10 +293,13 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
     memory_messages: list[str] = []
 
     class FakePipeline:
+        effects = property(lambda self: self)
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         character = SimpleNamespace(name="Companion")
 
-        def _current_reality_scope(self, uid):
+        def reality_scope(self, uid):
             return SimpleNamespace(character_id=TEST_CHAR_ID)
 
         async def fetch(self, uid, message, **kwargs):

@@ -1,3 +1,4 @@
+from tests.fixtures.runtime_capabilities import read_registered_character
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_ui_endpoints.py — Dream UI read/settings endpoint contract tests
@@ -59,7 +60,7 @@ def test_state_get_is_readonly_no_file_writes(sandbox):
     pre = set(sandbox._base.rglob("*")) if sandbox._base.exists() else set()
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
-        result = asyncio.run(dream_state_get())
+        result = asyncio.run(dream_state_get(read_character=read_registered_character))
 
     post = set(sandbox._base.rglob("*")) if sandbox._base.exists() else set()
     new_files = {p for p in (post - pre) if p.is_file()}
@@ -85,7 +86,7 @@ def test_state_get_mood_state_unchanged(sandbox):
     assert not mood_path.exists(), "Precondition: mood_state.json should not exist"
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
-        asyncio.run(dream_state_get())
+        asyncio.run(dream_state_get(read_character=read_registered_character))
 
     assert not mood_path.exists(), "GET /dream/state must not touch mood_state.json"
 
@@ -105,7 +106,7 @@ def test_state_get_scheduler_files_unchanged(sandbox):
     assert not sandbox.scheduler_user_state().exists()
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
-        asyncio.run(dream_state_get())
+        asyncio.run(dream_state_get(read_character=read_registered_character))
 
     assert not sandbox.scheduler_cooldowns().exists(), "GET /dream/state must not touch scheduler_cooldowns.json"
     assert not sandbox.scheduler_user_state().exists(), "GET /dream/state must not touch scheduler_user_state.json"
@@ -120,7 +121,7 @@ def test_state_get_no_dream_returns_reality_chat(sandbox):
     from admin.routers.dream import dream_state_get
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
-        result = asyncio.run(dream_state_get())
+        result = asyncio.run(dream_state_get(read_character=read_registered_character))
 
     assert result["status"] == "REALITY_CHAT"
     assert result["dream_id"] is None
@@ -137,7 +138,7 @@ def test_state_get_unknown_char_id_is_character_unavailable(sandbox):
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(dream_state_get(char_id="ghost_char_xyz"))
+            asyncio.run(dream_state_get(char_id="ghost_char_xyz", read_character=read_registered_character))
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "character_unavailable"
 
@@ -166,7 +167,7 @@ def test_state_get_dream_active_returns_projected_body(sandbox):
     })
 
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        result = asyncio.run(dream_state_get())
+        result = asyncio.run(dream_state_get(read_character=read_registered_character))
 
     assert result["status"] == "DREAM_ACTIVE"
     assert result["dream_id"] == f"dream_{uid}_proj"
@@ -213,7 +214,7 @@ def test_state_get_scenario_exposes_safe_progress_observation_only(sandbox):
     })
 
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        result = asyncio.run(dream_state_get())
+        result = asyncio.run(dream_state_get(read_character=read_registered_character))
 
     scenario = result["scenario"]
     assert scenario["current_stage_id"] == "arrival"
@@ -242,7 +243,7 @@ def test_state_get_body_zero_when_no_body_state(sandbox):
     })
 
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        result = asyncio.run(dream_state_get())
+        result = asyncio.run(dream_state_get(read_character=read_registered_character))
 
     assert result["body"] == {"heat": 0.0, "sensitivity": 0.0, "tension": 0.0}
     assert result["char_tension"] == 0.0
@@ -259,7 +260,7 @@ def test_settings_get_returns_all_defaults(sandbox):
     from core.dream.dream_settings import _DEFAULTS
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
-        result = asyncio.run(dream_settings_get())
+        result = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
     for key in _DEFAULTS:
         assert key in result, f"Missing default field in GET /dream/settings: {key!r}"
@@ -268,7 +269,7 @@ def test_settings_get_returns_all_defaults(sandbox):
     from core.dream.dream_settings import save as _save
     _save(_UID, {"memory_access": "card_only"})
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
-        result2 = asyncio.run(dream_settings_get())
+        result2 = asyncio.run(dream_settings_get(read_character=read_registered_character))
     assert result2["memory_access"] == "card_only"
 
 
@@ -290,10 +291,10 @@ def test_settings_patch_write_and_reread_consistent(sandbox):
             "lucid_mode": "non_lucid",
             "scenario_injection_mode": "full_script",
             "enable_dream_lorebook": False,
-        }))
+        }, read_character=read_registered_character))
         assert resp["ok"]
 
-        reread = asyncio.run(dream_settings_get())
+        reread = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
     assert reread["memory_access"] == "card_only"
     assert reread["boundary_level"] == "numbers_visible"
@@ -314,8 +315,8 @@ def test_settings_patch_partial_update_only_changes_given_fields(sandbox):
     _save(uid, {"world_layer": "cat", "memory_access": "full_snapshot"})
 
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        asyncio.run(dream_settings_patch({"world_layer": "abo"}))
-        result = asyncio.run(dream_settings_get())
+        asyncio.run(dream_settings_patch({"world_layer": "abo"}, read_character=read_registered_character))
+        result = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
     assert result["world_layer"] == "abo"
     assert result["memory_access"] == "full_snapshot", (
@@ -332,10 +333,10 @@ def test_settings_patch_display_write_and_reread_consistent(sandbox):
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
         resp = asyncio.run(dream_settings_patch({
             "display": {"physiological_arousal": True},
-        }))
+        }, read_character=read_registered_character))
         assert resp["ok"]
 
-        reread = asyncio.run(dream_settings_get())
+        reread = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
     assert reread["display"] == {"physiological_arousal": True}
 
@@ -353,7 +354,7 @@ def test_settings_patch_invalid_display_rejected(sandbox, bad_display):
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID + "_display_invalid"):
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(dream_settings_patch({"display": bad_display}))
+            asyncio.run(dream_settings_patch({"display": bad_display}, read_character=read_registered_character))
 
     assert exc_info.value.status_code == 422
 
@@ -377,16 +378,16 @@ def test_settings_patch_invalid_enum_rejected(sandbox, field, bad_val):
     uid = _UID + "_inv"
 
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        before = asyncio.run(dream_settings_get())
+        before = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(dream_settings_patch({field: bad_val}))
+            asyncio.run(dream_settings_patch({field: bad_val}, read_character=read_registered_character))
 
         assert exc_info.value.status_code == 422, (
             f"Expected 422 for {field}={bad_val!r}, got {exc_info.value.status_code}"
         )
 
-        after = asyncio.run(dream_settings_get())
+        after = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
     assert after[field] == before[field], (
         f"PATCH with invalid {field}={bad_val!r} should not persist; "
@@ -402,13 +403,13 @@ def test_settings_patch_invalid_enable_lorebook_rejected(sandbox):
     uid = _UID + "_inv_bool"
 
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        before = asyncio.run(dream_settings_get())
+        before = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(dream_settings_patch({"enable_dream_lorebook": "yes"}))
+            asyncio.run(dream_settings_patch({"enable_dream_lorebook": "yes"}, read_character=read_registered_character))
 
         assert exc_info.value.status_code == 422
-        after = asyncio.run(dream_settings_get())
+        after = asyncio.run(dream_settings_get(read_character=read_registered_character))
 
     assert after["enable_dream_lorebook"] == before["enable_dream_lorebook"]
 
@@ -420,7 +421,7 @@ def test_settings_patch_empty_body_rejected(sandbox):
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(dream_settings_patch({"unknown_key": "foo"}))
+            asyncio.run(dream_settings_patch({"unknown_key": "foo"}, read_character=read_registered_character))
 
     assert exc_info.value.status_code == 422
 
@@ -455,7 +456,7 @@ def test_footgun_patch_world_layer_during_dream_not_backfilled(sandbox):
 
     # ── PATCH world_layer to abo while dream is active ──────────────────────
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        resp = asyncio.run(dream_settings_patch({"world_layer": "abo"}))
+        resp = asyncio.run(dream_settings_patch({"world_layer": "abo"}, read_character=read_registered_character))
     assert resp["ok"], "PATCH should succeed"
 
     # Assert: dream_state.frozen_world is still reality_derived (not backfilled)

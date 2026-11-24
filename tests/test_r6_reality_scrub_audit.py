@@ -106,12 +106,12 @@ def _make_pipeline(llm_reply: str = "回复", char_id: str = TEST_CHAR_ID):
     fake.character.name = "TestChar"
     fake.author_note_extra = ""
     fake._active_character_id = char_id
-    fake._current_reality_scope = MagicMock(
+    fake.character_state.reality_scope = MagicMock(
         return_value=MemoryScope.reality_scope("77777", char_id)
     )
     fake.context.fetch = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value=llm_reply)
+    fake.generation.run_llm = AsyncMock(return_value=llm_reply)
     # Brief 37: record_assistant_turn calls post_process_critical (awaited) then
     # post_process_slow (fire-and-forget after send) — both must exist.
     fake.effects.capture_critical = AsyncMock(
@@ -516,7 +516,7 @@ async def test_b4_turn_sink_memory_text_scrubbed(sandbox, monkeypatch):
         user_text="请回答",
         fanout=[],
         bypass_gate=True,
-        pipeline=fake_pipeline,
+        effects=fake_pipeline.effects,
         envelope=stamp_user_chat(),
     )
 

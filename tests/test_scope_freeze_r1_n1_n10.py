@@ -95,12 +95,12 @@ def _make_pipeline(char_id: str = "char_a", llm_reply: str = "回复"):
     fake.character.name = "测试角色"
     fake.author_note_extra = ""
     fake._active_character_id = char_id
-    fake._current_reality_scope = MagicMock(
+    fake.character_state.reality_scope = MagicMock(
         return_value=MemoryScope.reality_scope(_OWNER_ID, char_id)
     )
     fake.context.fetch = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value=llm_reply)
+    fake.generation.run_llm = AsyncMock(return_value=llm_reply)
     # Brief 37: record_assistant_turn now calls post_process_critical (awaited,
     # inside conversation_lock) then post_process_slow (fire-and-forget after
     # send). Both must exist on the fake or the create_task in turn_sink errors.

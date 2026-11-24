@@ -128,14 +128,16 @@ pipeline_registry.register()
 
 职责：
 
-- 角色卡与世界书热切换，prompt construction 与 LLM 输出治理的实际实现
+- 组合唯一 CharacterSession（角色、世界书、author note）和无状态 ReplyGeneration（LLM 输出治理）
+- prompt construction 的实际实现；不再拥有模型算法或重复角色状态
 - 创建并持有 RealityContextReader、ToolTurnRunner、TurnEffects 三个领域实例
 - 领域实现各自执行检索、工具回合、关键写入和发送后慢段；不经旧方法转发
 
-T3 保留 `pipeline_registry` 为 main 创建的唯一进程级运行实例引用，不新增任意 service key 或另一套状态。
-已有 HTTP、后台任务和工具的进程入口继续从这里取得同一实例；回合内通过 OwnerChatTurn / Stage view / turn_sink 显式传递。
-Slow handler 在 main 注册时注入该实例，avatar 投影从 TurnEffects 的实例引用读取当前角色，不再反查全局注册表。
-完整调用者清单与保留边界见 [T3 报告](refactors/migration-cutover-t3.md)。
+T3.1 保留 `pipeline_registry` 为 main 创建的唯一进程级运行实例引用，不新增任意 service key 或另一套状态。
+HTTP 角色读写依赖使用既有 FastAPI dependency_overrides 在 main 初始化时绑定；独立 Admin 无运行会话时仍报告不可用。
+后台和工具入口的暂存查找逐点审查；turn_sink 必须由调用者提供 effects，角色标识由显式 char_id / frozen_scope 传入。
+Slow handler 必须绑定角色读取和条件写入能力；avatar 只持有 CharacterSession 的活动角色判断能力。
+完整调用者清单与保留边界见 [T3.1 报告](refactors/migration-cutover-t3.1.md)。
 
 进程入口可通过 registry 取得同一运行实例；回合与领域实现显式注入依赖，不自行创建第二个运行实例。
 

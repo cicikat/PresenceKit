@@ -141,6 +141,7 @@ async def test_generate_private_skips_fetch_context():
     captured = {}
 
     class FakePipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         async def fetch(self, *a, **kw):
             raise AssertionError("private exchange must use the lightweight path")
@@ -187,6 +188,7 @@ async def test_generate_private_instruction_prefixed_for_continuation_and_opener
     captured = []
 
     class FakePipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         async def fetch(self, *a, **kw):
             raise AssertionError("private exchange must use the lightweight path")

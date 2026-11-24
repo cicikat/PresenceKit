@@ -37,17 +37,20 @@ def _get_scope_from_payload(payload: dict, handler_name: str) -> MemoryScope:
     return MemoryScope.reality_scope(str(uid), DEFAULT_CHAR_ID)
 
 
-async def _handler_consistency_check(payload: dict, *, runtime) -> None:
+async def _handler_consistency_check(payload: dict, *, read_character, write_author_note) -> None:
     from core import character_loader
-    pipeline = runtime
-    if pipeline is None:
+    char_id, character = read_character()
+    if payload["char_id"] != char_id:
+        logger.debug("[pipeline.consistency] discarded queued check for inactive character: %s", payload["char_id"])
         return
-    check_result = await character_loader.consistency_check(pipeline.character, payload["reply"])
+    check_result = await character_loader.consistency_check(character, payload["reply"])
     if not check_result.get("ok"):
         issue = check_result.get("issue", "")
         if issue:
-            pipeline.author_note_extra = issue
-            logger.info(f"[pipeline.consistency] 一致性问题，下轮追加纠偏: {issue}")
+            if write_author_note(char_id, issue):
+                logger.info(f"[pipeline.consistency] 一致性问题，下轮追加纠偏: {issue}")
+            else:
+                logger.debug("[pipeline.consistency] discarded stale character check: %s", char_id)
 
 
 async def _handler_user_profile_update(payload: dict) -> None:
@@ -91,8 +94,10 @@ async def _handler_trait_tracker_update(payload: dict) -> None:
     logger.info("[pipeline.trait_tracker] 更新完成: uid=%s char_id=%s", uid, char_id)
 
 
-def register_slow_handlers(runtime=None) -> None:
+def register_slow_handlers(*, read_character, write_author_note) -> None:
     """main.py 启动时调用一次，注册所有慢任务 handler。"""
+    if not callable(read_character) or not callable(write_author_note):
+        raise TypeError("slow handlers require read_character and write_author_note capabilities")
     from core.post_process import slow_queue
     from functools import partial
     from core.memory.fixation_pipeline import (
@@ -108,7 +113,7 @@ def register_slow_handlers(runtime=None) -> None:
     slow_queue.register_handler("reflect_to_episodic",      handler_reflect_to_episodic)
     slow_queue.register_handler("consolidate_to_identity",  handler_consolidate_to_identity)
     slow_queue.register_handler("storyline_evicted_input",  handler_storyline_evicted_input)
-    slow_queue.register_handler("consistency_check",       partial(_handler_consistency_check, runtime=runtime))
+    slow_queue.register_handler("consistency_check",       partial(_handler_consistency_check, read_character=read_character, write_author_note=write_author_note))
     slow_queue.register_handler("user_profile_update",     _handler_user_profile_update)
     from core.food_memory import process_pending as process_food_pending
 

@@ -1440,7 +1440,7 @@ async def test_anti_collapse_retry_strips_marker(monkeypatch):
         return "嗯。换了个说法{false}"
 
     monkeypatch.setattr("core.llm_client.chat", _retry)
-    result = await pipeline._anti_collapse_prefix_retry(
+    result = await pipeline.generation._anti_collapse_prefix_retry(
         [{"role": "assistant", "content": "嗯。历史", "_layer": "9_history"}],
         "嗯。原始回复{false}",
     )

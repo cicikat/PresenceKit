@@ -30,6 +30,8 @@ import pytest
 # ---------------------------------------------------------------------------
 
 class _FakePipeline:
+    effects = property(lambda self: self)
+    generation = property(lambda self: self)
     context = property(lambda self: self)
     def __init__(self, name: str = "default"):
         self.name = name

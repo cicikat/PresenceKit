@@ -149,7 +149,7 @@ class StageCharacterView:
                 lightweight,
                 debug.get("token_estimate"),
             )
-        return await self.pipeline.run_llm(messages, char_id=self.char_id)
+        return await self.pipeline.generation.run_llm(messages, char_id=self.char_id)
 
     async def generate_private(
         self,
@@ -207,7 +207,7 @@ class StageCharacterView:
             char_id=self.char_id,
             consume_pending_perception=False,
         )
-        reply = await self.pipeline.run_llm(messages, char_id=self.char_id)
+        reply = await self.pipeline.generation.run_llm(messages, char_id=self.char_id)
         return (reply or "").strip()
 
     async def generate_reaction(

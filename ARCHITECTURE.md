@@ -111,10 +111,12 @@ Intiface / Buttplug 硬件是 reality-side actuator：只有 owner 私聊中的�
 
 ## Pipeline 四步骤
 
-T3：`Pipeline` 保留角色/世界书生命周期、prompt 组装和模型生成的实际代码；
+T3.1：`Pipeline` 负责组合和 prompt 组装；角色/世界书与 author note 的唯一所有者为 `CharacterSession`，
+模型调用与输出治理实现位于 `ReplyGeneration`。
 `context`、`tools`、`effects` 分别为 RealityContextReader、ToolTurnRunner、TurnEffects 的实际领域实例。
-旧检索、工具回合和后处理转发方法已删除；慢队列注册与 handler 属于 `core/post_process/handlers.py`，由 main 显式注入运行实例。
-调用图、注册表保留理由与验证见 [T3 报告](docs/refactors/migration-cutover-t3.md)。
+旧检索、工具回合和后处理转发方法已删除；三个领域组件只接收必需的窄能力，均不持有 Pipeline。
+慢队列 handler 由 main 注入角色读取和条件写入能力，旧角色检查不能写入新角色。
+调用图、逐点注册表审查与验证见 [T3.1 报告](docs/refactors/migration-cutover-t3.1.md)。
 
 ```
 用户消息
@@ -351,13 +353,15 @@ data/
 
 ## 全局 Pipeline 实例管理
 
-`core/pipeline_registry.py` 持有唯一的 Pipeline 实例，供管理面板、后处理纠偏、调度器等跨模块获取。
+`core/pipeline_registry.py` 持有唯一的 Pipeline 实例。T3.1 已切断 HTTP 路由、QQ 通道和 turn_sink 的直接查找；
+调度等暂存调用点须与[精确审查清单](docs/refactors/t31-pipeline-registry-sites.json)一致。
+后处理纠偏在启动时显式绑定 CharacterSession 能力，不使用 registry。
 
 ```python
 # 注册（main.py 初始化时）
 pipeline_registry.register(pipeline)
 
-# 跨模块获取（admin/routers/chat.py、consistency_check handler、scheduler._pipeline_send）
+# 暂存的后台执行边界（如 scheduler._pipeline_send；须在逐点清单中）
 pipeline = pipeline_registry.get()
 ```
 

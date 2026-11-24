@@ -1,4 +1,5 @@
 """Dream common API responsibilities; legacy names re-exported by dream.py."""
+from functools import partial as _bind_character_reader
 
 from core import config_loader
 
@@ -25,32 +26,37 @@ def _owner_uid() -> str:
     return uid
 
 
-def _active_dream_char_id() -> str:
-    from core.pipeline_registry import get as _get_pipeline
+def _active_dream_char_id(
+    *, read_character,
+) -> str:
 
-    pl = _get_pipeline()
-    cid = str((getattr(pl, "_active_character_id", None) if pl else None) or "").strip()
+    pl = read_character()
+    cid = str((getattr(pl, "active_character_id", None) if pl else None) or "").strip()
     if cid:
         return resolve_requested_char_id(cid)
     from admin.routers._common import active_char_id
     return active_char_id()
 
 
-def _validated_live_char_id(char_id: object | None = None) -> str:
-    value = resolve_requested_char_id(char_id, fallback=_active_dream_char_id)
+def _validated_live_char_id(char_id: object | None = None,
+    *, read_character,
+) -> str:
+    value = resolve_requested_char_id(char_id, fallback=_bind_character_reader(_active_dream_char_id, read_character=read_character))
     if not _SAFE_DREAM_ID_RE.fullmatch(value):
         raise HTTPException(status_code=422, detail="char_id 不合法")
     return value
 
 
-def _validated_archive_char_id(char_id: object | None = None) -> str:
+def _validated_archive_char_id(char_id: object | None = None,
+    *, read_character,
+) -> str:
     """Archive buckets keep historical ids; live pages fail-loud instead."""
     requested = requested_char_id(char_id)
     if requested:
         if not _SAFE_DREAM_ID_RE.fullmatch(requested):
             raise HTTPException(status_code=422, detail="char_id 不合法")
         return requested
-    value = _active_dream_char_id()
+    value = _active_dream_char_id(read_character=read_character)
     if not _SAFE_DREAM_ID_RE.fullmatch(value):
         raise HTTPException(status_code=422, detail="char_id 不合法")
     return value

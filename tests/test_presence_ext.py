@@ -337,7 +337,7 @@ class TestRunAgenticLoopToolCategories:
         character = _FakeChar(presence_ext={"tool_categories_path_c": ["info", "mcp"]})
         monkeypatch.setattr("core.character_loader.load", lambda _char_id: character)
         pl = self._make_pipeline(character=character)
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 
@@ -371,7 +371,7 @@ class TestRunAgenticLoopToolCategories:
         async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 
@@ -402,7 +402,7 @@ class TestRunAgenticLoopToolCategories:
         async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 
@@ -434,7 +434,7 @@ class TestRunAgenticLoopToolCategories:
         async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 

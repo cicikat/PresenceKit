@@ -1,6 +1,7 @@
 """C1.1: legacy authored roots stay readable but never become writer targets."""
 
 from __future__ import annotations
+from tests.fixtures.runtime_capabilities import read_registered_character
 
 import asyncio
 import json
@@ -118,7 +119,7 @@ def test_legacy_dream_world_edit_materializes_package_and_delete_fails_loud(tmp_
     only_legacy = tmp_path / "characters" / "dream_worlds" / "read_only_world"
     only_legacy.mkdir()
     with pytest.raises(HTTPException, match="只读"):
-        _run(dream.delete_dream_world("read_only_world"))
+        _run(dream.delete_dream_world("read_only_world", read_character=read_registered_character))
     assert only_legacy.is_dir()
 
 

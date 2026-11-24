@@ -191,6 +191,8 @@ async def test_owner_chat_passes_frozen_character_to_non_stream_llm(monkeypatch)
     llm_char_ids = []
 
     class Pipeline:
+        effects = property(lambda self: self)
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         character = SimpleNamespace(name="Active")
 
@@ -329,6 +331,7 @@ async def test_context_failure_stops_sibling_probe_before_retry(monkeypatch):
     started = asyncio.Event()
     stopped = asyncio.Event()
     class Pipeline:
+        effects = property(lambda self: self)
         context = property(lambda self: self)
         character = SimpleNamespace(name="Scoped")
         async def fetch(self, *args, **kwargs):

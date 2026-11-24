@@ -118,7 +118,7 @@ async def send(
         return record_delivery_channel(uid,char_id,correlation_id,channel,status,reason)
     try:
         result = await record_assistant_turn(
-            pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
+            effects=pipeline.effects, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
             trigger_name="autonomy", char_id=char_id, bypass_gate=False,
             audit_extras={
                 "source": "autonomy",

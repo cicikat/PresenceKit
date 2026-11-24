@@ -71,6 +71,7 @@ def _block_dream_guard(monkeypatch, status="BLOCK_ACTIVE"):
 
 def _make_fake_pipeline(llm_fn=None):
     class _FakePipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         effects = property(lambda self: self)
         async def fetch(self, uid, content, *a, **kw):
@@ -288,6 +289,7 @@ async def test_duplicate_scheduler_event_no_llm_no_post_process(monkeypatch):
         return "reply"
 
     class _TrackingPipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         effects = property(lambda self: self)
         async def fetch(self, uid, content, *a, **kw):

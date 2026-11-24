@@ -50,17 +50,6 @@ class TurnResult:
     suppression_reason: str = ""
 
 
-def _require_pipeline(pipeline=None):
-    if pipeline is not None:
-        return pipeline
-    from core.pipeline_registry import get
-
-    resolved = get()
-    if resolved is None:
-        raise RuntimeError("Pipeline is not initialized")
-    return resolved
-
-
 def _validate_inputs(
     assistant_text: str,
     source: TurnSource,
@@ -248,7 +237,7 @@ async def record_assistant_turn(
     bypass_gate: bool = False,
     exclude_origin_channel: Optional[str] = None,
     durable_mobile_mirror: bool = True,
-    pipeline=None,
+    effects=None,
     envelope=None,
     audit_extras: Optional[dict] = None,
     # QQ metadata is passed to the effect owner (R1-D).
@@ -305,7 +294,8 @@ async def record_assistant_turn(
 
     source = TurnSource(source)
     _validate_inputs(assistant_text, source, trigger_name, user_text)
-    pipeline = _require_pipeline(pipeline)
+    if effects is None:
+        raise RuntimeError("Turn effects must be supplied by the caller")
 
     memory_input = user_text if source == TurnSource.USER_CHAT else (trigger_name or "")
     capture_trigger = "" if source == TurnSource.USER_CHAT else (trigger_name or "")
@@ -314,8 +304,6 @@ async def record_assistant_turn(
     artifacts = drain_turn_artifacts()
     if char_id is None and frozen_scope is not None:
         char_id = getattr(frozen_scope, "character_id", None)
-    if char_id is None:
-        char_id = getattr(pipeline, "_active_character_id", None) or None
 
     # Reality inlet pre-scrub (defense-in-depth): strip render markup then
     # action/narration content before passing to post_process.  This covers all
@@ -368,7 +356,7 @@ async def record_assistant_turn(
         # Brief 37: send 前只 await 落盘（post_process_critical），不再等
         # 认知评价等 LLM 往返。post_process_slow 在下面 fanout 完成后
         # 才用 create_task 调度，emotion/mood/slow_queue 全挪到 send 之后。
-        post_info = await pipeline.effects.capture_critical(
+        post_info = await effects.capture_critical(
             uid,
             memory_input,
             memory_text,
@@ -462,7 +450,7 @@ async def record_assistant_turn(
             else:
                 asyncio.create_task(call())
         _schedule_slow(
-            partial(pipeline.effects.run_deferred_effects,
+            partial(effects.run_deferred_effects,
                 uid,
                 memory_input,
                 memory_text,

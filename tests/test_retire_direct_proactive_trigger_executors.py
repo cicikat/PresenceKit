@@ -119,7 +119,7 @@ async def test_talk_owner_delivery_is_idempotent_per_correlation(sandbox, monkey
     from core.autonomy import talk_gate
 
     monkeypatch.setattr(talk_gate, "check", lambda *_args, **_kwargs: ("allow", "ok"))
-    monkeypatch.setattr("core.pipeline_registry.get", lambda: object())
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: SimpleNamespace(effects=object()))
     monkeypatch.setattr("channels.registry.get_active", lambda: [object()])
     monkeypatch.setattr("core.response_processor.strip_render_tags", lambda text: text)
     monkeypatch.setattr("core.reality_output_scrubber.scrub_reality_output_text", lambda text: text)

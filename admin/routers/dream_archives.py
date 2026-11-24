@@ -1,4 +1,5 @@
 """Dream archives API responsibilities; legacy names re-exported by dream.py."""
+from admin.character_dependencies import require_character_reader
 
 from admin.routers import dream_common
 from core import sandbox
@@ -126,9 +127,11 @@ async def dream_archive_list(
     limit: int = Query(default=20, ge=1, le=100),
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     """List archived solo Dream sessions without reading current_dream/tmp."""
-    selected_char = dream_common._validated_archive_char_id(char_id)
+    selected_char = dream_common._validated_archive_char_id(char_id, read_character=read_character)
     archive_dir = sandbox.get_paths().dreams_archive_dir(char_id=selected_char)
     files = []
     if archive_dir.is_dir():
@@ -167,9 +170,11 @@ async def dream_archive_detail(
     dream_id: str,
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     selected_id = dream_common._validated_dream_id(dream_id)
-    selected_char = dream_common._validated_archive_char_id(char_id)
+    selected_char = dream_common._validated_archive_char_id(char_id, read_character=read_character)
     path = _archive_path(selected_id, selected_char)
     if not path.is_file():
         try:

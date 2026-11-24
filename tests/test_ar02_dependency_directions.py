@@ -17,9 +17,17 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+T31_COMPONENT_MODULES = {
+    "core.memory.reality_context", "core.owner_chat.tool_loop",
+    "core.post_process.turn_effects", "core.post_process.handlers",
+    "core.owner_chat.reply_generation", "core.character_session", "core.turn_sink",
+}
 
 
 def forbidden_targets(module):
+    if module in T31_COMPONENT_MODULES:
+        existing = ("admin", "core.tool_dispatcher") if module in {"core.memory.reality_context", "core.post_process.turn_effects"} else ("admin.routers",)
+        return (*existing, "core.pipeline", "core.pipeline_registry")
     if module.startswith("core.tool_runtime.") or module.startswith("core.tools.") and module.endswith("_definitions"):
         return ("core.tool_dispatcher",)
     if module.startswith("core.owner_chat."):
@@ -112,6 +120,7 @@ def target_files():
         ROOT / "core/post_process/turn_effects.py",
         ROOT / "core/scheduler/loop.py",
         ROOT / "core/autonomy/runner.py",
+        *(ROOT / Path(*module.split(".")).with_suffix(".py") for module in T31_COMPONENT_MODULES),
     })
 
 
@@ -180,7 +189,7 @@ HTTP_HELPERS = {
 }
 
 
-def cutover_dependencies(source, module):
+def cutover_dependencies(source, module, *, registry_sites=None):
     """Return (rule, enclosing owner, target) per import/access, including repeats.
 
     Imports inside functions, aliases, relative imports, TYPE_CHECKING, literal
@@ -250,7 +259,7 @@ def cutover_dependencies(source, module):
                 value = resolve(node.value)
                 aliases.clear()
                 aliases.update(previous_aliases)
-                if value.startswith(("admin.routers.", "core.scheduler.loop", "core.activity.store", "core.activity.transcript")):
+                if value.startswith(("admin.routers.", "core.scheduler.loop", "core.activity.store", "core.activity.transcript", "core.pipeline_registry")):
                     for target in targets:
                         if isinstance(target, ast.Name):
                             bindings[target.id] = value
@@ -277,9 +286,22 @@ def cutover_dependencies(source, module):
         elif isinstance(node, ast.Attribute):
             record(resolve(node), owner, "access")
         elif isinstance(node, ast.Call):
+            if registry_sites is not None:
+                called = resolve(node.func)
+                if called in {"core.pipeline_registry.get", "core.pipeline_registry.register"}:
+                    registry_sites.append({"owner": owner, "operation": called.rsplit(".", 1)[1], "line": node.lineno})
+                elif (called in {"importlib.import_module", "__import__", "builtins.__import__", "sys.modules.get"}
+                      and resolve(node) == "core.pipeline_registry"):
+                    registry_sites.append({"owner": owner, "operation": "dynamic-load", "line": node.lineno})
+                elif called == "getattr" and node.args and resolve(node.args[0]) == "core.pipeline_registry" and (
+                    len(node.args) < 2 or not isinstance(node.args[1], ast.Constant)
+                ):
+                    registry_sites.append({"owner": owner, "operation": "dynamic-member", "line": node.lineno})
             if resolve(node.func) in {"getattr", "importlib.import_module", "__import__", "builtins.__import__", "sys.modules.get"}:
                 record(resolve(node), owner, "dynamic")
         elif isinstance(node, ast.Subscript) and resolve(node.value) == "sys.modules":
+            if registry_sites is not None and resolve(node) == "core.pipeline_registry":
+                registry_sites.append({"owner": owner, "operation": "dynamic-load", "line": node.lineno})
             record(resolve(node), owner, "dynamic")
         if module.startswith("core.scheduler."):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in ACTIVITY_API | MOVED_IDENTITY_IMPLEMENTATIONS:
@@ -307,6 +329,222 @@ def cutover_scan(root=ROOT):
             rows.append({"source": path.relative_to(root).as_posix(), "rule": rule,
                          "owner": owner, "target": target, "count": count})
     return rows
+
+
+def registry_scan(root=ROOT):
+    """Scan every Git-visible production Python file, including new files and entry scripts."""
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.py"],
+        cwd=root, capture_output=True, check=True,
+    ).stdout.decode("utf-8").split("\0")
+    rows = []
+    for name in sorted(set(listed) - {""}):
+        if name.startswith("tests/") or Path(name).name.startswith("test_"):
+            continue
+        path = root / name
+        if not path.is_file():
+            continue
+        sites = []
+        module = ".".join(Path(name).with_suffix("").parts)
+        cutover_dependencies(path.read_text(encoding="utf-8"), module, registry_sites=sites)
+        rows.extend({"source": name, **site} for site in sites)
+    return sorted(rows, key=lambda row: (row["source"], row["owner"], row["operation"], row["line"]))
+
+
+T31_CONSTRUCTOR_CAPABILITIES = {
+    "RealityContextReader": {"resolve_scope", "read_snapshot"},
+    "ToolTurnRunner": {"run_llm", "run_llm_stream", "guard_tool_meta_leak", "guard_unverified_claim", "anti_collapse_prefix_retry"},
+    "TurnEffects": {"resolve_scope", "is_active_character"},
+}
+REGISTRY_REVIEW = ROOT / "docs/refactors/t31-pipeline-registry-sites.json"
+
+
+def narrow_component_violations(source, module):
+    """Structural contracts in the identified narrow domain, not general Python data-flow proof."""
+    tree = ast.parse(source)
+    errors = []
+    if module not in T31_COMPONENT_MODULES:
+        return errors
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in {"pipeline", "runtime", "generator", "__self__", "__globals__", "__closure__"}:
+            errors.append((node.lineno, "whole runtime/back-reference"))
+        if isinstance(node, ast.Name) and node.id in {"pipeline", "runtime", "_pipeline"}:
+            errors.append((node.lineno, "whole runtime binding"))
+        if isinstance(node, ast.Call):
+            name = node.func.id if isinstance(node.func, ast.Name) else ""
+            if name in {"globals", "locals", "vars", "eval", "exec", "__import__"}:
+                errors.append((node.lineno, "namespace/dynamic access"))
+            if name == "getattr" and len(node.args) > 1 and isinstance(node.args[1], ast.Constant) and node.args[1].value in {
+                "pipeline", "runtime", "generator", "__self__", "__globals__", "__closure__",
+            }:
+                errors.append((node.lineno, "reflective runtime access"))
+        if isinstance(node, ast.ClassDef) and node.name in T31_CONSTRUCTOR_CAPABILITIES:
+            init = next(n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
+            if ([arg.arg for arg in init.args.args] != ["self"] or init.args.posonlyargs
+                or init.args.vararg or init.args.kwarg
+                or {arg.arg for arg in init.args.kwonlyargs} != T31_CONSTRUCTOR_CAPABILITIES[node.name]
+                or any(default is not None for default in init.args.kw_defaults)):
+                errors.append((init.lineno, "constructor must require only its narrow capabilities"))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {"register_slow_handlers", "_handler_consistency_check"}:
+            dependencies = {arg.arg for arg in node.args.kwonlyargs}
+            if dependencies != {"read_character", "write_author_note"} or any(default is not None for default in node.args.kw_defaults):
+                errors.append((node.lineno, "consistency dependencies must be required"))
+            for branch in ast.walk(node):
+                if isinstance(branch, ast.If) and any(isinstance(n, ast.Name) and n.id in dependencies for n in ast.walk(branch.test)):
+                    if any(isinstance(n, ast.Return) and (n.value is None or isinstance(n.value, ast.Constant) and n.value.value is None) for n in branch.body):
+                        errors.append((branch.lineno, "missing consistency dependency cannot silently return"))
+    return sorted(set(errors))
+
+
+def component_composition_violations(source):
+    tree = ast.parse(source)
+    aliases = {}
+    whole = {"self", "pipeline", "runtime", "_pipeline", "pl"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for item in node.names:
+                aliases[item.asname or item.name] = (node.module or "") + "." + item.name
+    def resolve(node):
+        if isinstance(node, ast.Name):
+            return aliases.get(node.id, node.id)
+        if isinstance(node, ast.Attribute):
+            return resolve(node.value) + "." + node.attr
+        return ""
+    changed = True
+    while changed:
+        before = set(whole)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                value = node.value
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                if isinstance(value, ast.Name) and value.id in whole or isinstance(value, ast.Call) and resolve(value.func).endswith("Pipeline"):
+                    whole.update(target.id for target in targets if isinstance(target, ast.Name))
+        changed = whole != before
+    captured = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            local = {arg.arg for arg in [*node.args.args, *node.args.kwonlyargs, *node.args.posonlyargs]}
+            if any(isinstance(child, ast.Name) and child.id in whole - local for statement in node.body for child in ast.walk(statement)):
+                captured.add(node.name)
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            value = node.value
+            if isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name) and value.value.id in whole:
+                captured.update(target.id for target in targets if isinstance(target, ast.Name))
+            if isinstance(value, ast.Lambda) and any(isinstance(child, ast.Name) and child.id in whole for child in ast.walk(value.body)):
+                captured.update(target.id for target in targets if isinstance(target, ast.Name))
+    errors = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or resolve(node.func).rsplit(".", 1)[-1] not in T31_CONSTRUCTOR_CAPABILITIES:
+            continue
+        if node.args:
+            errors.append((node.lineno, "positional whole-object dependency"))
+        for keyword in node.keywords:
+            value = keyword.value
+            if isinstance(value, ast.Name) and value.id in captured:
+                errors.append((node.lineno, "named capability captures whole Pipeline"))
+            if isinstance(value, ast.Name) and value.id in whole:
+                errors.append((node.lineno, "whole object disguised as capability"))
+            if isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name) and value.value.id in whole:
+                errors.append((node.lineno, "capability bound to whole Pipeline"))
+            for closure in ast.walk(value):
+                if isinstance(closure, ast.Lambda):
+                    local = {arg.arg for arg in [*closure.args.args, *closure.args.kwonlyargs]}
+                    if any(isinstance(n, ast.Name) and n.id in whole - local for n in ast.walk(closure.body)):
+                        errors.append((node.lineno, "closure captures whole Pipeline"))
+                if isinstance(closure, ast.Attribute) and closure.attr in {"pipeline", "runtime", "__self__", "__globals__", "__closure__"}:
+                    errors.append((node.lineno, "capability back-reference"))
+    return sorted(set(errors))
+
+
+def test_t31_domains_use_narrow_capabilities():
+    errors = {}
+    for module in T31_COMPONENT_MODULES:
+        path = ROOT / Path(*module.split(".")).with_suffix(".py")
+        violations = narrow_component_violations(path.read_text(encoding="utf-8"), module)
+        if violations:
+            errors[module] = violations
+    assert errors == {}, errors
+    pipeline = (ROOT / "core/pipeline.py").read_text(encoding="utf-8")
+    assert component_composition_violations(pipeline) == []
+
+
+@pytest.mark.parametrize("source", [
+    "class RealityContextReader:\n def __init__(self, runtime): self.runtime = runtime",
+    "class TurnEffects:\n def __init__(self, *, resolve_scope=None, is_active_character=None): pass",
+    "def read(): return holder.pipeline.character",
+    "def read(): return getattr(holder, '__self__')",
+    "def read(): return globals()['runtime']",
+    "def register_slow_handlers(*, read_character=None, write_author_note=None): pass",
+    "def _handler_consistency_check(payload, *, read_character, write_author_note):\n if read_character is None: return",
+])
+def test_t31_rejects_whole_runtime_and_optional_handler_dependencies(source):
+    assert narrow_component_violations(source, "core.memory.reality_context"), source
+
+
+@pytest.mark.parametrize("source", [
+    "from core.memory.reality_context import RealityContextReader as Reader\nx = Reader(runtime)",
+    "from core.memory.reality_context import RealityContextReader as Reader\nrenamed = pipeline\nx = Reader(resolve_scope=renamed)",
+    "x = TurnEffects(resolve_scope=self.scope, is_active_character=self.active)",
+    "x = TurnEffects(resolve_scope=lambda uid: pipeline.scope(uid))",
+    "x = TurnEffects(resolve_scope=holder.__self__)",
+    "def scope(uid): return pipeline.scope(uid)\nx = TurnEffects(resolve_scope=scope)",
+    "lookup = pipeline.scope\nx = TurnEffects(resolve_scope=lookup)",
+])
+def test_t31_rejects_disguised_runtime_composition(source):
+    assert component_composition_violations(source), source
+
+
+def test_t31_allows_required_narrow_capabilities():
+    source = "class RealityContextReader:\n def __init__(self, *, resolve_scope, read_snapshot):\n  self._resolve_scope = resolve_scope\n  self._read_snapshot = read_snapshot"
+    assert narrow_component_violations(source, "core.memory.reality_context") == []
+    assert component_composition_violations(
+        "x = RealityContextReader(resolve_scope=self.character_state.reality_scope, read_snapshot=self.character_state.context_snapshot)"
+    ) == []
+
+
+@pytest.mark.parametrize("source,operation", [
+    ("from core.pipeline_registry import get as lookup\ndef run(): return lookup()", "get"),
+    ("from core import pipeline_registry as registry\nlookup=registry.get\nlookup()", "get"),
+    ("def run():\n from core.pipeline_registry import register as bind\n bind(object())", "register"),
+    ("import core.pipeline_registry as r\ngetattr(r, 'get')()", "get"),
+    ("from importlib import import_module as load\nr=load('core.' + 'pipeline_registry')\nr.get()", "dynamic-load"),
+    ("import sys as s\nr=s.modules['core.pipeline_registry']\nr.get()", "dynamic-load"),
+    ("import core.pipeline_registry as r\ngetattr(r, name)()", "dynamic-member"),
+])
+def test_t31_registry_scan_tracks_local_aliases_and_recognizable_dynamic_access(source, operation):
+    sites = []
+    cutover_dependencies(source, "integrations.probe", registry_sites=sites)
+    assert any(row["operation"] == operation for row in sites), sites
+
+
+def test_t31_unrelated_get_and_register_are_not_registry_sites():
+    sites = []
+    cutover_dependencies("from channels import registry\nregistry.register(object())\nvalue = {}.get('key')", "channels.probe", registry_sites=sites)
+    assert sites == []
+
+
+def test_t31_registry_sites_match_individual_review():
+    document = json.loads(REGISTRY_REVIEW.read_text(encoding="utf-8"))
+    fields = ("source", "owner", "operation", "line")
+    approved = []
+    for row in document["retained"]:
+        assert row["decision"] == "retain"
+        assert all(isinstance(row[name], str) and row[name].strip() for name in (
+            "classification", "chain", "capability", "reason", "exit_condition",
+        ))
+        assert "*" not in row["source"] and "*" not in row["owner"]
+        approved.append({field: row[field] for field in fields})
+    sites = registry_scan()
+    assert sites == approved, "Unreviewed or stale registry call sites: " + repr(sites)
+    forbidden_scopes = {
+        ("core/scheduler/loop.py", "_char_name"),
+        ("core/dream/dream_pipeline.py", "enter_dream"),
+    }
+    forbidden_modules = T31_COMPONENT_MODULES | {"core.autonomy.runner"}
+    assert not [row for row in sites if row["source"].startswith(("admin/", "channels/"))
+                or ".".join(Path(row["source"]).with_suffix("").parts) in forbidden_modules
+                or (row["source"], row["owner"]) in forbidden_scopes], "Retired registry lookup cannot be restored"
 
 
 def test_migration_cutover_has_no_new_or_stale_dependency_debt():
@@ -578,6 +816,38 @@ def test_retired_t1_debt_cannot_be_restored_with_source_and_json(cutover_git_rep
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 1 and "T1 must remain zero" in result.stdout, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("source,gate", [
+    ("from core.pipeline_registry import get as lookup\ndef run(): return lookup()\n", "test_t31_registry_sites_match_individual_review"),
+    ("from core.memory.reality_context import RealityContextReader\nx = RealityContextReader(resolve_scope=lambda uid: pipeline.scope(uid))\n", "test_t31_domains_use_narrow_capabilities"),
+])
+def test_t31_actual_ci_assertion_rejects_fault_then_recovers(cutover_git_repository, source, gate):
+    """Invoke the same pytest gate CI collects, in a real isolated Git repository."""
+    root, _, _, _ = cutover_git_repository
+    (root / "docs/refactors/t31-pipeline-registry-sites.json").write_bytes(b'{"retained": []}')
+    for module in T31_COMPONENT_MODULES:
+        path = root / Path(*module.split(".")).with_suffix(".py")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"")
+    target = root / ("integrations/probe.py" if "registry" in gate else "core/pipeline.py")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(source.encode())
+    env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+    env.pop("PYTEST_ADDOPTS", None)
+    env.pop("PYTEST_PLUGINS", None)
+    command = [sys.executable, "-m", "pytest", "--noconftest", "-c", "pytest.ini", "-q",
+               "tests/test_ar02_dependency_directions.py::" + gate]
+    failed = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=30)
+    assert failed.returncode == 1 and "AssertionError" in failed.stdout, failed.stdout + failed.stderr
+    if "registry" in gate:
+        assert "Unreviewed or stale registry call sites" in failed.stdout
+        assert "integrations/probe.py" in failed.stdout
+    else:
+        assert "closure captures whole Pipeline" in failed.stdout
+    target.write_bytes(b"")
+    recovered = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=30)
+    assert recovered.returncode == 0, recovered.stdout + recovered.stderr
 
 
 @pytest.mark.parametrize("restore_source", [True, False])

@@ -251,6 +251,7 @@ async def test_topic_seed_block_assembles_activity_topic_and_moment(sandbox, mon
     captured = {}
 
     class FakePipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         async def fetch(self, uid, content, *, frozen_scope):
             raise AssertionError("topic seed must use the lightweight path")

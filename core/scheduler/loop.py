@@ -326,14 +326,10 @@ def _char_name() -> str:
     """角色显示名。始终从 pipeline_registry 的活跃 character card 取。
     pipeline 未注册或 character 属性缺失时 fail-loud（不读 config）。
     """
-    from core import pipeline_registry
-    pl = pipeline_registry.get()
-    if pl is not None:
-        char = getattr(pl, "character", None)
-        if char is not None:
-            name = getattr(char, "name", None)
-            if name:
-                return name
+    from core.character_name_provider import get_active_char_name
+    name = get_active_char_name()
+    if name and name != "(角色未加载)":
+        return name
     raise RuntimeError(
         "[scheduler] _char_name(): pipeline 未注册或 character 未加载；"
         "scheduler 触发器在 pipeline 初始化前不应运行"
@@ -520,7 +516,7 @@ async def _pipeline_send(
                 from core.memory.scope import MemoryScope
                 _frozen_scope = MemoryScope.reality_scope(oid, resolved_char_id)
             else:
-                _frozen_scope = _pipeline._current_reality_scope(oid)
+                _frozen_scope = _pipeline.character_state.reality_scope(oid)
         except (ValueError, RuntimeError) as _scope_err:
             logger.error(
                 "[scheduler._pipeline_send] scope freeze 失败，本次触发中止 trigger=%s: %s",
@@ -552,7 +548,7 @@ async def _pipeline_send(
             messages, _ = _pipeline.build_prompt(
                 oid, prompt, context, char_id=_frozen_scope.character_id
             )
-            reply = await _pipeline.run_llm(
+            reply = await _pipeline.generation.run_llm(
                 messages, is_proactive=True, char_id=_frozen_scope.character_id,
             )
             if reply:
@@ -596,7 +592,7 @@ async def _pipeline_send(
                         fanout=[] if output_mode == "return" else fanout,
                         payload={"behavior": resolved_behavior} if resolved_behavior else None,
                         bypass_gate=True,  # already inside conversation_lock
-                        pipeline=_pipeline,
+                        effects=_pipeline.effects,
                         envelope=_envelope,
                         audit_extras=_audit_extras,
                         frozen_scope=_frozen_scope,
@@ -799,7 +795,7 @@ async def _compose_trigger_reply(
                 from core.memory.scope import MemoryScope
                 _frozen_scope = MemoryScope.reality_scope(oid, resolved_char_id)
             else:
-                _frozen_scope = _pipeline._current_reality_scope(oid)
+                _frozen_scope = _pipeline.character_state.reality_scope(oid)
         except (ValueError, RuntimeError) as _scope_err:
             logger.error("[scheduler._compose_trigger_reply] scope freeze 失败: %s", _scope_err)
             return None
@@ -836,7 +832,7 @@ async def _compose_trigger_reply(
                     allowed_tool_names=allowed,
                 )
             else:
-                reply = await _pipeline.run_llm(
+                reply = await _pipeline.generation.run_llm(
                     messages, is_proactive=True, char_id=_frozen_scope.character_id,
                 )
         reply = (reply or "").strip()

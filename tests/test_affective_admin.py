@@ -64,13 +64,13 @@ async def test_avatar_push_is_expression_only_and_scoped(monkeypatch):
     async def push(action):
         actions.append(action)
     monkeypatch.setattr('core.tools.devices_definitions._push_desktop_action', push)
-    runtime = SimpleNamespace(_active_character_id="companion")
+    is_active_character = lambda char_id: char_id == "companion"
     state = {"current": "happy", "intensity": .6, "has_signal": True, "source_turn_id": "turn-a",
              "source_at": time.time(), "expires_at": time.time()+1800, "version": 12,
              "affect": {"dominant": "anger"}}
-    await _maybe_push_avatar_directive(state, "other", runtime=runtime)
+    await _maybe_push_avatar_directive(state, "other", is_active_character=is_active_character)
     assert actions == []
-    await _maybe_push_avatar_directive(state, "companion", runtime=runtime)
+    await _maybe_push_avatar_directive(state, "companion", is_active_character=is_active_character)
     action = actions[0]
     assert action["expression"] == "happy" and action["char_id"] == "companion"
     assert action["version"] == 12 and action["source_turn_id"] == "turn-a"

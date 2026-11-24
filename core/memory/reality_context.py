@@ -10,17 +10,24 @@ logger = logging.getLogger("core.pipeline")
 
 
 class RealityContextReader:
-    def __init__(self, runtime):
-        self.runtime = runtime
+    def __init__(self, *, resolve_scope, read_snapshot):
+        if not callable(resolve_scope) or not callable(read_snapshot):
+            raise TypeError("RealityContextReader requires scope and snapshot capabilities")
+        self._resolve_scope = resolve_scope
+        self._read_snapshot = read_snapshot
 
     async def fetch(self, user_id: str, content: str, group_id: str | None = None,
                     frozen_scope: MemoryScope | None = None, recall_policy: str = "seed",
                     query_free_fallback: bool = False) -> dict:
         """Read evidence against the ingress-frozen character and recall policy."""
-        scope = frozen_scope if frozen_scope is not None else self.runtime._current_reality_scope(user_id)
-        character = self.runtime.character
-        lore_engine = self.runtime.lore_engine
-        active_character_id = self.runtime._active_character_id
+        scope = frozen_scope if frozen_scope is not None else self._resolve_scope(user_id)
+        snapshot = self._read_snapshot()
+        from core.character_session import CharacterContextSnapshot
+        if not isinstance(snapshot, CharacterContextSnapshot):
+            raise TypeError("context reader requires a CharacterContextSnapshot")
+        character = snapshot.character
+        lore_engine = snapshot.lore_engine
+        active_character_id = snapshot.active_character_id
         uid = scope.uid
         char_id = scope.character_id
         assert char_id is not None

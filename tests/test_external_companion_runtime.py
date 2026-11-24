@@ -129,9 +129,10 @@ async def test_companion_service_freezes_context_and_disables_tools_and_fanout(
     calls: list[dict] = []
 
     class FakePipeline:
+        character_state = property(lambda self: self)
         character = SimpleNamespace(name="Fixture Companion")
 
-        def _current_reality_scope(self, uid):
+        def reality_scope(self, uid):
             return MemoryScope.reality_scope(uid, "fixture-character")
 
     async def fake_owner_turn(message, channel, **kwargs):

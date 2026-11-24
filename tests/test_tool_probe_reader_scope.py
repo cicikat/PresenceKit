@@ -33,18 +33,18 @@ def _make_pipeline(active_char_id: str, refresh_raises=None):
     fake._active_character_id = active_char_id
     fake.context.fetch = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value="回复")
+    fake.generation.run_llm = AsyncMock(return_value="回复")
     fake.post_process = AsyncMock(
         return_value={"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
     )
     if refresh_raises is not None:
         # _current_reality_scope calls _refresh_character_if_needed; mock it to raise
-        fake._current_reality_scope = MagicMock(side_effect=refresh_raises)
-        fake._refresh_character_if_needed = MagicMock(side_effect=refresh_raises)
+        fake.character_state.reality_scope = MagicMock(side_effect=refresh_raises)
+        fake.character_state.refresh = MagicMock(side_effect=refresh_raises)
     else:
-        fake._refresh_character_if_needed = MagicMock()
+        fake.character_state.refresh = MagicMock()
         # Return a proper MemoryScope so _char_id = _frozen_scope.character_id resolves
-        fake._current_reality_scope = MagicMock(
+        fake.character_state.reality_scope = MagicMock(
             side_effect=lambda uid: MemoryScope.reality_scope(str(uid), active_char_id)
         )
     return fake
@@ -224,7 +224,7 @@ async def test_probe_path_intact_for_valid_active(sandbox, monkeypatch):
 
     await _main.handle_message(_MSG)
 
-    fake.run_llm.assert_called_once()
+    fake.generation.run_llm.assert_called_once()
 
 
 @pytest.fixture(autouse=True)

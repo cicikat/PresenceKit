@@ -21,7 +21,7 @@ def _make_pipeline():
     pipeline.character = MagicMock()
     pipeline.character.name = "TestChar"
     pipeline.character.presence_ext = {}
-    pipeline._current_reality_scope.return_value = MemoryScope.reality_scope(_USER_ID, "test_char")
+    pipeline.character_state.reality_scope.return_value = MemoryScope.reality_scope(_USER_ID, "test_char")
     pipeline.context.fetch = AsyncMock(return_value={})
     pipeline.build_prompt.return_value = ([{"role": "user", "content": "现在几点"}], {"pending_paths": []})
     pipeline.tools.run = AsyncMock(return_value="自然语言回复")

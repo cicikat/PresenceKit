@@ -141,7 +141,7 @@ def test_current_reality_scope_uid_equals_user_id(chars_tree, sandbox, registry)
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     _write_active(sandbox, TEST_CHAR_ID)
 
-    scope = pipeline._current_reality_scope("u42")
+    scope = pipeline.character_state.reality_scope("u42")
 
     assert scope.uid == "u42", f"scope.uid must equal user_id, got {scope.uid!r}"
 
@@ -152,7 +152,7 @@ def test_current_reality_scope_character_id_equals_active(chars_tree, sandbox, r
     pipeline = _make_pipeline("character_b", registry)
     _write_active(sandbox, "character_b")
 
-    scope = pipeline._current_reality_scope("u1")
+    scope = pipeline.character_state.reality_scope("u1")
 
     assert scope.character_id == "character_b", (
         f"scope.character_id must equal active char, got {scope.character_id!r}"
@@ -165,7 +165,7 @@ def test_current_reality_scope_domain_is_reality(chars_tree, sandbox, registry):
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     _write_active(sandbox, TEST_CHAR_ID)
 
-    scope = pipeline._current_reality_scope("u1")
+    scope = pipeline.character_state.reality_scope("u1")
 
     assert scope.domain == "reality", f"scope.domain must be 'reality', got {scope.domain!r}"
 
@@ -181,7 +181,7 @@ def test_current_reality_scope_raises_on_invalid_active(chars_tree, sandbox, reg
     )
 
     with pytest.raises((ValueError, RuntimeError)):
-        pipeline._current_reality_scope("u1")
+        pipeline.character_state.reality_scope("u1")
 
 
 # ── 5. fetch_context stores receive scope.character_id ────────────────────────

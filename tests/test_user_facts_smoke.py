@@ -405,7 +405,7 @@ class TestPipelineFetchContext:
 
         # Stub _current_reality_scope to bypass active_prompt_assets.json
         scope = MemoryScope.reality_scope(OWNER_UID, char_id)
-        pipeline._current_reality_scope = mock.MagicMock(return_value=scope)
+        pipeline.context._resolve_scope = mock.MagicMock(return_value=scope)
 
         return pipeline
 

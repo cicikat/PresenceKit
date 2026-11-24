@@ -152,7 +152,7 @@ async def test_fanout_channel_preserves_action_text(monkeypatch):
         source=TurnSource.USER_CHAT,
         user_text="在吗",
         fanout="qq",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -179,7 +179,7 @@ async def test_fanout_channel_strips_render_tags_not_bracket_actions(monkeypatch
         source=TurnSource.TRIGGER,
         trigger_name="scheduler_test",
         fanout="mobile",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -207,7 +207,7 @@ async def test_fanout_render_tags_stripped(enabled_client_channels):
         source=TurnSource.USER_CHAT,
         user_text="在吗",
         fanout="mobile",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -470,7 +470,7 @@ async def test_qq_fanout_strips_tags_keeps_bracket_actions():
         source=TurnSource.USER_CHAT,
         user_text="别欺负我",
         fanout="qq",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -525,7 +525,7 @@ async def test_all_action_reply_visible_kept_memory_skipped(enabled_client_chann
         source=TurnSource.USER_CHAT,
         user_text="在吗",
         fanout="mobile",
-        pipeline=pl,
+        effects=pl.effects,
     )
 
     # Visible output was delivered (channel received something)

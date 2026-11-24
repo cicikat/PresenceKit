@@ -100,7 +100,8 @@ def test_handler_registered_in_slow_queue(monkeypatch):
     monkeypatch.setattr("core.memory.fixation_pipeline.handler_consolidate_to_identity", _stub, raising=False)
 
     from core.post_process.handlers import register_slow_handlers
-    register_slow_handlers()
+    register_slow_handlers(read_character=lambda: (TEST_CHAR_ID, None),
+                           write_author_note=lambda char_id, issue: True)
 
     assert "trait_tracker_update" in sq._handlers, (
         "trait_tracker_update must be registered after register_slow_handlers()"

@@ -10,6 +10,7 @@ Covers:
   ⑥ GET /dream/state exposes flow_entries + char_tension
   ⑦ GET /dream/state with no active dream → flow_entries == []
 """
+from tests.fixtures.runtime_capabilities import read_registered_character
 
 import asyncio
 from unittest.mock import patch
@@ -162,7 +163,7 @@ def test_state_get_exposes_flow_entries_and_char_tension(sandbox):
     })
 
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
-        result = asyncio.run(dream_state_get())
+        result = asyncio.run(dream_state_get(read_character=read_registered_character))
 
     assert result["flow_entries"] == [
         {"ts": "2026-01-01T00:00:00+00:00", "kind": "status_shift", "summary": "梦境正在成形"},
@@ -179,6 +180,6 @@ def test_state_get_no_dream_flow_entries_empty(sandbox):
     from admin.routers.dream import dream_state_get
 
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID + "_none"):
-        result = asyncio.run(dream_state_get())
+        result = asyncio.run(dream_state_get(read_character=read_registered_character))
 
     assert result["flow_entries"] == []

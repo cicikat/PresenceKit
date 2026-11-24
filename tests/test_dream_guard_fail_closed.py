@@ -192,6 +192,7 @@ async def test_desktop_wake_path_b_blocked_when_dream_active(sandbox, monkeypatc
     pipeline_reached = []
 
     class _FakePipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         async def fetch(self, *a, **kw):
             pipeline_reached.append("fetch_context")
@@ -228,6 +229,7 @@ async def test_desktop_wake_path_b_blocked_when_corrupt(sandbox, monkeypatch):
     pipeline_reached = []
 
     class _FakePipeline:
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         async def fetch(self, *a, **kw):
             pipeline_reached.append("fetch_context")

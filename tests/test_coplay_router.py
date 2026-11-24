@@ -1,3 +1,4 @@
+from tests.fixtures.runtime_capabilities import read_registered_character
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_router.py — Brief 54-A：coplay 启用链路修缮的 router 测试。
@@ -59,14 +60,14 @@ def _coplay_cfg_section():
 
 @pytest.mark.asyncio
 async def test_state_get_reports_enabled_true(sandbox, _coplay_cfg_section):
-    result = await coplay_router.coplay_state_get(_auth="dummy")
+    result = await coplay_router.coplay_state_get(_auth="dummy", read_character=read_registered_character)
     assert result["enabled"] is True
 
 
 @pytest.mark.asyncio
 async def test_state_get_reports_enabled_false(sandbox, _coplay_cfg_section):
     _coplay_cfg_section["enabled"] = False
-    result = await coplay_router.coplay_state_get(_auth="dummy")
+    result = await coplay_router.coplay_state_get(_auth="dummy", read_character=read_registered_character)
     assert result["enabled"] is False
 
 
@@ -78,7 +79,7 @@ async def test_state_get_enabled_defaults_true_when_key_absent(sandbox):
     cfg = cl.get_config()
     original = cfg.pop("coplay", None)
     try:
-        result = await coplay_router.coplay_state_get(_auth="dummy")
+        result = await coplay_router.coplay_state_get(_auth="dummy", read_character=read_registered_character)
         assert result["enabled"] is True
     finally:
         if original is not None:
@@ -87,7 +88,7 @@ async def test_state_get_enabled_defaults_true_when_key_absent(sandbox):
 
 @pytest.mark.asyncio
 async def test_state_get_last_probe_none_before_any_tick(sandbox, _coplay_cfg_section):
-    result = await coplay_router.coplay_state_get(_auth="dummy")
+    result = await coplay_router.coplay_state_get(_auth="dummy", read_character=read_registered_character)
     assert result["last_probe"] is None
 
 
@@ -99,7 +100,7 @@ async def test_state_get_last_probe_reflects_watcher_tick(sandbox, _coplay_cfg_s
          patch.object(watcher, "_maybe_launch_pet"):
         await watcher.tick(UID, char_id=CHAR)
 
-    result = await coplay_router.coplay_state_get(_auth="dummy")
+    result = await coplay_router.coplay_state_get(_auth="dummy", read_character=read_registered_character)
     assert result["last_probe"] is not None
     assert result["last_probe"]["running_app_id"] == "42"
     assert result["last_probe"]["matched_process"] is None
@@ -111,7 +112,7 @@ async def test_arm_returns_409_when_deployment_disabled(sandbox, _coplay_cfg_sec
     _coplay_cfg_section["enabled"] = False
 
     with pytest.raises(Exception) as exc_info:
-        await coplay_router.coplay_arm(_auth="dummy")
+        await coplay_router.coplay_arm(_auth="dummy", read_character=read_registered_character)
 
     # FastAPI HTTPException
     assert getattr(exc_info.value, "status_code", None) == 409
@@ -121,7 +122,7 @@ async def test_arm_returns_409_when_deployment_disabled(sandbox, _coplay_cfg_sec
 
 @pytest.mark.asyncio
 async def test_arm_succeeds_when_enabled_true(sandbox, _coplay_cfg_section):
-    result = await coplay_router.coplay_arm(_auth="dummy")
+    result = await coplay_router.coplay_arm(_auth="dummy", read_character=read_registered_character)
     assert result == {"ok": True, "status": session.CoplayStatus.ARMED.value}
     assert session.read_state(UID, char_id=CHAR)["status"] == session.CoplayStatus.ARMED.value
 
@@ -134,7 +135,7 @@ async def test_arm_succeeds_when_coplay_key_absent(sandbox):
     cfg = cl.get_config()
     original = cfg.pop("coplay", None)
     try:
-        result = await coplay_router.coplay_arm(_auth="dummy")
+        result = await coplay_router.coplay_arm(_auth="dummy", read_character=read_registered_character)
         assert result["ok"] is True
     finally:
         if original is not None:

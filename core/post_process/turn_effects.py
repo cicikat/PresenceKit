@@ -50,13 +50,12 @@ def _detect_dream_echo(user_id: str, char_id: str, content: str, reply: str) -> 
         return False
 
 
-async def _maybe_push_avatar_directive(mood_state: dict, char_id: str, *, runtime) -> None:
+async def _maybe_push_avatar_directive(mood_state: dict, char_id: str, *, is_active_character) -> None:
     """Phase A v8: push avatar_directive to desktop client when mood changes."""
     import time as _t
     try:
         from core.tools.devices_definitions import _push_desktop_action
-        active = runtime
-        if active is not None and getattr(active, "_active_character_id", "") != char_id:
+        if not is_active_character(char_id):
             return
         emotion = mood_state.get("current", "")
         if not emotion or not mood_state.get("has_signal"):
@@ -117,8 +116,11 @@ async def _send_tts(text: str, target_id: str, is_group: bool, emotion: str = "n
 
 
 class TurnEffects:
-    def __init__(self, runtime):
-        self.runtime = runtime
+    def __init__(self, *, resolve_scope, is_active_character):
+        if not callable(resolve_scope) or not callable(is_active_character):
+            raise TypeError("TurnEffects requires scope and active-character capabilities")
+        self._resolve_scope = resolve_scope
+        self._is_active_character = is_active_character
 
     async def capture_critical(
         self,
@@ -171,7 +173,7 @@ class TurnEffects:
         if frozen_scope is not None:
             scope = frozen_scope
         else:
-            scope = self.runtime._current_reality_scope(user_id)
+            scope = self._resolve_scope(user_id)
         char_id = scope.character_id
         assert char_id is not None
         scope_payload = scope.to_payload()
@@ -435,7 +437,7 @@ class TurnEffects:
             # Phase A v8: push avatar directive (fail-open, outside locks)
             if (_mood_state_after is not None and _mood_state_after.get("has_signal")
                     and _mood_state_after.get("source_turn_id") == str(_turn_id)):
-                asyncio.create_task(_maybe_push_avatar_directive(_mood_state_after, char_id, runtime=self.runtime))
+                asyncio.create_task(_maybe_push_avatar_directive(_mood_state_after, char_id, is_active_character=self._is_active_character))
             # 爱意探针 → 板子爱心（非阻塞、锁外、fail-open）；梦境/沙盒等场景不触发实体爱心。
             if envelope.can_affect_mood:
                 from core.embodiment.heart import maybe_draw_heart as _maybe_heart
@@ -515,6 +517,7 @@ class TurnEffects:
             slow_queue.enqueue("summarize_to_midterm", _mt_payload)
         slow_queue.enqueue("consistency_check", {
             "reply": reply,
+            "char_id": char_id,
         })
         if envelope.can_write_memory and _should_update_profile:
             slow_queue.enqueue("user_profile_update", {

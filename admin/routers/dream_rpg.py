@@ -1,6 +1,7 @@
 """Read-only contracts for the backend-only RPG Dream foundation."""
 
 from __future__ import annotations
+from admin.character_dependencies import require_character_reader
 
 import time
 
@@ -75,26 +76,29 @@ def _uid() -> str:
     return str(get_config().get("scheduler", {}).get("owner_id", "owner"))
 
 
-def _char_id() -> str:
-    from core.pipeline_registry import get as get_pipeline
-    pipeline = get_pipeline()
-    return str((getattr(pipeline, "_active_character_id", None) if pipeline else None) or DEFAULT_CHAR_ID)
+def _char_id(
+    *, read_character,
+) -> str:
+    pipeline = read_character()
+    return str((getattr(pipeline, "active_character_id", None) if pipeline else None) or DEFAULT_CHAR_ID)
 
 
-def _current():
+def _current(
+    *, read_character,
+):
     from core.dream.dream_state import read_state
     from core.dream.rpg_store import load, projection
     state = read_state(_uid())
     dream_id = str(state.get("dream_id") or "")
     if state.get("dream_mode") != "rpg" or not dream_id:
         return None
-    core, health = load(_uid(), dream_id, char_id=str(state.get("char_id") or _char_id()))
+    core, health = load(_uid(), dream_id, char_id=str(state.get("char_id") or _char_id(read_character=read_character)))
     if core is None:
         # Do not manufacture a resumable core from a partial write. This is a
         # content-free error projection only; normal Dream Guard remains closed.
         return {
             "dream_id": dream_id,
-            "char_id": str(state.get("char_id") or _char_id()),
+            "char_id": str(state.get("char_id") or _char_id(read_character=read_character)),
             "script_id": (state.get("rpg_session") or {}).get("script_id"),
             "status": "uncertain",
             "round_status": "unknown",
@@ -122,8 +126,10 @@ async def dream_capabilities(_auth=Depends(require_scopes("activity"))):
 
 
 @router.get("/dream/rpg/state", response_model=RpgStateResponse, summary="RPG Dream safe session state")
-async def rpg_state(_auth=Depends(require_scopes("activity"))):
-    session = _current()
+async def rpg_state(_auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
+    session = _current(read_character=read_character)
     scene = {}
     if session:
         try:
@@ -137,8 +143,10 @@ async def rpg_state(_auth=Depends(require_scopes("activity"))):
 
 
 @router.post("/dream/rpg/turn", response_model=RpgTurnResponse, summary="Run one RPG Dream round")
-async def rpg_turn(body: RpgTurnRequest, _auth=Depends(require_scopes("activity"))):
-    state = _current()
+async def rpg_turn(body: RpgTurnRequest, _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
+    state = _current(read_character=read_character)
     if state is None:
         raise _kernel_http(type("E", (), {"code": "RPG_NOT_ACTIVE"})())
     if body.dream_id != state["dream_id"]:
@@ -153,8 +161,10 @@ async def rpg_turn(body: RpgTurnRequest, _auth=Depends(require_scopes("activity"
 
 
 @router.get("/dream/rpg/transcript", response_model=RpgTranscriptResponse, summary="Read RPG Dream transcript")
-async def rpg_transcript(dream_id: str, before: str | None = Query(default=None, max_length=160), limit: int = Query(default=50, ge=1, le=200), _auth=Depends(require_scopes("activity"))):
-    state = _current()
+async def rpg_transcript(dream_id: str, before: str | None = Query(default=None, max_length=160), limit: int = Query(default=50, ge=1, le=200), _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
+    state = _current(read_character=read_character)
     if state is None:
         raise _kernel_http(type("E", (), {"code": "RPG_NOT_ACTIVE"})())
     if dream_id != state["dream_id"]:
@@ -169,8 +179,10 @@ async def rpg_transcript(dream_id: str, before: str | None = Query(default=None,
 
 
 @router.post("/dream/rpg/corrections", response_model=RpgCorrectionResponse, summary="Apply an RPG correction")
-async def rpg_correction(body: RpgCorrectionRequest, _auth=Depends(require_scopes("activity"))):
-    state = _current()
+async def rpg_correction(body: RpgCorrectionRequest, _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
+    state = _current(read_character=read_character)
     if state is None:
         raise _kernel_http(type("E", (), {"code": "RPG_NOT_ACTIVE"})())
     if body.dream_id != state["dream_id"]:
@@ -197,12 +209,14 @@ async def rpg_correction(body: RpgCorrectionRequest, _auth=Depends(require_scope
     response_model=RpgObservabilityResponse,
     summary="RPG Dream content-free observability",
 )
-async def rpg_observability(_auth=Depends(require_scopes("state.read"))):
+async def rpg_observability(_auth=Depends(require_scopes("state.read")),
+    *, read_character=Depends(require_character_reader),
+):
     from core.dream.dream_state import read_state
     from core.dream.rpg_store import load, observability
     state = read_state(_uid())
     dream_id = str(state.get("dream_id") or "")
     if state.get("dream_mode") != "rpg" or not dream_id:
         return RpgObservabilityResponse(**observability(None, health="missing", recovery_source="no_active_rpg_state"))
-    core, health = load(_uid(), dream_id, char_id=str(state.get("char_id") or _char_id()))
+    core, health = load(_uid(), dream_id, char_id=str(state.get("char_id") or _char_id(read_character=read_character)))
     return RpgObservabilityResponse(**observability(core, health=health, recovery_source="disk"))

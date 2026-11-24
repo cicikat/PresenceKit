@@ -92,10 +92,13 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
         name = "Companion"
 
     class _Pipeline:
+        effects = property(lambda self: self)
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         character = _Character()
 
-        def _current_reality_scope(self, _uid):
+        def reality_scope(self, _uid):
             return SimpleNamespace(character_id="companion")
 
         async def fetch(self, *_args, **_kwargs):
@@ -232,13 +235,15 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
         name = "Companion"
 
     class _Pipeline:
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
         context = property(lambda self: self)
         effects = property(lambda self: self)
         tools = property(lambda self: self)
         character = _Character()
         _active_character_id = "companion"
 
-        def _current_reality_scope(self, uid):
+        def reality_scope(self, uid):
             return MemoryScope.reality_scope(uid, "companion")
 
         async def fetch(self, *_args, **_kwargs):
@@ -266,8 +271,8 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
             if stream:
                 if empty_reply == "__buffered_failure__" and not failed_generation:
                     return next_reply()
-                return self.run_llm_stream(_messages)
-            return await self.run_llm(_messages)
+                return self.generation.run_llm_stream(_messages)
+            return await self.generation.run_llm(_messages)
 
         async def capture_critical(self, uid, content, reply, **kwargs):
             # Bind against the production method instead of accepting arbitrary

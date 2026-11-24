@@ -113,7 +113,7 @@ async def test_qq_fanout_strips_say_tags():
         source=TurnSource.USER_CHAT,
         user_text="hello",
         fanout="qq",
-        pipeline=_CapturePipeline(),
+        effects=_CapturePipeline().effects,
     )
 
     assert len(qq_ch.sent) == 1
@@ -140,7 +140,7 @@ async def test_mobile_fanout_strips_say_tags(enabled_client_channels):
         source=TurnSource.TRIGGER,
         trigger_name="morning_greeting",
         fanout="mobile",
-        pipeline=_CapturePipeline(),
+        effects=_CapturePipeline().effects,
     )
 
     assert len(mobile_ch.sent) == 1
@@ -165,7 +165,7 @@ async def test_memory_text_stripped_of_say_tags():
         source=TurnSource.USER_CHAT,
         user_text="test",
         fanout=[],
-        pipeline=pipeline,
+        effects=pipeline.effects,
     )
 
     assert pipeline.captured_reply is not None
@@ -187,7 +187,7 @@ async def test_memory_text_stripped_of_multiple_tags():
         source=TurnSource.USER_CHAT,
         user_text="test",
         fanout=[],
-        pipeline=pipeline,
+        effects=pipeline.effects,
     )
 
     reply = pipeline.captured_reply
@@ -214,7 +214,7 @@ async def test_desktop_fanout_receives_scrubbed_text(desktop_wire):
         source=TurnSource.USER_CHAT,
         user_text="hello",
         fanout="desktop",
-        pipeline=_CapturePipeline(),
+        effects=_CapturePipeline().effects,
     )
 
     push_msg_calls = [frame for frame in desktop_wire if frame["type"] == "channel_message"]
@@ -240,7 +240,7 @@ async def test_desktop_message_segments_say_only(desktop_wire):
         source=TurnSource.USER_CHAT,
         user_text="hello",
         fanout="desktop",
-        pipeline=_CapturePipeline(),
+        effects=_CapturePipeline().effects,
     )
 
     push_seg_calls = [frame for frame in desktop_wire if frame["type"] == "message_segments"]
@@ -276,7 +276,7 @@ async def test_plain_text_memory_unchanged():
         source=TurnSource.USER_CHAT,
         user_text="hi",
         fanout=[],
-        pipeline=pipeline,
+        effects=pipeline.effects,
     )
 
     # Scrubber is a no-op for plain dialogue — content unchanged
@@ -298,7 +298,7 @@ async def test_plain_text_qq_fanout_unchanged():
         source=TurnSource.USER_CHAT,
         user_text="hi",
         fanout="qq",
-        pipeline=_CapturePipeline(),
+        effects=_CapturePipeline().effects,
     )
 
     assert qq_ch.sent[0] == raw
