@@ -166,7 +166,7 @@ def test_scenario_a_yexuan_content_not_in_character_b_context(
     _write_active(sandbox, "character_b")
     _apply_fetch_stubs(monkeypatch)
     pipeline = _make_pipeline("character_b", registry)
-    ctx = asyncio.run(pipeline.fetch_context(user_id=uid, content="你好"))
+    ctx = asyncio.run(pipeline.context.fetch(user_id=uid, content="你好"))
 
     # Step 3: Verify no contamination
     hist_text = " ".join(m.get("content", "") for m in ctx["history"])
@@ -241,7 +241,7 @@ def test_scenario_b_character_b_content_not_in_yexuan_context(
     _write_active(sandbox, TEST_CHAR_ID)
     _apply_fetch_stubs(monkeypatch)
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
-    ctx = asyncio.run(pipeline.fetch_context(user_id=uid, content="你好"))
+    ctx = asyncio.run(pipeline.context.fetch(user_id=uid, content="你好"))
 
     # Step 3: Verify no contamination
     hist_text = " ".join(m.get("content", "") for m in ctx["history"])
@@ -604,7 +604,8 @@ async def test_fail_loud_missing_active_blocks_all_writes(
          patch.object(_el, "append", side_effect=lambda *a, **kw: el_calls.append((a, kw)) or True), \
          patch.object(sq, "enqueue", side_effect=lambda *a, **kw: sq_calls.append((a, kw))):
         with pytest.raises((ValueError, RuntimeError)):
-            await pipeline.post_process("u_ghost", "你好", "在的", envelope=env)
+            _critical_result = await pipeline.effects.capture_critical('u_ghost', '你好', '在的', envelope=env)
+            await pipeline.effects.run_deferred_effects('u_ghost', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     assert st_calls == [], f"short_term.append 不应被调用，实际: {st_calls}"
     assert el_calls == [], f"event_log.append 不应被调用，实际: {el_calls}"
@@ -636,7 +637,7 @@ async def test_fail_loud_empty_active_blocks_fetch_context(
     monkeypatch.setattr(_st, "load_for_prompt", _spy)
 
     with pytest.raises(ValueError, match="active_character"):
-        await pipeline.fetch_context(user_id="u_empty", content="hello")
+        await pipeline.context.fetch(user_id="u_empty", content="hello")
 
     assert load_calls == [], (
         "short_term.load_for_prompt 不应被调用 (active_character 为空)"
@@ -665,6 +666,7 @@ async def test_fail_loud_missing_active_no_mood_update(
 
     with patch.object(_ms, "update", side_effect=lambda *a, **kw: mood_calls.append((a, kw))):
         with pytest.raises((ValueError, RuntimeError)):
-            await pipeline.post_process("u_ghost2", "你好", "在的", envelope=env)
+            _critical_result = await pipeline.effects.capture_critical('u_ghost2', '你好', '在的', envelope=env)
+            await pipeline.effects.run_deferred_effects('u_ghost2', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     assert mood_calls == [], f"mood_state.update 不应被调用，实际: {mood_calls}"

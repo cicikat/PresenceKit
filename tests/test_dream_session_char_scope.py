@@ -129,6 +129,8 @@ def test_admin_dream_enter_passes_active_char_id(sandbox, chars_tree, monkeypatc
         from admin.routers.dream import router
         app = FastAPI()
         app.include_router(router)
+        from tests.fixtures.runtime_capabilities import bind_character_http
+        bind_character_http(app)
         for route in router.routes:
             for dep in route.dependant.dependencies:
                 if hasattr(dep.call, "_required_scopes"):

@@ -1,3 +1,4 @@
+from tests.fixtures.runtime_capabilities import read_registered_character
 from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 import asyncio
 import json
@@ -21,7 +22,7 @@ def test_switch_preserves_owned_asset_bindings(sandbox):
 
 def test_managed_entries_crud_and_prompt_do_not_cross_characters(sandbox):
     asyncio.run(jailbreak_entries.add_entry(jailbreak_entries.JbEntry(title="Private", content="Alpha private"), char_id=TEST_CHAR_ID, auth=None))
-    asyncio.run(lorebook.add_lore_entry(lorebook.LoreEntry(keyword=["secret"], content="Alpha lore"), char_id=TEST_CHAR_ID, auth=None))
+    asyncio.run(lorebook.add_lore_entry(lorebook.LoreEntry(keyword=["secret"], content="Alpha lore"), char_id=TEST_CHAR_ID, auth=None, read_character=read_registered_character))
     assert _load_jailbreak(char_id=TEST_CHAR_ID) == "Alpha private"
     assert _load_jailbreak(char_id=TEST_PEER_CHAR_ID) == ""
     assert asyncio.run(jailbreak_entries.get_entries(char_id=TEST_PEER_CHAR_ID, auth=None)) == {"entries": [], "char_id": TEST_PEER_CHAR_ID}

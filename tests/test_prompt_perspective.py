@@ -170,7 +170,7 @@ async def test_builder_rules_remain_valid_after_loop_tool_return(build_prompt, m
     ])
     _script_execute(monkeypatch, [(result, None)])
     _patch_final_chat(monkeypatch, "收到结果。")
-    await _make_pipeline().run_agentic_loop(messages, uid="test_owner", char_id=TEST_CHAR_ID, session_state=object())
+    await _make_pipeline().tools.run(messages, uid="test_owner", char_id=TEST_CHAR_ID, session_state=object())
     assert len(calls) == 2
     note = layer(calls[-1]["messages"], "11_author_note")
     assert "后续收到的新结果同样适用" in note

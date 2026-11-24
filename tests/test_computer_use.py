@@ -875,7 +875,7 @@ async def test_tool_loop_offers_scoped_definitions_and_prompt_on_first_turn(fixt
         })
 
     monkeypatch.setattr(llm_client, "chat_turn", chat_turn)
-    await Pipeline.__new__(Pipeline).run_agentic_loop(
+    await Pipeline(character=None, lore_engine=None).tools.run(
         [{"role": "user", "content": "Please operate Notepad for me."}],
         uid="owner", char_id="other_char" if context == "other_role" else "fixture_char", session_state=SessionState(),
         is_group=context == "group", is_proactive=context == "proactive",

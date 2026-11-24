@@ -136,7 +136,7 @@ async def generate_online_replies(
             },
             {"role": "user", "content": prompt},
         ]
-        reply = await pipeline.run_llm(messages, char_id=char_id)
+        reply = await pipeline.generation.run_llm(messages, char_id=char_id)
         replies.append(reply or "")
     return replies
 

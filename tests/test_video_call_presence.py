@@ -187,7 +187,7 @@ async def test_in_call_talk_is_still_recorded_in_the_ledger(monkeypatch):
 
     recorded = []
     monkeypatch.setattr(talk_gate, "check", lambda *a, **k: ("allow", "ok"))
-    monkeypatch.setattr("core.pipeline_registry.get", lambda: object())
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: SimpleNamespace(effects=object()))
     monkeypatch.setattr("channels.registry.get_active", lambda: ["desktop"])
 
     async def fake_turn(**_kwargs):

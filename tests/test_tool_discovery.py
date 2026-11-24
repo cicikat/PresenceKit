@@ -51,12 +51,13 @@ def harness(monkeypatch):
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", execute)
     monkeypatch.setattr("core.llm_client.chat", final)
     pipeline = _make_pipeline()
-    monkeypatch.setattr(pipeline, "_anti_collapse_prefix_retry", lambda msgs, text, **kw: final())
+    monkeypatch.setattr(pipeline.generation, "_anti_collapse_prefix_retry", lambda msgs, text, **kw: final())
 
     async def run(content="查询", **kwargs):
-        return await pipeline.run_agentic_loop([{"role": "user", "content": content}],
+        return await pipeline.tools.run([{"role": "user", "content": content}],
             uid="u1", char_id="c1", session_state=object(), **kwargs)
 
+    run.tools = pipeline.tools
     return script, requests, executions, run
 
 
@@ -83,7 +84,7 @@ async def test_used_tool_stream_does_not_publish_loading_announcement(harness, m
         yield "加载辅助"
         yield "工具中，请稍后..."
 
-    monkeypatch.setattr("core.pipeline.Pipeline.run_llm_stream", leaking_stream)
+    monkeypatch.setattr("core.owner_chat.reply_generation.ReplyGeneration.run_llm_stream", leaking_stream)
     result = await run(stream=True)
     visible = "".join([piece async for piece in result])
     assert executions
@@ -118,7 +119,7 @@ async def test_discovery_does_not_grant_completion_evidence(harness, monkeypatch
         flags.append(successful_tool_call)
         return reply
 
-    monkeypatch.setattr("core.pipeline.Pipeline._guard_unverified_claim", _spy)
+    monkeypatch.setattr(run.tools, "_guard_unverified_claim", _spy.__get__(run.tools))
     script.extend([turn(call("load_tools_info")), turn(content="已完成")])
     await run(tool_call_required=True, required_tool_names=["web_search"])
     assert executions == []

@@ -1,4 +1,5 @@
 """Dream pseudo-stream remains isolated; Reality uses canonical local responses."""
+from tests.fixtures.runtime_capabilities import read_registered_character
 from tests.fixtures.public_assets import TEST_CHAR_ID
 from unittest.mock import patch
 import pytest
@@ -19,6 +20,7 @@ async def test_dream_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
     monkeypatch.setattr("core.dream.dream_pipeline.dream_turn", fake_dream_turn)
 
     class FakePipeline:
+        effects = property(lambda self: self)
         _active_character_id = TEST_CHAR_ID
 
     monkeypatch.setattr("core.pipeline_registry.get", lambda: FakePipeline())
@@ -31,7 +33,7 @@ async def test_dream_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
     monkeypatch.setattr("channels.ui_push.pseudo_stream_push", fake_pseudo_stream_push)
 
     with patch('admin.routers.dream_common._owner_uid', return_value="owner"):
-        result = await dream_router.dream_chat({"message": "你好"}, _auth=None)
+        result = await dream_router.dream_chat({"message": "你好"}, _auth=None, read_character=read_registered_character)
 
     assert result["reply"] == "梦里的风很轻。"
     assert result["msg_id"]
@@ -54,7 +56,7 @@ async def test_dream_chat_no_msg_id_when_reply_empty(sandbox, monkeypatch):
     )
 
     with patch('admin.routers.dream_common._owner_uid', return_value="owner"):
-        result = await dream_router.dream_chat({"message": "你好"}, _auth=None)
+        result = await dream_router.dream_chat({"message": "你好"}, _auth=None, read_character=read_registered_character)
 
     assert "msg_id" not in result
     assert calls == []

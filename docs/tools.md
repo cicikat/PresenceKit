@@ -65,7 +65,7 @@ history 落盘，拦不住已发出的回复）：
 
 | 路径 | 位置 | 命中后 |
 |---|---|---|
-| 聊天 Path C 自然结束且未调用过工具 | `Pipeline._guard_tool_meta_leak()`（`run_agentic_loop` 在 `_guard_unverified_claim` 之后） | 追加 system 指令静默重试一次；重试仍泄漏则返回固定兜底话术，不发泄漏文本；重试异常 fail-open 保持原回复 |
+| 聊天 Path C 自然结束且未调用过工具 | `Pipeline._guard_tool_meta_leak()`（`ToolTurnRunner.run` 在 `_guard_unverified_claim` 之后） | 追加 system 指令静默重试一次；重试仍泄漏则返回固定兜底话术，不发泄漏文本；重试异常 fail-open 保持原回复 |
 | autonomy 的 `talk_owner.text` | `core/autonomy/talk_gate.py::send()` | 拒绝本次发言，返回 `tool_meta_leak`（run 落成 `talk_canceled`），不进 turn_sink；无生成上下文可重试 |
 | xml_fallback 解析失败兜底 | `llm_client.chat_turn()` 的 xml_fallback 分支 | 丢弃泄漏文本（`ChatTurn.content=""`、无工具调用），不再原样当 content 返回 |
 
@@ -200,14 +200,14 @@ hello 字段或协商流程。
   激活后：
     - `route_pretool()` 仍先检查显式快速路径白名单；只有普通 LLM 探针会被跳过，工具决策权
       随后移交主模型。QQ、desktop、mobile 的快速路径判定和执行契约相同
-    - 主生成改走 Pipeline.run_agentic_loop()：
+    - 主生成改走 ToolTurnRunner.run()：
         chat_turn(messages, tools) → 有 tool_calls 就 execute_structured(origin="assistant_loop") 回填
         role="tool" 消息（tool_call_id 对齐）→ 继续下一步，直到自然终止 / max_steps 耗尽 /
         总墙钟 total_timeout_s 超时
     - 用过 ≥1 个工具后，最终生成前注入 voice_reanchor system 提示，收尾出口改走
       run_llm()/run_llm_stream()（复用既有反坍缩重试），不再带 tools 参数
     - 高危工具触发 ask_confirm → 立即强制收尾，直接把询问文字作为本轮回复，下一步必须是问用户
-    - Tool Ephemeral Status P0：`run_agentic_loop(tool_event_observer=)` 可将工具生命周期
+    - Tool Ephemeral Status P0：`ToolTurnRunner.run(tool_event_observer=)` 可将工具生命周期
       发给 UI 专用观察者。事件仅在进程内传递，带 status_id、串行 index/total、attempt 和 20 秒
       TTL，绝不经过 `record_assistant_turn()`、short_term、event_log、prompt history、TTS、贴纸或
       action_trace。`queued` 只会在参数、权限和确认闸门通过之后发出，语义是“正在处理”，不代表
@@ -245,7 +245,7 @@ hello 字段或协商流程。
   event_log 只保留剥离后的正文。程序过滤才是防线，提示词只降低产生概率。
 
   明确意图 grounding：`route_pretool()` 将关键词命中结果作为本轮上下文元数据传给
-  `run_agentic_loop(tool_call_required=True)`。即使工具没有出现在 schema、调用失败或
+  `ToolTurnRunner.run(tool_call_required=True)`。即使工具没有出现在 schema、调用失败或
   结果不明，最终收尾也会经过 `Pipeline._guard_unverified_claim()`（`core.tool_grounding.check_unverified_claim()`）。
   命中「未经证实的完成声明」时**不改写、不输出固定字面量**：同一轮追加一条 nudge（经 `char_name` 插值），
   让模型用角色口吻重写，最多 1 次；重写后仍命中则原样放行。每次触发写 runtime signal
@@ -818,7 +818,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 `重新看看`，不上 LLM 判断）就给本轮 `execute_structured()` 传 `bypass_read_log=True`。`is_recently_read()`
 的 `bypass` 参数只影响"拦不拦"：命中时放行本次调用，但指纹仍照常 `record_read()` 刷新，
 不是关掉去重本身。Path A 的 QQ/desktop/mobile 调用统一由 `route_pretool()` 从本轮用户原始文本
-探测一次；`core/pipeline.py::run_agentic_loop` 的 Path C 也从同一原始文本计算并在多步调用中复用。
+探测一次；`core/pipeline.py::ToolTurnRunner.run` 的 Path C 也从同一原始文本计算并在多步调用中复用。
 
 ### 花园工具
 
@@ -832,7 +832,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 **沉淀路径**：`core/tools/web_search.py` → `vector_store.upsert(source="web", source_id=url)`
 
-**召回路径**：`pipeline.fetch_context()` 在每轮拉取 `_query_vec` 后额外做一次 `vector_store.query_with_preview(sources=["web"])`, 结果格式化为 `web_recall_result`，注入 prompt 层 `web_recall`（`_drop_priority=35`，优先于大多数记忆层裁剪）。LLM 看到的框定为"外部事实，不是你的记忆或亲身经历"。
+**召回路径**：`pipeline.context.fetch()` 在每轮拉取 `_query_vec` 后额外做一次 `vector_store.query_with_preview(sources=["web"])`, 结果格式化为 `web_recall_result`，注入 prompt 层 `web_recall`（`_drop_priority=35`，优先于大多数记忆层裁剪）。LLM 看到的框定为"外部事实，不是你的记忆或亲身经历"。
 
 **隔离规则**：
 - web 条目只存在于 `vector_store`（`source="web"`），**不进** `mid_term` / `episodic` / `identity` 固化链（这些只从 `short_term` 对话流晋升）。
@@ -939,7 +939,7 @@ tuple `execute()` 已删除，不再解包为 `(result, confirmation_request)`�
 | 漏传（调用方未写 `origin=`） | `TypeError`，调用即崩，杜绝静默绕过 |
 | 传入值不在白名单 | `status=tool_failed`（result / confirmation_request 均为 None）+ `logger.warning`，零副作用（fail-closed） |
 | `origin="user_live"` | Path A 正常执行 |
-| `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
+| `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`ToolTurnRunner.run()` 专用 |
 | `origin="autonomy_loop"` | autonomy runner 受限工具调用；schema 与执行复查共用 `AutonomyToolDecision` |
 | `origin="admin_console"` | 管理面 MCP Tool-call Console |
 | `origin="assistant_self_management"` | Path C 原生 tool call 的 self-management gateway；不能执行普通业务工具 |

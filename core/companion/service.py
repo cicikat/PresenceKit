@@ -82,7 +82,7 @@ def _runtime_context() -> RuntimeContext:
         uid = str(get_config().get("scheduler", {}).get("owner_id") or "").strip()
         if not uid:
             raise CompanionUnavailable("companion owner runtime is not configured")
-        scope = pipeline._current_reality_scope(uid)
+        scope = pipeline.character_state.reality_scope(uid)
         char_id = str(getattr(scope, "character_id", "") or "").strip()
         if not char_id or getattr(pipeline, "character", None) is None:
             raise CompanionUnavailable("companion active character is unavailable")

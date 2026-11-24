@@ -1,3 +1,4 @@
+from tests.fixtures.runtime_capabilities import read_registered_character
 import asyncio
 from copy import deepcopy
 import io
@@ -330,14 +331,14 @@ async def test_audio_upload_reaches_chat_without_tone_on_failure(configured, mon
     response = await chat.upload_ingest(
         file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
         files=None, message="hi", channel="desktop", request_id="", _auth={},
-    )
+     read_character=read_registered_character)
     assert "未能听清" in response["message"]
     assert response["hint"] is None
     monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "calm"}))
     response = await chat.upload_ingest(
         file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
         files=None, message="", channel="desktop", request_id="", _auth={},
-    )
+     read_character=read_registered_character)
     assert response["message"] == "hello"
     assert response["hint"]["_layer"] == "3.8_audio_impression"
 

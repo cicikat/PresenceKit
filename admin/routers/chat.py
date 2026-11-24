@@ -4,6 +4,7 @@
 
 POST /chat — 接收消息，走完整 Pipeline，返回回复 + 好感度
 """
+from admin.character_dependencies import require_character_reader
 
 import asyncio
 import hashlib
@@ -383,6 +384,8 @@ async def upload_ingest(
     x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
     _auth=Depends(require_scopes("chat")),
     desktop_request_id: str | None = Header(None, alias="X-Presence-Chat-Request"),
+
+    *, read_character=Depends(require_character_reader),
 ):
     """
     multipart 上传 + 可选用户附言 + channel 标记。
@@ -396,7 +399,7 @@ async def upload_ingest(
         raise HTTPException(status_code=422, detail="文件不能为空")
     rid = desktop_request_id if isinstance(desktop_request_id, str) else ""
     if not rid:
-        return await _ingest_chat_upload(upload_files, message, channel, grant, request_id)
+        return await _ingest_chat_upload(upload_files, message, channel, grant, request_id, read_character=read_character)
     if channel != "desktop" or grant is not None or request_id:
         raise HTTPException(422, "conflicting_chat_request_identity")
     owner_id, _ = session_requests.owner_media_scope()
@@ -424,11 +427,13 @@ async def upload_ingest(
     return await _execute_desktop_request(
         rid, auth=_auth, owner_id=owner_id,
         payload={"kind": "desktop_upload", "message": message, "files": descriptors},
-        execute=lambda: _ingest_chat_upload(snapshots, message, channel, None, rid),
+        execute=lambda: _ingest_chat_upload(snapshots, message, channel, None, rid, read_character=read_character),
     )
 
 
-async def _ingest_chat_upload(upload_files, message, channel, grant, request_id):
+async def _ingest_chat_upload(upload_files, message, channel, grant, request_id,
+    *, read_character,
+):
     from core import media_processor
     from core.config_loader import get_config as _cfg
 
@@ -480,9 +485,8 @@ async def _ingest_chat_upload(upload_files, message, channel, grant, request_id)
 
         owner_uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
         from core.data_paths import DEFAULT_CHAR_ID
-        from core import pipeline_registry
         active_char = grant.char_id if grant is not None else (
-            getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
+            getattr(read_character(), "active_character_id", None) or DEFAULT_CHAR_ID
         )
         try:
             result = await media_processor.ingest_file_bytes(data, fname, uid=owner_uid, char_id=active_char)
@@ -534,9 +538,8 @@ async def _ingest_chat_upload(upload_files, message, channel, grant, request_id)
         ]
         owner_uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
         from core.data_paths import DEFAULT_CHAR_ID
-        from core import pipeline_registry
         active_char = grant.char_id if grant is not None else (
-            getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
+            getattr(read_character(), "active_character_id", None) or DEFAULT_CHAR_ID
         )
         try:
             descriptions = await media_processor.ingest_image_bytes(items, uid=owner_uid, char_id=active_char)

@@ -83,6 +83,7 @@ async def test_online_generation_uses_pipeline_run_llm(monkeypatch):
             raise AssertionError("empty world_book must not load entries")
 
     class FakePipeline:
+        generation = property(lambda self: self)
         def __init__(self, loaded_character, lore_engine, active_character_id=""):
             assert loaded_character is character
             assert isinstance(lore_engine, FakeLoreEngine)

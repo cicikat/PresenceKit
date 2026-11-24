@@ -84,7 +84,7 @@ class StageCharacterView:
             context = self._lightweight_context()
         else:
             scope = MemoryScope.reality_scope(stage.owner_uid, self.char_id)
-            context = await self.pipeline.fetch_context(
+            context = await self.pipeline.context.fetch(
                 stage.owner_uid,
                 latest,
                 frozen_scope=scope,
@@ -149,7 +149,7 @@ class StageCharacterView:
                 lightweight,
                 debug.get("token_estimate"),
             )
-        return await self.pipeline.run_llm(messages, char_id=self.char_id)
+        return await self.pipeline.generation.run_llm(messages, char_id=self.char_id)
 
     async def generate_private(
         self,
@@ -207,7 +207,7 @@ class StageCharacterView:
             char_id=self.char_id,
             consume_pending_perception=False,
         )
-        reply = await self.pipeline.run_llm(messages, char_id=self.char_id)
+        reply = await self.pipeline.generation.run_llm(messages, char_id=self.char_id)
         return (reply or "").strip()
 
     async def generate_reaction(

@@ -15,7 +15,7 @@ that enforces this — worded below without the literal marker strings it scans
 for, so this docstring doesn't trip its own guard):
 - Never enqueues the reality-side mid-term consolidation job
 - Never imports the reality-side character-relationship write path
-- Never calls Pipeline.fetch_context / Pipeline.build_prompt
+- Never calls Pipeline.context.fetch / Pipeline.build_prompt
 - Only appends to the dream-tree transcript via core.stage.dream_store
 - Phase R/T are force-off (settings.max_reactions=0, topic_seed_prob=0) —
   no generate_reaction callback is even wired, Brief 100 §0

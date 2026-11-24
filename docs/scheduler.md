@@ -761,16 +761,18 @@ register(pipeline)
 ```python
 # _pipeline_send 内部
 _pipeline = pipeline_registry.get()   # 从 registry 读取
-context  = await _pipeline.fetch_context(owner_id, prompt)
+context  = await _pipeline.context.fetch(owner_id, prompt)
 messages, _ = _pipeline.build_prompt(owner_id, prompt, context)
-reply    = await _pipeline.run_llm(messages)
+reply    = await _pipeline.generation.run_llm(messages)
 await record_assistant_turn(
     assistant_text=reply,
     uid=owner_id,
     source=TurnSource.TRIGGER,
     trigger_name=trigger_name,
     fanout="all",
-    pipeline=_pipeline,
+    effects=_pipeline.effects,
+    char_id=frozen_scope.character_id,
+    frozen_scope=frozen_scope,
 )
 ```
 

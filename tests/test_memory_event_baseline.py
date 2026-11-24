@@ -90,7 +90,7 @@ def test_legacy_memory_chain_golden_shape_and_character_isolation(sandbox, monke
 
     pipeline = Pipeline(load_character(TEST_CHAR_ID), LoreEngine(), active_character_id=TEST_CHAR_ID)
     context = asyncio.run(
-        pipeline.fetch_context(
+        pipeline.context.fetch(
             user_id=uid,
             content="placeholder project",
             frozen_scope=MemoryScope.reality_scope(uid, TEST_CHAR_ID),

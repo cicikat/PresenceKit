@@ -8,12 +8,16 @@ import pytest
 
 
 class _FakePipeline:
+    effects = property(lambda self: self)
+    character_state = property(lambda self: self)
+    generation = property(lambda self: self)
+    context = property(lambda self: self)
     character = type("_C", (), {"name": "TestChar"})()
 
-    def _current_reality_scope(self, uid):
+    def reality_scope(self, uid):
         return type("Scope", (), {"character_id": TEST_CHAR_ID})()
 
-    async def fetch_context(self, uid, query, **kwargs):
+    async def fetch(self, uid, query, **kwargs):
         return {}
 
     def build_prompt(self, uid, prompt, context, **kwargs):

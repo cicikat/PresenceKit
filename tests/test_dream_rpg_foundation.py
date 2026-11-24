@@ -1,3 +1,4 @@
+from tests.fixtures.runtime_capabilities import read_registered_character
 import asyncio
 import json
 
@@ -90,7 +91,7 @@ def test_rpg_corrupt_core_is_safe_uncertain_projection(sandbox, monkeypatch):
     path = sandbox.dream_rpg_session_path(_UID, result["dream_id"])
     path.write_text("{broken", encoding="utf-8")
     monkeypatch.setattr(dream_rpg, "_uid", lambda: _UID)
-    projection = dream_rpg._current()
+    projection = dream_rpg._current(read_character=read_registered_character)
     assert projection["status"] == "uncertain"
     assert projection["last_error_code"] == "RPG_SESSION_INVALID"
 

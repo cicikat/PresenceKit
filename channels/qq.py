@@ -58,12 +58,9 @@ class QQChannel(BaseChannel):
 
             _char_name = ""
             try:
-                from core.pipeline_registry import get as _get_pipeline
-                pl = _get_pipeline()
-                if pl is not None:
-                    char = getattr(pl, "character", None)
-                    if char is not None:
-                        _char_name = getattr(char, "name", "") or ""
+                from core.character_name_provider import get_active_char_name
+                name = get_active_char_name()
+                _char_name = "" if name == "(角色未加载)" else (name or "")
             except Exception:
                 pass
 

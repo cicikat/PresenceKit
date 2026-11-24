@@ -125,8 +125,8 @@ CREATE TABLE vec_meta (
 | 挂接位置 | 动作 |
 |---|---|
 | `fixation_pipeline.reflect_to_episodic()` → `write_episode()` 之后 | `asyncio.ensure_future(vector_store.upsert(..., source='episodic'))` |
-| `pipeline.post_process()` → `capture_turn()` 之后 | `asyncio.create_task(vector_store.upsert(..., source='event_log'))` |
-| `pipeline.fetch_context()` → 并发任务启动前 | `await embed([content])` → `vs.query(k=8)` 得到 `_query_vec` + `_semantic_hits`；`query_vec` 传入 `event_log.search` 和 `episodic.retrieve`，结果也存入 context `semantic_hits` / `query_vec`（供 X3 复用） |
+| `TurnEffects.capture_critical() / run_deferred_effects()` → `capture_turn()` 之后 | `asyncio.create_task(vector_store.upsert(..., source='event_log'))` |
+| `pipeline.context.fetch()` → 并发任务启动前 | `await embed([content])` → `vs.query(k=8)` 得到 `_query_vec` + `_semantic_hits`；`query_vec` 传入 `event_log.search` 和 `episodic.retrieve`，结果也存入 context `semantic_hits` / `query_vec`（供 X3 复用） |
 | `memory_janitor._check_vector_consistency()`（Brief 49，每日深夜） | `list_entries()` 对照 episodic.json / 近30天event_log 真相源统计孤儿数；超阈值（>20 或占比>10%）调用 `rebuild()`，否则只记观测日志 |
 
 ---

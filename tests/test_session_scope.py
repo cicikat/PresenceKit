@@ -191,9 +191,12 @@ async def test_owner_chat_passes_frozen_character_to_non_stream_llm(monkeypatch)
     llm_char_ids = []
 
     class Pipeline:
+        effects = property(lambda self: self)
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
         character = SimpleNamespace(name="Active")
 
-        async def fetch_context(self, *_args, **_kwargs):
+        async def fetch(self, *_args, **_kwargs):
             return {"_scoped_character": SimpleNamespace(name="Scoped")}
 
         def build_prompt(self, *_args, **_kwargs):
@@ -328,8 +331,10 @@ async def test_context_failure_stops_sibling_probe_before_retry(monkeypatch):
     started = asyncio.Event()
     stopped = asyncio.Event()
     class Pipeline:
+        effects = property(lambda self: self)
+        context = property(lambda self: self)
         character = SimpleNamespace(name="Scoped")
-        async def fetch_context(self, *args, **kwargs):
+        async def fetch(self, *args, **kwargs):
             await started.wait()
             raise RuntimeError("context unavailable")
     async def probe(*args, **kwargs):

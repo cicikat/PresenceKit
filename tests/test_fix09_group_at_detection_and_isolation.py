@@ -187,7 +187,7 @@ def _patch_pipeline_for_group(monkeypatch):
     fake.character.system_prompt = "你是一个AI助手。"
     fake.character.description = ""
     fake.character.personality = ""
-    fake.run_llm = AsyncMock(return_value="好的！")
+    fake.generation.run_llm = AsyncMock(return_value="好的！")
     monkeypatch.setattr(_main, "_pipeline", fake)
     return fake
 

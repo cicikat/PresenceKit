@@ -5,8 +5,8 @@ tests/test_n2_fetch_context_side_effects.py
 N2-A 审计测试：fetch_context 读路径副作用封口验收
 
 验收标准：
-1. Pipeline.fetch_context 是无情绪写入的读路径
-2. Pipeline.fetch_context 调 episodic retrieve 时 allow_strengthen=False，不写回 strength
+1. Pipeline.context.fetch 是无情绪写入的读路径
+2. Pipeline.context.fetch 调 episodic retrieve 时 allow_strengthen=False，不写回 strength
 3. 记忆召回不制造新的角色情绪；时间和工具不强制写入标签。
 
 """
@@ -114,7 +114,7 @@ def _apply_base_stubs(monkeypatch):
 
 
 def _run_fetch(pipeline, user_id="u1", content="hello"):
-    return asyncio.run(pipeline.fetch_context(user_id=user_id, content=content))
+    return asyncio.run(pipeline.context.fetch(user_id=user_id, content=content))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -148,7 +148,8 @@ def test_fetch_context_does_not_call_mood_state_update_directly(
 def test_fetch_context_source_code_has_no_mood_update_call():
     """N2-A T1 (静态): fetch_context 可执行代码行中无 mood_state.update 调用。"""
     from core.pipeline import Pipeline
-    src = inspect.getsource(Pipeline.fetch_context)
+    from core.memory.reality_context import RealityContextReader
+    src = inspect.getsource(RealityContextReader.fetch)
     code_lines = [l for l in src.splitlines() if not l.strip().startswith("#")]
     code_body = "\n".join(code_lines)
     assert "_mood_update" not in code_body, (
@@ -326,7 +327,8 @@ def test_fetch_context_source_has_no_sleepy_write():
     注释里引用函数名是允许的；检查的是可执行行。
     """
     from core.pipeline import Pipeline
-    src = inspect.getsource(Pipeline.fetch_context)
+    from core.memory.reality_context import RealityContextReader
+    src = inspect.getsource(RealityContextReader.fetch)
     code_lines = [l for l in src.splitlines() if not l.strip().startswith("#")]
     code_body = "\n".join(code_lines)
 

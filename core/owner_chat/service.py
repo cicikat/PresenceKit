@@ -96,7 +96,7 @@ async def run_owner_chat_turn(
     # character switch (admin panel) cannot split reads and writes across
     # two characters.
     try:
-        _frozen_scope = frozen_scope or pipeline._current_reality_scope(user_id)
+        _frozen_scope = frozen_scope or pipeline.character_state.reality_scope(user_id)
     except (ValueError, RuntimeError) as _scope_err:
         logger.error("[owner_chat] scope freeze 失败，本轮中止: %s", _scope_err)
         raise HTTPException(status_code=503, detail="active character 状态异常，本轮中止")

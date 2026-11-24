@@ -651,7 +651,7 @@ def test_expired_lease_can_be_reclaimed_but_stale_finisher_cannot_overwrite(sand
 def test_talk_does_not_enter_turn_sink_without_a_delivery_channel(sandbox, monkeypatch):
     from core.autonomy import talk_gate
     monkeypatch.setattr(talk_gate, "check", lambda *_args, **_kwargs: ("allow", "ok"))
-    monkeypatch.setattr("core.pipeline_registry.get", lambda: object())
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: SimpleNamespace(effects=object()))
     monkeypatch.setattr("channels.registry.get_active", lambda: [])
     invoked = []
     async def forbidden(**_kwargs): invoked.append(True)
@@ -665,7 +665,7 @@ def test_talk_rejects_tool_meta_leak_before_sending(sandbox, monkeypatch):
     """工单 C1：talk_owner.text 本身是工具目录描述时拒绝发送，不进 turn_sink。"""
     from core.autonomy import talk_gate
     monkeypatch.setattr(talk_gate, "check", lambda *_args, **_kwargs: ("allow", "ok"))
-    monkeypatch.setattr("core.pipeline_registry.get", lambda: object())
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: SimpleNamespace(effects=object()))
     monkeypatch.setattr("channels.registry.get_active", lambda: [object()])
     monkeypatch.setattr("core.response_processor.strip_render_tags", lambda text: text)
     monkeypatch.setattr("core.reality_output_scrubber.scrub_reality_output_text", lambda text: text)
@@ -693,7 +693,7 @@ def test_temporary_retry_is_durably_backed_off(sandbox):
 def test_successful_talk_uses_turn_sink_then_records_shared_ledger(sandbox, monkeypatch):
     from core.autonomy import talk_gate
     monkeypatch.setattr(talk_gate, "check", lambda *_args, **_kwargs: ("allow", "ok"))
-    monkeypatch.setattr("core.pipeline_registry.get", lambda: object())
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: SimpleNamespace(effects=object()))
     monkeypatch.setattr("channels.registry.get_active", lambda: [object()])
     monkeypatch.setattr("core.response_processor.strip_render_tags", lambda text: text)
     monkeypatch.setattr("core.reality_output_scrubber.scrub_reality_output_text", lambda text: text)

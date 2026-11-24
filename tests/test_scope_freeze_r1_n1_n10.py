@@ -95,19 +95,19 @@ def _make_pipeline(char_id: str = "char_a", llm_reply: str = "回复"):
     fake.character.name = "测试角色"
     fake.author_note_extra = ""
     fake._active_character_id = char_id
-    fake._current_reality_scope = MagicMock(
+    fake.character_state.reality_scope = MagicMock(
         return_value=MemoryScope.reality_scope(_OWNER_ID, char_id)
     )
-    fake.fetch_context = AsyncMock(return_value={})
+    fake.context.fetch = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value=llm_reply)
+    fake.generation.run_llm = AsyncMock(return_value=llm_reply)
     # Brief 37: record_assistant_turn now calls post_process_critical (awaited,
     # inside conversation_lock) then post_process_slow (fire-and-forget after
     # send). Both must exist on the fake or the create_task in turn_sink errors.
-    fake.post_process_critical = AsyncMock(
+    fake.effects.capture_critical = AsyncMock(
         return_value={"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
     )
-    fake.post_process_slow = AsyncMock(
+    fake.effects.run_deferred_effects = AsyncMock(
         return_value={"turn_id": "t1", "emotion": "neutral"}
     )
     return fake
@@ -163,9 +163,9 @@ async def test_n1_scope_frozen_across_fetch_build_post(sandbox, monkeypatch):
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
     fake = _make_pipeline(char_id="char_a")
-    fake.fetch_context = _spy_fetch
+    fake.context.fetch = _spy_fetch
     fake.build_prompt = _spy_build
-    fake.post_process_critical = _spy_post
+    fake.effects.capture_critical = _spy_post
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main.handle_message({
@@ -227,7 +227,7 @@ async def test_r1_conversation_lock_acquired(sandbox, monkeypatch):
         lock_held_during_post.append(_spy_lock.active)
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake.post_process_critical = _spy_post
+    fake.effects.capture_critical = _spy_post
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main.handle_message({
@@ -270,7 +270,7 @@ async def test_n10_post_process_exception_observable(sandbox, monkeypatch):
 
     import main as _main
     fake = _make_pipeline(char_id="char_a")
-    fake.post_process_critical = AsyncMock(side_effect=RuntimeError("写入失败"))
+    fake.effects.capture_critical = AsyncMock(side_effect=RuntimeError("写入失败"))
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     # Should not raise despite post_process failing
@@ -328,7 +328,7 @@ async def test_reply_with_tool_result_passes_frozen_scope(sandbox, monkeypatch):
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
     fake = _make_pipeline(char_id="char_frozen")
-    fake.post_process_critical = _spy_post
+    fake.effects.capture_critical = _spy_post
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main._reply_with_tool_result(
@@ -368,7 +368,7 @@ async def test_memory_path_scrubbed_before_post_process(sandbox, monkeypatch):
         captured_reply.append(reply)
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake.post_process_critical = _spy_post
+    fake.effects.capture_critical = _spy_post
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main.handle_message({

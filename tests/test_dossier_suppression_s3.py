@@ -38,7 +38,7 @@ def _setup(monkeypatch, sandbox, registry, cfg):
 
 
 def _run(pipeline):
-    return asyncio.run(pipeline.fetch_context(user_id="u1", content="tell me about coffee please"))
+    return asyncio.run(pipeline.context.fetch(user_id="u1", content="tell me about coffee please"))
 
 
 def test_global_mode_clears_all(monkeypatch, sandbox, registry, chars_tree):

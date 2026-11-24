@@ -128,7 +128,7 @@ async def test_pipeline_rejects_non_reality_appraisal_inputs(sandbox, monkeypatc
     from core.write_envelope import stamp_user_chat, stamp_ingest, stamp_debug
     from core.memory.scope import MemoryScope
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda *a, **k: None)
-    monkeypatch.setattr("core.pipeline._detect_dream_echo", lambda *a, **k: blocked == "dream")
+    monkeypatch.setattr("core.post_process.turn_effects._detect_dream_echo", lambda *a, **k: blocked == "dream")
     evaluator = AsyncMock(return_value=(proposal(anger=.9), "ready"))
     monkeypatch.setattr(appraisal, "evaluate", evaluator)
     env = stamp_ingest() if blocked == "import" else stamp_debug() if blocked == "debug" else stamp_user_chat()
@@ -136,7 +136,7 @@ async def test_pipeline_rejects_non_reality_appraisal_inputs(sandbox, monkeypatc
                 "turn_id": "t1", "should_update_profile": False, "profile_recent": [],
                 "source_at": time.time()-1, "critical_written": blocked != "failed_capture",
                 "expression_signal": "happy", "appraisal_input": "real event"}
-    await Pipeline(SimpleNamespace(name="Companion"), None).post_process_slow(
+    await Pipeline(SimpleNamespace(name="Companion"), None).effects.run_deferred_effects(
         "owner", "event", "reply", critical, envelope=env,
         trigger_name="timer" if blocked == "trigger" else "", is_group=blocked == "group",
         web_echo=blocked == "web", coplay_echo=blocked == "coplay")
@@ -151,7 +151,7 @@ async def test_expression_commits_before_network_and_network_holds_no_uid_lock(s
     from core.memory import locks
     gate, started = asyncio.Event(), asyncio.Event()
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda *a, **k: None)
-    monkeypatch.setattr("core.pipeline._detect_dream_echo", lambda *a, **k: False)
+    monkeypatch.setattr("core.post_process.turn_effects._detect_dream_echo", lambda *a, **k: False)
     async def evaluate(*args, **kwargs):
         started.set()
         await gate.wait()
@@ -161,7 +161,7 @@ async def test_expression_commits_before_network_and_network_holds_no_uid_lock(s
                 "turn_id": "t1", "should_update_profile": False, "profile_recent": [],
                 "source_at": time.time()-1, "critical_written": True,
                 "expression_signal": "happy", "appraisal_input": "real event"}
-    task = asyncio.create_task(Pipeline(SimpleNamespace(name="Companion"), None).post_process_slow(
+    task = asyncio.create_task(Pipeline(SimpleNamespace(name="Companion"), None).effects.run_deferred_effects(
         "owner", "event", "reply", critical, envelope=stamp_user_chat()))
     await asyncio.wait_for(started.wait(), 2)
     assert ms.get_current(char_id="companion") == "happy"

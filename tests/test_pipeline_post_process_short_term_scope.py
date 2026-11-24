@@ -101,7 +101,8 @@ async def test_post_process_st_load_receives_char_id_character_b(
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process(user_id="u1", content="你好", reply="在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='你好', reply='在的', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='你好', reply='在的', envelope=env)
 
     assert captured_char_ids, "_st.load must be called at least once inside post_process"
     bad = [c for c in captured_char_ids if c != "character_b"]
@@ -144,7 +145,8 @@ async def test_post_process_st_load_uses_new_char_id_after_switch(
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
         # First turn: yexuan active
-        await pipeline.post_process(user_id="u1", content="你好", reply="在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='你好', reply='在的', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='你好', reply='在的', envelope=env)
         first_calls = list(captured)
         assert first_calls, "_st.load must be called on first turn"
         assert all(c == TEST_CHAR_ID for c in first_calls), (
@@ -155,7 +157,8 @@ async def test_post_process_st_load_uses_new_char_id_after_switch(
         _write_active(sandbox, "character_b")
 
         # Second turn: character_b active
-        await pipeline.post_process(user_id="u1", content="今天怎样", reply="挺好的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='今天怎样', reply='挺好的', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='今天怎样', reply='挺好的', envelope=env)
         assert captured, "_st.load must be called on second turn"
         assert all(c == "character_b" for c in captured), (
             f"After switch, _st.load must use char_id='character_b'; got {captured}"
@@ -205,7 +208,8 @@ async def test_post_process_profile_recent_reads_character_b_bucket_only(
         _st_mod.append(uid, "user", YEXUAN_ONLY, char_id=TEST_CHAR_ID)
         _st_mod.append(uid, "user", CHARACTER_B_SIGNAL, char_id="character_b")
 
-        await pipeline.post_process(user_id=uid, content="你好", reply="在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id=uid, content='你好', reply='在的', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id=uid, content='你好', reply='在的', envelope=env)
 
     profile_updates = [e for e in enqueued if e["name"] == "user_profile_update"]
     assert profile_updates, "user_profile_update must be enqueued when profile update triggers"

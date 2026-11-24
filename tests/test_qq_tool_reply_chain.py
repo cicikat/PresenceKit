@@ -29,13 +29,13 @@ def _make_fake_pipeline(llm_reply: str = "你好") -> MagicMock:
     fake.author_note_extra = ""
     fake._active_character_id = TEST_CHAR_ID
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value=llm_reply)
+    fake.generation.run_llm = AsyncMock(return_value=llm_reply)
     # Brief 37: record_assistant_turn calls post_process_critical (awaited) then
     # post_process_slow (fire-and-forget after send) — both must exist.
-    fake.post_process_critical = AsyncMock(
+    fake.effects.capture_critical = AsyncMock(
         return_value={"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
     )
-    fake.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     return fake
 
 
@@ -77,7 +77,7 @@ async def test_post_process_is_called(sandbox, monkeypatch):
     await _main._reply_with_tool_result("tool_data", "u1", "u1", False)
     await asyncio.sleep(0.05)
 
-    fake.post_process_critical.assert_called_once()
+    fake.effects.capture_critical.assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -105,7 +105,7 @@ async def test_memory_reply_excludes_action_lines(sandbox, monkeypatch):
         captured_replies.append(reply)
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake.post_process_critical = spy_post_process
+    fake.effects.capture_critical = spy_post_process
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main._reply_with_tool_result("tool_data", "u1", "u1", False)
@@ -187,7 +187,7 @@ async def test_envelope_is_stamp_qq(sandbox, monkeypatch):
         captured_envelopes.append(kwargs.get("envelope"))
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake.post_process_critical = spy_post_process
+    fake.effects.capture_critical = spy_post_process
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main._reply_with_tool_result("tool_data", "u1", "u1", False)
@@ -211,7 +211,7 @@ async def test_llm_error_handled_gracefully(sandbox, monkeypatch):
     import main as _main
 
     fake = _make_fake_pipeline()
-    fake.run_llm = AsyncMock(side_effect=RuntimeError("LLM timeout"))
+    fake.generation.run_llm = AsyncMock(side_effect=RuntimeError("LLM timeout"))
     monkeypatch.setattr(_main, "_pipeline", fake)
     _patch_memory(monkeypatch)
     sent = _patch_text_output(monkeypatch)
@@ -224,7 +224,7 @@ async def test_llm_error_handled_gracefully(sandbox, monkeypatch):
     await asyncio.sleep(0.05)
 
     assert sent == [], "Nothing should be sent on LLM error"
-    fake.post_process_critical.assert_not_called()
+    fake.effects.capture_critical.assert_not_called()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -271,8 +271,8 @@ async def test_handle_message_main_path_intact(sandbox, monkeypatch):
     import main as _main
     from core.memory.scope import MemoryScope
     fake = _make_fake_pipeline("正常回复内容。")
-    fake.fetch_context = AsyncMock(return_value={})
-    fake._current_reality_scope = MagicMock(
+    fake.context.fetch = AsyncMock(return_value={})
+    fake.character_state.reality_scope = MagicMock(
         return_value=MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     )
     monkeypatch.setattr(_main, "_pipeline", fake)
@@ -284,7 +284,7 @@ async def test_handle_message_main_path_intact(sandbox, monkeypatch):
     })
     await asyncio.sleep(0.05)
 
-    fake.run_llm.assert_called_once()
+    fake.generation.run_llm.assert_called_once()
     assert sent, "QQ main path should send a reply"
 
 

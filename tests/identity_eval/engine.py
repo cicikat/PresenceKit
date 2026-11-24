@@ -2,7 +2,7 @@
 
 Cases seed only existing memory write points, optionally execute the real
 ``consolidate_to_identity`` fixation path with an offline LLM response, then
-exercise ``Pipeline.fetch_context`` and ``Pipeline.build_prompt``.
+exercise ``Pipeline.context.fetch`` and ``Pipeline.build_prompt``.
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ async def _run_case_async(case: dict, monkeypatch, char_ids: dict[str, str]) -> 
     from core.memory import user_identity
     from core.memory.scope import MemoryScope
 
-    ctx = await pipeline.fetch_context(
+    ctx = await pipeline.context.fetch(
         user_id=uid,
         content=case["query"],
         frozen_scope=MemoryScope.reality_scope(uid, primary),

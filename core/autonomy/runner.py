@@ -1202,10 +1202,6 @@ def _is_write_tool(name: str) -> bool:
 def _character_for(char_id: str):
     """Read the intended character without creating a new Pipeline or prompt audit."""
     try:
-        from core import pipeline_registry
-        pipeline = pipeline_registry.get()
-        if pipeline is not None and getattr(pipeline, "_active_character_id", None) == char_id:
-            return pipeline.character
         from core.character_loader import load
         return load(char_id)
     except Exception:

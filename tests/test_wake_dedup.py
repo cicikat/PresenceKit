@@ -16,10 +16,11 @@ import pytest
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 class _FakePipeline:
-    async def post_process_critical(self, uid, content, reply, **kwargs):
+    effects = property(lambda self: self)
+    async def capture_critical(self, uid, content, reply, **kwargs):
         return {"turn_id": f"t-{content[:4]}", "critical_written": True, "emotion": "neutral"}
 
-    async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+    async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
         return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
 
@@ -75,7 +76,7 @@ async def test_push_segments_fires_only_when_desktop_in_fanout(monkeypatch, enab
         source="trigger",
         trigger_name="morning_greeting",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     # channel_message 发出一次
@@ -350,7 +351,7 @@ async def test_push_segments_fires_for_user_chat(monkeypatch, enabled_client_cha
         source="user_chat",
         user_text="你好",
         fanout="all",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     # 普通 chat 时 push_segments 应发出一次

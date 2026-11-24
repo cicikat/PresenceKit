@@ -92,7 +92,7 @@ class TestSaveAndMeta:
 
 class TestFreshnessGate:
     """
-    验证 pipeline.fetch_context 里的新鲜度闸逻辑。
+    验证 pipeline.context.fetch 里的新鲜度闸逻辑。
     把相关逻辑提取成等价 helper 来白盒测试。
     """
 

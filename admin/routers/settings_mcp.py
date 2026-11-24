@@ -1,5 +1,6 @@
 """MCP 外部工具的管理面配置、连接测试与热重载（Brief 110）。"""
 from __future__ import annotations
+from admin.character_dependencies import require_character_reader
 
 import re
 import uuid
@@ -378,7 +379,9 @@ def _safe_parameter_summary(schema: object) -> dict:
     return {"properties": properties, "required": required}
 
 
-def _current_mcp_exposure_names() -> set[str]:
+def _current_mcp_exposure_names(
+    *, read_character,
+) -> set[str]:
     """Resolve the active Path C schema once for the admin three-state view."""
     from core.config_loader import get_config
     from core.prompt_asset_selection import active_character
@@ -389,11 +392,10 @@ def _current_mcp_exposure_names() -> set[str]:
     if not owner_id or not tool_loop_active(owner_id):
         return set()
     try:
-        from core import pipeline_registry
 
-        pipeline = pipeline_registry.get()
+        pipeline = read_character()
         character = getattr(pipeline, "character", None) if pipeline is not None else None
-        char_id = str(getattr(pipeline, "_active_character_id", None) or DEFAULT_CHAR_ID)
+        char_id = str(getattr(pipeline, "active_character_id", None) or DEFAULT_CHAR_ID)
         from core.tool_exposure import resolve as resolve_exposure
         exposure = resolve_exposure("path_c", char_id=char_id)
         categories = list(exposure.categories)
@@ -549,10 +551,12 @@ def _server_view(
 
 
 @router.get("/settings/mcp", summary="读取 MCP server 配置与运行状态")
-async def get_mcp_settings(_auth=Depends(require_scopes("admin"))):
+async def get_mcp_settings(_auth=Depends(require_scopes("admin")),
+    *, read_character=Depends(require_character_reader),
+):
     cfg = get_config().get("mcp_servers", {}) or {}
     servers = [item for item in (cfg.get("servers") or []) if isinstance(item, dict)]
-    session_exposed_names = _current_mcp_exposure_names()
+    session_exposed_names = _current_mcp_exposure_names(read_character=read_character)
     return {
         "enabled": bool(cfg.get("enabled", False)),
         "require_local_policy": bool(cfg.get("require_local_policy", False)),
@@ -674,7 +678,9 @@ async def invoke_mcp_console(body: McpConsoleInvoke, _auth=Depends(require_scope
 
 
 @router.patch("/settings/mcp", summary="更新 MCP 总开关（写配置并热同步）")
-async def update_mcp_settings(body: McpSettingsUpdate, _auth=Depends(require_scopes("admin"))):
+async def update_mcp_settings(body: McpSettingsUpdate, _auth=Depends(require_scopes("admin")),
+    *, read_character=Depends(require_character_reader),
+):
     # Brief 115 根治：sync_mcp_servers() 现在只把信号丢进各 server 专属常驻 task 的
     # 队列，真正的 AsyncExitStack.aclose()/重连都在那个专属 task 自己的上下文里执行，
     # 不再从这次 HTTP 请求的 task 里跨 task 直接碰 stack，热同步可以安全恢复。
@@ -686,7 +692,7 @@ async def update_mcp_settings(body: McpSettingsUpdate, _auth=Depends(require_sco
     from core import config_loader, mcp_client
     config_loader.reload_config()
     await mcp_client.sync_mcp_servers(wait=False)
-    result = await get_mcp_settings(_auth)
+    result = await get_mcp_settings(_auth, read_character=read_character)
     result["message"] = "MCP 总开关已更新并热同步"
     return result
 
@@ -704,7 +710,9 @@ async def test_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("ad
 
 
 @router.post("/settings/mcp/import", summary="测试后导入远程 MCP server")
-async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("admin"))):
+async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("admin")),
+    *, read_character=Depends(require_character_reader),
+):
     from core import config_loader, mcp_client
 
     server_cfg = _validate_draft(body)
@@ -770,14 +778,16 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
         "server": _server_view(
             server_cfg,
             require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
-            session_exposed_names=_current_mcp_exposure_names(),
+            session_exposed_names=_current_mcp_exposure_names(read_character=read_character),
         ),
     })
     return payload
 
 
 @router.patch("/settings/mcp/{name}", summary="更新一个 MCP server 的启停或工具白名单")
-async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin"))):
+async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin")),
+    *, read_character=Depends(require_character_reader),
+):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
     if not body.model_fields_set:
@@ -833,7 +843,7 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
             "server": _server_view(
                 server,
                 require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
-                session_exposed_names=_current_mcp_exposure_names(),
+                session_exposed_names=_current_mcp_exposure_names(read_character=read_character),
             ),
         })
         return payload
@@ -926,13 +936,15 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
     payload["server"] = _server_view(
         server,
         require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
-        session_exposed_names=_current_mcp_exposure_names(),
+        session_exposed_names=_current_mcp_exposure_names(read_character=read_character),
     )
     return payload
 
 
 @router.post("/settings/mcp/{name}/reconnect", summary="按当前配置重新连接一个 MCP server")
-async def reconnect_mcp_server(name: str, _auth=Depends(require_scopes("admin"))):
+async def reconnect_mcp_server(name: str, _auth=Depends(require_scopes("admin")),
+    *, read_character=Depends(require_character_reader),
+):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
     full_cfg = _read_config()
@@ -956,7 +968,7 @@ async def reconnect_mcp_server(name: str, _auth=Depends(require_scopes("admin"))
     payload["server"] = _server_view(
         server,
         require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
-        session_exposed_names=_current_mcp_exposure_names(),
+        session_exposed_names=_current_mcp_exposure_names(read_character=read_character),
     )
     return payload
 

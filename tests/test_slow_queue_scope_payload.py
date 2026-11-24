@@ -100,7 +100,8 @@ async def test_new_payload_contains_scope_field(chars_tree, monkeypatch, sandbox
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),
     ):
-        await pipeline.post_process("u1", "hello", "hi", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', 'hello', 'hi', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', 'hello', 'hi', critical_result=_critical_result, envelope=env)
 
     scoped_payloads = [(t, p) for t, p in enqueued if t != "consistency_check"]
     assert scoped_payloads, "应有至少一个非 consistency_check 入队任务"
@@ -128,7 +129,8 @@ async def test_new_payload_retains_uid_and_char_id(chars_tree, monkeypatch, sand
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),
     ):
-        await pipeline.post_process("u42", "hello", "hi", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u42', 'hello', 'hi', envelope=env)
+        await pipeline.effects.run_deferred_effects('u42', 'hello', 'hi', critical_result=_critical_result, envelope=env)
 
     scoped_payloads = [(t, p) for t, p in enqueued if t != "consistency_check"]
     for task_type, payload in scoped_payloads:
@@ -209,7 +211,7 @@ def test_non_reality_scope_raises():
 
 def test_non_reality_scope_raises_pipeline():
     """pipeline._get_scope_from_payload 对非 reality domain 也应 fail-loud。"""
-    from core.pipeline import _get_scope_from_payload
+    from core.post_process.handlers import _get_scope_from_payload
 
     dream_scope = MemoryScope.dream_scope("u1", TEST_CHAR_ID, "world_x").to_payload()
     payload = {"uid": "u1", "char_id": TEST_CHAR_ID, "scope": dream_scope}
@@ -248,7 +250,7 @@ def test_legacy_payload_with_char_id_no_scope():
 
 def test_legacy_payload_pipeline_with_char_id_no_scope():
     """pipeline._get_scope_from_payload 对旧格式同样兼容。"""
-    from core.pipeline import _get_scope_from_payload
+    from core.post_process.handlers import _get_scope_from_payload
 
     payload = {"uid": "u_old", "char_id": TEST_CHAR_ID}
     scope = _get_scope_from_payload(payload, "legacy_test")
@@ -274,7 +276,7 @@ def test_legacy_payload_no_char_id_no_scope_warns_and_fallback(caplog):
 
 def test_legacy_payload_pipeline_no_char_id_warns(caplog):
     """pipeline._get_scope_from_payload 同样在无 scope/char_id 时 WARN + fallback yexuan。"""
-    from core.pipeline import _get_scope_from_payload
+    from core.post_process.handlers import _get_scope_from_payload
 
     payload = {"uid": "u_dlq2"}
     with caplog.at_level(logging.WARNING):
@@ -382,7 +384,7 @@ async def test_handler_reflect_to_episodic_uses_scope_char_id(sandbox):
 @pytest.mark.asyncio
 async def test_handler_user_profile_update_uses_scope_char_id(sandbox):
     """pipeline._handler_user_profile_update 应从 payload['scope'] 提取 char_id。"""
-    from core.pipeline import _handler_user_profile_update
+    from core.post_process.handlers import _handler_user_profile_update
 
     captured: list[tuple[str, str]] = []
 
@@ -453,7 +455,8 @@ async def test_new_payload_char_id_field_unchanged(chars_tree, monkeypatch, sand
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),
     ):
-        await pipeline.post_process("u_reg", "msg", "rep", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u_reg', 'msg', 'rep', envelope=env)
+        await pipeline.effects.run_deferred_effects('u_reg', 'msg', 'rep', critical_result=_critical_result, envelope=env)
 
     for task_type, payload in enqueued:
         if task_type == "consistency_check":

@@ -1,3 +1,4 @@
+from core.post_process import handlers as _handlers
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 R8-B: trait_tracker_update 独立 slow_queue 任务。
@@ -98,8 +99,9 @@ def test_handler_registered_in_slow_queue(monkeypatch):
     monkeypatch.setattr("core.memory.fixation_pipeline.handler_reflect_to_episodic",     _stub, raising=False)
     monkeypatch.setattr("core.memory.fixation_pipeline.handler_consolidate_to_identity", _stub, raising=False)
 
-    from core.pipeline import register_slow_handlers
-    register_slow_handlers()
+    from core.post_process.handlers import register_slow_handlers
+    register_slow_handlers(read_character=lambda: (TEST_CHAR_ID, None),
+                           write_author_note=lambda char_id, issue: True)
 
     assert "trait_tracker_update" in sq._handlers, (
         "trait_tracker_update must be registered after register_slow_handlers()"
@@ -134,7 +136,8 @@ async def test_post_process_enqueues_trait_tracker_update(
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process("u1", "你好", "在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '你好', '在的', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     types_enqueued = [t for t, _ in enqueued]
     assert "trait_tracker_update" in types_enqueued, (
@@ -174,7 +177,8 @@ async def test_payload_uses_active_char_id_not_hardcoded(
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process("u1", "你好", "在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '你好', '在的', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     assert captured_payloads, "trait_tracker_update must be enqueued"
     p = captured_payloads[0]
@@ -213,7 +217,8 @@ async def test_no_enqueue_when_write_disabled(
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process("u1", "你好", "在的", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical('u1', '你好', '在的', envelope=env)
+        await pipeline.effects.run_deferred_effects('u1', '你好', '在的', critical_result=_critical_result, envelope=env)
 
     assert "trait_tracker_update" not in enqueued_types, (
         "trait_tracker_update must not be enqueued when can_write_memory=False"
@@ -224,7 +229,7 @@ async def test_no_enqueue_when_write_disabled(
 
 async def test_handler_creates_trait_state_file(sandbox, public_default_traits):
     """The public default character's handler writes a valid trait_state file."""
-    from core.pipeline import _handler_trait_tracker_update
+    from core.post_process.handlers import _handler_trait_tracker_update
     from core.memory.scope import MemoryScope
 
     scope = MemoryScope.reality_scope("u_test", PUBLIC_DEFAULT_CHAR_ID)
@@ -251,7 +256,7 @@ async def test_handler_does_not_inherit_default_traits_for_non_default_role(
     sandbox, public_default_traits, caplog,
 ):
     """A public default schema must not become an arbitrary role's traits."""
-    from core.pipeline import _handler_trait_tracker_update
+    from core.post_process.handlers import _handler_trait_tracker_update
     from core.memory.scope import MemoryScope
 
     scope = MemoryScope.reality_scope("u_non_default", TEST_CHAR_ID)
@@ -285,7 +290,8 @@ def test_author_note_rotator_reads_handler_write_path(sandbox):
 def test_fetch_context_has_no_trait_tracker_enqueue():
     """fetch_context is a pure-read path and must not enqueue trait_tracker_update."""
     import core.pipeline as _p
-    source = inspect.getsource(_p.Pipeline.fetch_context)
+    from core.memory.reality_context import RealityContextReader
+    source = inspect.getsource(RealityContextReader.fetch)
     assert "trait_tracker_update" not in source, (
         "fetch_context must never enqueue trait_tracker_update (pure-read path)"
     )
@@ -297,7 +303,7 @@ def test_r3_no_new_yexuan_default_from_trait_handler():
     """_handler_trait_tracker_update must not declare char_id=TEST_CHAR_ID as default."""
     import ast, core.pipeline as _p
 
-    source = inspect.getsource(_p._handler_trait_tracker_update)
+    source = inspect.getsource(_handlers._handler_trait_tracker_update)
     tree = ast.parse(source)
 
     for node in ast.walk(tree):

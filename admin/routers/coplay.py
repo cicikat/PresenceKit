@@ -14,6 +14,7 @@ scope 复用 docs/security.md 里已有的 `activity`（活动/梦境 overlay �
 手工 set-active 端点：active/closing 转换只应由 watcher 触发，避免和真实检测
 状态打架。
 """
+from admin.character_dependencies import require_character_reader
 
 import logging
 import hashlib
@@ -37,10 +38,11 @@ def _owner_uid() -> str:
     return uid
 
 
-def _active_char_id() -> str:
-    from core.pipeline_registry import get as _get_pipeline
-    pl = _get_pipeline()
-    char_id = pl._active_character_id if pl else None
+def _active_char_id(
+    *, read_character,
+) -> str:
+    pl = read_character()
+    char_id = pl.active_character_id if pl else None
     return char_id or DEFAULT_CHAR_ID
 
 
@@ -50,12 +52,14 @@ def _coplay_enabled() -> bool:
 
 
 @router.get("/coplay/state", summary="读取陪玩模式状态（只读）")
-async def coplay_state_get(_auth=Depends(require_scopes("activity"))):
+async def coplay_state_get(_auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     from core.coplay import watcher
     from core.coplay.session import read_state
 
     uid = _owner_uid()
-    char_id = _active_char_id()
+    char_id = _active_char_id(read_character=read_character)
     state = read_state(uid, char_id=char_id)
     from core.coplay.device_collection import projection
     return {
@@ -71,7 +75,9 @@ async def coplay_state_get(_auth=Depends(require_scopes("activity"))):
 
 
 @router.post("/coplay/arm", summary="开启陪玩模式（off → armed）")
-async def coplay_arm(_auth=Depends(require_scopes("activity"))):
+async def coplay_arm(_auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     from core.coplay.session import arm
 
     if not _coplay_enabled():
@@ -82,17 +88,19 @@ async def coplay_arm(_auth=Depends(require_scopes("activity"))):
         )
 
     uid = _owner_uid()
-    char_id = _active_char_id()
+    char_id = _active_char_id(read_character=read_character)
     state = arm(uid, char_id=char_id)
     return {"ok": True, "status": state.get("status")}
 
 
 @router.post("/coplay/disarm", summary="关闭陪玩模式（任意状态 → off，总是成功）")
-async def coplay_disarm(_auth=Depends(require_scopes("activity"))):
+async def coplay_disarm(_auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     from core.coplay.session import disarm
 
     uid = _owner_uid()
-    char_id = _active_char_id()
+    char_id = _active_char_id(read_character=read_character)
     state = disarm(uid, char_id=char_id)
     return {"ok": True, "status": state.get("status")}
 
@@ -125,16 +133,20 @@ def _device_identity(request: Request) -> str:
 
 @router.post("/coplay/device/poll", summary="桌面陪玩采集租约")
 async def device_poll(body: DevicePoll, request: Request,
-                      _auth=Depends(require_scopes("activity", "sensor.write", "ws.desktop"))):
+                      _auth=Depends(require_scopes("activity", "sensor.write", "ws.desktop")),
+    *, read_character=Depends(require_character_reader),
+):
     from core.coplay.device_collection import poll
-    return poll(_owner_uid(), _active_char_id(), _device_identity(request), **body.model_dump())
+    return poll(_owner_uid(), _active_char_id(read_character=read_character), _device_identity(request), **body.model_dump())
 
 
 @router.post("/coplay/device/result", summary="提交一次性陪玩设备采集")
 async def device_result(body: DeviceResult, request: Request,
-                        _auth=Depends(require_scopes("activity", "sensor.write", "ws.desktop"))):
+                        _auth=Depends(require_scopes("activity", "sensor.write", "ws.desktop")),
+    *, read_character=Depends(require_character_reader),
+):
     from core.coplay.device_collection import accept
-    result = accept(_owner_uid(), _active_char_id(), _device_identity(request), body.model_dump())
+    result = accept(_owner_uid(), _active_char_id(read_character=read_character), _device_identity(request), body.model_dump())
     if not result["accepted"]:
         raise HTTPException(409, result["reason"])
     return result

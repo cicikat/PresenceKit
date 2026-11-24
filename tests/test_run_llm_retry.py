@@ -71,7 +71,7 @@ async def test_first_failure_then_success_returns_reply(monkeypatch, sandbox):
     monkeypatch.setattr(llm_client, "chat", fake_chat)
 
     pipeline = _make_pipeline()
-    reply = await pipeline.run_llm([{"role": "user", "content": "hi"}])
+    reply = await pipeline.generation.run_llm([{"role": "user", "content": "hi"}])
 
     assert reply == "回复文本"
     assert len(calls) == 2, f"expected exactly 2 chat() calls, got {len(calls)}"
@@ -96,7 +96,7 @@ async def test_all_retries_fail_degrades_to_fallback_message(monkeypatch, sandbo
     monkeypatch.setattr(llm_client, "chat", always_fail)
 
     pipeline = _make_pipeline()
-    reply = await pipeline.run_llm([{"role": "user", "content": "hi"}])
+    reply = await pipeline.generation.run_llm([{"role": "user", "content": "hi"}])
 
     assert reply == "我现在有点累，等会儿再聊～"
     assert call_count == 3, f"expected exactly max_retries=3 chat() calls, got {call_count}"
@@ -121,7 +121,7 @@ async def test_retries_do_not_duplicate_or_mutate_messages(monkeypatch, sandbox)
 
     pipeline = _make_pipeline()
     original_messages = [{"role": "user", "content": "hi"}]
-    await pipeline.run_llm(original_messages)
+    await pipeline.generation.run_llm(original_messages)
 
     assert len(received) == 3
     assert all(msgs == original_messages for msgs in received), (

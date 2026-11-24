@@ -262,7 +262,7 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
                 )
                 return
             scope = MemoryScope.reality_scope(uid, char_id)
-            context = await pipeline.fetch_context(
+            context = await pipeline.context.fetch(
                 uid,
                 _CONTINUATION_PROMPT,
                 frozen_scope=scope,
@@ -274,7 +274,7 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
                 context,
                 char_id=char_id,
             )
-            reply = await pipeline.run_llm(messages, is_proactive=True, char_id=char_id)
+            reply = await pipeline.generation.run_llm(messages, is_proactive=True, char_id=char_id)
             if not str(reply or "").strip():
                 _lifecycle_record(
                     uid,
@@ -312,7 +312,7 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
                 trigger_name="dream_exit_continuation",
                 fanout="all",
                 bypass_gate=True,
-                pipeline=pipeline,
+                effects=pipeline.effects,
                 envelope=stamp_trigger(),
                 audit_extras={
                     "delivery_kind": DELIVERY_CONTINUATION,

@@ -47,7 +47,7 @@ def _lines_with(src: str, pat: str) -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DLQ_ALLOWED_FUNCTIONS = {
-    "core/pipeline.py":              "_get_scope_from_payload",
+    "core/post_process/handlers.py": "_get_scope_from_payload",
     "core/memory/fixation_pipeline.py": "_get_scope_from_payload",
 }
 
@@ -278,7 +278,7 @@ def test_dlq_compat_layers_emit_warn():
     P1-3A 后 pipeline/fixation 改名为 _get_scope_from_payload。
     """
     checks = [
-        ("core/pipeline.py",               "_get_scope_from_payload",  "logger.warning"),
+        ("core/post_process/handlers.py", "_get_scope_from_payload",  "logger.warning"),
         ("core/memory/fixation_pipeline.py","_get_scope_from_payload",  "logger.warning"),
         ("core/dream/dream_pipeline.py",    "_state_char_id",            "logger.warning"),
     ]
@@ -362,7 +362,7 @@ def test_pipeline_dlq_fallback_emits_warning_for_legacy_payload():
     P1-3A: 返回值由 str 改为 MemoryScope。
     """
     import logging
-    from core.pipeline import _get_scope_from_payload
+    from core.post_process.handlers import _get_scope_from_payload
 
     with mock.patch.object(
         __import__("logging").getLogger("core.pipeline"),
@@ -420,7 +420,7 @@ def test_pipeline_dlq_new_payload_no_fallback():
     P1-3A: 返回值由 str 改为 MemoryScope。
     """
     import logging
-    from core.pipeline import _get_scope_from_payload
+    from core.post_process.handlers import _get_scope_from_payload
 
     with mock.patch.object(
         __import__("logging").getLogger("core.pipeline"),

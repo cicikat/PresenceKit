@@ -302,11 +302,5 @@ def reload_active_character(char_id: str) -> None:
     if pipeline is None:
         return  # admin running standalone, no pipeline yet
 
-    new_char = load(char_id)
-    pipeline.character = new_char
-    pipeline._active_character_id = char_id
-    if pipeline.lore_engine is not None:
-        pipeline.lore_engine.load()
-        if new_char.world_book:
-            pipeline.lore_engine.load_entries(new_char.world_book)
+    new_char = pipeline.character_state.reload_character(char_id)
     logger.info(f"[character] hot-reloaded {char_id!r} ({new_char.name}) on pipeline")

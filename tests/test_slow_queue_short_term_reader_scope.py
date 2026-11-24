@@ -81,7 +81,7 @@ async def test_user_profile_update_does_not_read_short_term(sandbox):
     _handler_user_profile_update 使用 payload['recent']，
     不在 handler 内部调用 short_term.load/get_history/load_for_prompt。
     """
-    from core.pipeline import _handler_user_profile_update
+    from core.post_process.handlers import _handler_user_profile_update
     import core.memory.short_term as _st
 
     uid = "uid_profile_test"
@@ -277,7 +277,7 @@ async def test_character_b_payload_never_reads_yexuan_short_term(sandbox):
         handler_consolidate_to_identity,
         handler_capture_turn_retry,
     )
-    from core.pipeline import _handler_user_profile_update
+    from core.post_process.handlers import _handler_user_profile_update
     import core.memory.short_term as _st
 
     uid = "uid_character_b_isolation"
@@ -337,7 +337,7 @@ async def test_legacy_dlq_payload_missing_char_id_warns_and_falls_back(caplog):
     覆盖 fixation_pipeline 和 pipeline 两处 helper。
     """
     from core.memory.fixation_pipeline import _get_scope_from_payload as _fp_helper
-    from core.pipeline import _get_scope_from_payload as _pl_helper
+    from core.post_process.handlers import _get_scope_from_payload as _pl_helper
 
     with caplog.at_level(logging.WARNING):
         fp_scope = _fp_helper({"uid": "u1"}, "test_handler")
@@ -405,7 +405,7 @@ def test_get_char_id_from_payload_returns_char_id_silently(caplog):
     payload 含 char_id（无 scope）时 legacy fallback 直接返回 scope，不发任何 WARNING。
     """
     from core.memory.fixation_pipeline import _get_scope_from_payload as _fp_helper
-    from core.pipeline import _get_scope_from_payload as _pl_helper
+    from core.post_process.handlers import _get_scope_from_payload as _pl_helper
 
     with caplog.at_level(logging.WARNING):
         fp_scope = _fp_helper({"uid": "u1", "char_id": "character_b"}, "test_handler")

@@ -1,5 +1,6 @@
 """Dream settings are per-character; live active / default dirs are not shared authority."""
 from __future__ import annotations
+from tests.fixtures.runtime_capabilities import read_registered_character
 
 import json
 
@@ -109,11 +110,11 @@ def test_http_settings_follow_active_character_not_peer_bucket(sandbox, monkeypa
     register(_Fake(TEST_CHAR_ID))
     monkeypatch.setattr('admin.routers.dream_common._owner_uid', lambda: _UID)
 
-    got = __import__("asyncio").run(dream_settings_get())
+    got = __import__("asyncio").run(dream_settings_get(read_character=read_registered_character))
     assert got["world_layer"] == "abo"
 
     register(_Fake(TEST_PEER_CHAR_ID))
-    patched = __import__("asyncio").run(dream_settings_patch({"lucid_mode": "non_lucid"}))
+    patched = __import__("asyncio").run(dream_settings_patch({"lucid_mode": "non_lucid"}, read_character=read_registered_character))
     assert patched["ok"]
     assert load(_UID, char_id=TEST_PEER_CHAR_ID)["lucid_mode"] == "non_lucid"
     assert load(_UID, char_id=TEST_CHAR_ID)["lucid_mode"] == "lucid_shared"
@@ -134,11 +135,11 @@ def test_http_settings_explicit_char_id_ignores_active(sandbox, monkeypatch):
     register(_Fake(TEST_CHAR_ID))
     monkeypatch.setattr('admin.routers.dream_common._owner_uid', lambda: _UID)
 
-    got = __import__("asyncio").run(dream_settings_get(char_id=TEST_PEER_CHAR_ID))
+    got = __import__("asyncio").run(dream_settings_get(char_id=TEST_PEER_CHAR_ID, read_character=read_registered_character))
     assert got["world_layer"] == "vampire"
 
     patched = __import__("asyncio").run(
-        dream_settings_patch({"lucid_mode": "non_lucid", "char_id": TEST_PEER_CHAR_ID})
+        dream_settings_patch({"lucid_mode": "non_lucid", "char_id": TEST_PEER_CHAR_ID}, read_character=read_registered_character)
     )
     assert patched["ok"]
     assert load(_UID, char_id=TEST_PEER_CHAR_ID)["lucid_mode"] == "non_lucid"
@@ -162,7 +163,7 @@ def test_world_rename_does_not_rewrite_peer_character_settings(sandbox, monkeypa
     src = sandbox.dream_worlds_dir() / "rename_src"
     src.mkdir(parents=True, exist_ok=True)
     (src / "ruleset.md").write_text("rename isolation", encoding="utf-8")
-    result = __import__("asyncio").run(rename_dream_world("rename_src", {"new_name": "rename_dst"}))
+    result = __import__("asyncio").run(rename_dream_world("rename_src", {"new_name": "rename_dst"}, read_character=read_registered_character))
     assert result["world"] == "rename_dst"
     assert load(_UID, char_id=TEST_CHAR_ID)["world_layer"] == "rename_dst"
     assert load(_UID, char_id=TEST_PEER_CHAR_ID)["world_layer"] == "rename_src"
@@ -197,7 +198,7 @@ async def test_observability_http_returns_effective_char(sandbox, monkeypatch):
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": _UID}, "character": {"default": TEST_CHAR_ID}},
     )
-    snap = await dream_settings_observability()
+    snap = await dream_settings_observability(read_character=read_registered_character)
     assert snap["uid"] == _UID
     assert snap["char_id"] == TEST_CHAR_ID
     assert snap["canonical_exists"] is True

@@ -306,7 +306,7 @@ def legacy_tick_should_send_result(ex_module):
 class TestRunAgenticLoopToolCategories:
     def _make_pipeline(self, character=None):
         from core.pipeline import Pipeline
-        pl = Pipeline.__new__(Pipeline)
+        pl = Pipeline(character=None, lore_engine=None)
         pl.character = character
         return pl
 
@@ -337,7 +337,7 @@ class TestRunAgenticLoopToolCategories:
         character = _FakeChar(presence_ext={"tool_categories_path_c": ["info", "mcp"]})
         monkeypatch.setattr("core.character_loader.load", lambda _char_id: character)
         pl = self._make_pipeline(character=character)
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 
@@ -345,7 +345,7 @@ class TestRunAgenticLoopToolCategories:
             status = "idle"
 
         result = asyncio.run(
-            pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
+            pl.tools.run([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         assert result == "done"
         assert seen_categories == [["info", "mcp", "self", "schedule", "life", "qzone"]]
@@ -371,7 +371,7 @@ class TestRunAgenticLoopToolCategories:
         async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 
@@ -379,7 +379,7 @@ class TestRunAgenticLoopToolCategories:
             status = "idle"
 
         result = asyncio.run(
-            pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
+            pl.tools.run([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         assert result == "done"
         assert seen_categories == [["info", "desktop", "memory", "self", "schedule", "life", "qzone"]]
@@ -402,7 +402,7 @@ class TestRunAgenticLoopToolCategories:
         async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 
@@ -410,7 +410,7 @@ class TestRunAgenticLoopToolCategories:
             status = "idle"
 
         asyncio.run(
-            pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
+            pl.tools.run([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         msgs = seen_messages[0]
         assert msgs[-1]["role"] == "user"
@@ -434,7 +434,7 @@ class TestRunAgenticLoopToolCategories:
         async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
-        monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
+        monkeypatch.setattr(pl.generation, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio
 
@@ -442,7 +442,7 @@ class TestRunAgenticLoopToolCategories:
             status = "idle"
 
         asyncio.run(
-            pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
+            pl.tools.run([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         msgs = seen_messages[0]
         assert all(m.get("_layer") != "11.5_tool_nudge" for m in msgs)

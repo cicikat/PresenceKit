@@ -128,10 +128,11 @@ class _FakeChannel:
 
 
 class _FakePipeline:
-    async def post_process_critical(self, uid, content, reply, **kwargs):
+    effects = property(lambda self: self)
+    async def capture_critical(self, uid, content, reply, **kwargs):
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+    async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
         return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
 
@@ -151,7 +152,7 @@ async def test_fanout_channel_preserves_action_text(monkeypatch):
         source=TurnSource.USER_CHAT,
         user_text="在吗",
         fanout="qq",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -178,7 +179,7 @@ async def test_fanout_channel_strips_render_tags_not_bracket_actions(monkeypatch
         source=TurnSource.TRIGGER,
         trigger_name="scheduler_test",
         fanout="mobile",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -206,7 +207,7 @@ async def test_fanout_render_tags_stripped(enabled_client_channels):
         source=TurnSource.USER_CHAT,
         user_text="在吗",
         fanout="mobile",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -469,7 +470,7 @@ async def test_qq_fanout_strips_tags_keeps_bracket_actions():
         source=TurnSource.USER_CHAT,
         user_text="别欺负我",
         fanout="qq",
-        pipeline=_FakePipeline(),
+        effects=_FakePipeline().effects,
     )
 
     assert len(ch.sent) == 1
@@ -505,14 +506,15 @@ async def test_all_action_reply_visible_kept_memory_skipped(enabled_client_chann
 
     class _FakePipelineWithCapture:
         """Lets us intercept what memory_text post_process receives."""
+        effects = property(lambda self: self)
         def __init__(self):
             self.received_reply = None
 
-        async def post_process_critical(self, uid, content, reply, **kwargs):
+        async def capture_critical(self, uid, content, reply, **kwargs):
             self.received_reply = reply
             return {"turn_id": "t2", "critical_written": False, "emotion": "neutral"}
 
-        async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+        async def run_deferred_effects(self, uid, content, reply, critical_result, **kwargs):
             return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
     pl = _FakePipelineWithCapture()
@@ -523,7 +525,7 @@ async def test_all_action_reply_visible_kept_memory_skipped(enabled_client_chann
         source=TurnSource.USER_CHAT,
         user_text="在吗",
         fanout="mobile",
-        pipeline=pl,
+        effects=pl.effects,
     )
 
     # Visible output was delivered (channel received something)

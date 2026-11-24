@@ -1,4 +1,6 @@
 """Dream sessions API responsibilities; legacy names re-exported by dream.py."""
+from admin.character_dependencies import require_character_reader
+from functools import partial as _bind_character_reader
 
 from admin.routers import dream_common
 
@@ -21,7 +23,9 @@ _set_wake_observation = session_control._set_wake_observation
 
 
 @router.post("/dream/enter", summary="进入梦境")
-async def dream_enter(body: dict = {}, _auth=Depends(require_scopes("activity"))):
+async def dream_enter(body: dict = {}, _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     uid = dream_common._owner_uid()
     entry_reason = (body.get("entry_reason") or "").strip()
     dream_mode = (body.get("dream_mode") or "sandbox").strip()
@@ -33,14 +37,13 @@ async def dream_enter(body: dict = {}, _auth=Depends(require_scopes("activity"))
             detail=f"dream_mode={dream_mode!r} 非法，有效值：{sorted(VALID_DREAM_MODES)}",
         )
 
-    from core.pipeline_registry import get as _get_pipeline
     from core.dream.dream_pipeline import enter_dream
 
-    pl = _get_pipeline()
+    pl = read_character()
     if pl is None:
         raise HTTPException(status_code=503, detail="pipeline not initialized")
     char_id = resolve_requested_char_id(
-        body.get("char_id"), fallback=dream_common._active_dream_char_id,
+        body.get("char_id"), fallback=_bind_character_reader(dream_common._active_dream_char_id, read_character=read_character),
     )
 
     result = await enter_dream(
@@ -53,7 +56,9 @@ async def dream_enter(body: dict = {}, _auth=Depends(require_scopes("activity"))
 
 
 @router.post("/dream/chat", summary="梦境对话（独立 pipeline）")
-async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
+async def dream_chat(body: dict, _auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     """
     Dream turn endpoint — routes to dream_pipeline, never to reality pipeline.
 
@@ -104,11 +109,10 @@ async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
         import uuid as _uuid
 
         from channels import ui_push as _ui_push
-        from core.pipeline_registry import get as _get_pipeline
 
         _msg_id = _uuid.uuid4().hex
-        _pl = _get_pipeline()
-        _char_id = getattr(_pl, "_active_character_id", None) or ""
+        _pl = read_character()
+        _char_id = getattr(_pl, "active_character_id", None) or ""
         try:
             await _ui_push.pseudo_stream_push(
                 reply, msg_id=_msg_id, char_id=_char_id, profile="dream",

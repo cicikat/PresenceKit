@@ -24,7 +24,7 @@ from core.llm_client import ChatTurn
 
 def _make_pipeline():
     from core.pipeline import Pipeline
-    return Pipeline.__new__(Pipeline)
+    return Pipeline(character=None, lore_engine=None)
 
 
 @pytest.fixture(autouse=True)
@@ -147,7 +147,7 @@ async def test_empty_tool_free_closing_preserves_existing_natural_answer(monkeyp
             yield ''
     monkeypatch.setattr('core.llm_client.chat_stream', empty_stream)
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{'role': 'user', 'content': 'Read the fixture.'}], uid='fixture-owner',
         char_id=TEST_CHAR_ID, session_state=object(), stream=stream)
     text = ''.join([piece async for piece in result]) if stream else result
@@ -163,7 +163,7 @@ async def test_per_turn_exclude_tools_hides_only_completed_fast_path_tool(monkey
         ChatTurn(content="direct response", tool_calls=[], assistant_message={"role": "assistant", "content": "direct response"}),
     ])
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "what time is it"}],
         uid="u1",
         char_id=TEST_CHAR_ID,
@@ -195,7 +195,7 @@ async def test_without_per_turn_exclusion_native_fc_can_call_get_time(monkeypatc
     execute_calls = _script_execute(monkeypatch, [("工具已执行：get_time，结果：当前时间 10:00", None)])
     _patch_final_chat(monkeypatch, text="现在十点。")
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "what time is it"}],
         uid="u1",
         char_id=TEST_CHAR_ID,
@@ -224,7 +224,7 @@ async def test_same_life_records_query_runs_once_per_chat_turn(monkeypatch, sand
     execute_calls = _script_execute(monkeypatch, [("工具已执行：read_life_records，结果：找到记录", None)])
     _patch_final_chat(monkeypatch, text="已查到。")
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查昨天记录"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(),
     )
@@ -245,7 +245,7 @@ async def test_identical_arguments_different_read_tools_never_share_results(monk
     ])
     executed = _script_execute(monkeypatch, [(f"distinct result {name}", None) for name in names])
     _patch_final_chat(monkeypatch, text="按实际记录回答。")
-    result = await _make_pipeline().run_agentic_loop([{"role":"user","content":"查生活记录和权限"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object())
+    result = await _make_pipeline().tools.run([{"role":"user","content":"查生活记录和权限"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object())
     assert [call["tool_name"] for call in executed] == names
     assert result == "按实际记录回答。"
 
@@ -268,7 +268,7 @@ async def test_read_reuse_requires_success_and_unchanged_grants_and_data(monkeyp
     first = ToolExecutionOutcome(status="tool_failed", result="temporarily unavailable") if change == "failure" else ("first result",None)
     executed = _script_execute(monkeypatch, [first, ("new result", None)])
     _patch_final_chat(monkeypatch, text="明确说明读取状态。")
-    await _make_pipeline().run_agentic_loop([{"role":"user","content":"查生活记录"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object())
+    await _make_pipeline().tools.run([{"role":"user","content":"查生活记录"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object())
     assert len(executed) == 2
 
 
@@ -295,7 +295,7 @@ async def test_meal_question_keeps_goal_and_real_grocery_details_without_self_db
     ])
     closing=_patch_final_chat(monkeypatch,text='按每餐各一份米饭青菜和两枚鸡蛋，大约4餐，剩4枚鸡蛋。')
     question='前些天买的那些东西大概可以吃几餐？每餐米饭青菜各一份、鸡蛋两枚。'
-    result=await _make_pipeline().run_agentic_loop([{'role':'user','content':question}],uid='u1',char_id=TEST_CHAR_ID,session_state=object())
+    result=await _make_pipeline().tools.run([{'role':'user','content':question}],uid='u1',char_id=TEST_CHAR_ID,session_state=object())
     assert '4餐' in result
     final=closing[-1]
     assert any(row.get('role')=='user' and row.get('content')==question for row in final)
@@ -316,7 +316,7 @@ async def test_past_action_question_gets_audit_before_model_answer(monkeypatch):
         ChatTurn(content="有记录", tool_calls=[], assistant_message={"role": "assistant", "content": "有记录"}),
     ])
 
-    await _make_pipeline().run_agentic_loop(
+    await _make_pipeline().tools.run(
         [{"role": "user", "content": "昨晚你调用了什么工具？"}], uid="u1",
         char_id=TEST_CHAR_ID, session_state=object(),
     )
@@ -340,7 +340,7 @@ async def test_natural_termination_no_tool(monkeypatch):
     execute_calls = _script_execute(monkeypatch, [])
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -362,7 +362,7 @@ async def test_empty_natural_termination_falls_back_to_tool_free_final(monkeypat
     final_calls = _patch_final_chat(monkeypatch, text="降级后的正常回复")
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -393,7 +393,7 @@ async def test_two_step_natural_termination_with_tool_includes_reanchor(monkeypa
     final_calls = _patch_final_chat(monkeypatch, text="今天挺晴朗的～")
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "今天天气"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -438,7 +438,7 @@ async def test_steps_exhausted_forces_closing(monkeypatch):
     final_calls = _patch_final_chat(monkeypatch, text="收尾回复")
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "查两次"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -464,7 +464,7 @@ async def test_exclude_tools_filtered_from_schema(monkeypatch):
     _script_execute(monkeypatch, [])
 
     pipeline = _make_pipeline()
-    await pipeline.run_agentic_loop(
+    await pipeline.tools.run(
         [{"role": "user", "content": "hi"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -496,7 +496,7 @@ async def test_single_tool_exception_does_not_abort_loop(monkeypatch):
     final_calls = _patch_final_chat(monkeypatch, text="收尾")
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -525,7 +525,7 @@ async def test_ask_confirm_forces_immediate_stop(monkeypatch):
     execute_calls = _script_execute(monkeypatch, [(None, ask_text)])
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "关机"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -633,7 +633,7 @@ async def test_stream_tool_step_nonstream_final_streamed(monkeypatch):
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
     pipeline = _make_pipeline()
-    gen = await pipeline.run_agentic_loop(
+    gen = await pipeline.tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
@@ -663,7 +663,7 @@ async def test_stream_empty_natural_termination_falls_back_to_tool_free_stream(m
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
     pipeline = _make_pipeline()
-    gen = await pipeline.run_agentic_loop(
+    gen = await pipeline.tools.run(
         [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
@@ -703,7 +703,7 @@ async def test_action_trace_recorded_per_step(monkeypatch, sandbox):
 
     from core.session_state import SessionState
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "帮我做点事"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=SessionState(),
     )
@@ -787,7 +787,7 @@ async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, t
         stream_compatibility="openlux", protocol_recovery="nonstream_then_fallback")
     monkeypatch.setattr("core.llm_client.get_model_client", lambda *a, **k: mc)
     try:
-        request = _make_pipeline().run_agentic_loop(
+        request = _make_pipeline().tools.run(
             [{"role": "user", "content": "Create result.md in the workspace."}],
             uid="workspace-owner", char_id=TEST_CHAR_ID, session_state=SessionState())
         if failure == 'split_packets_incomplete':
@@ -855,7 +855,7 @@ async def test_nudge_hint_teaches_tail_brace_convention(monkeypatch):
     _script_execute(monkeypatch, [])
 
     pipeline = _make_pipeline()
-    await pipeline.run_agentic_loop(
+    await pipeline.tools.run(
         [{"role": "user", "content": "hi"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -883,7 +883,7 @@ async def test_nudge_hint_forbids_narrating_tool_call_as_dialogue(monkeypatch):
     _script_execute(monkeypatch, [])
 
     pipeline = _make_pipeline()
-    await pipeline.run_agentic_loop(
+    await pipeline.tools.run(
         [{"role": "user", "content": "去调用工具玩一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -917,7 +917,7 @@ async def test_nudge_hint_derives_opaque_mcp_parameter_guidance_from_current_reg
     ])
     _script_execute(monkeypatch, [])
 
-    await _make_pipeline().run_agentic_loop(
+    await _make_pipeline().tools.run(
         [{"role": "user", "content": "play"}], uid="u1", char_id="c1", session_state=object(),
     )
 
@@ -983,7 +983,7 @@ async def test_tail_brace_relay_triggers_second_tool_call(monkeypatch):
     )
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "陪我钓鱼"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -1038,7 +1038,7 @@ async def test_tail_brace_relay_unresolved_falls_back_to_natural_text(monkeypatc
     _fake_chat_with_relay(monkeypatch, relay_tool_calls=[], final_text="不会被用到")
 
     pipeline = _make_pipeline()
-    result = await pipeline.run_agentic_loop(
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "帮我个忙"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -1067,7 +1067,7 @@ async def test_tail_brace_false_marker_never_reaches_final_display(
         ),
     ])
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=stream,
     )
@@ -1167,7 +1167,7 @@ async def test_relay_prompt_covers_current_loop_categories_including_mcp(monkeyp
     )
 
     pipeline = _make_pipeline()
-    await pipeline.run_agentic_loop(
+    await pipeline.tools.run(
         [{"role": "user", "content": "陪我玩海龟汤"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
@@ -1191,7 +1191,7 @@ async def test_model_tool_preset_narrows_schema_for_its_chat_preset(monkeypatch)
     ])
     _script_execute(monkeypatch, [])
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id="c1", session_state=None,
     )
 
@@ -1217,7 +1217,7 @@ async def test_model_tool_preset_does_not_recatalogue_dynamic_mcp_tools(monkeypa
     ])
     _script_execute(monkeypatch, [])
 
-    await _make_pipeline().run_agentic_loop(
+    await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id="c1", session_state=None,
     )
 
@@ -1300,7 +1300,7 @@ async def test_tool_used_closing_generation_strips_false_marker(monkeypatch, str
     else:
         closing_calls = _patch_final_chat(monkeypatch, text="今天挺晴朗的～{false}")
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "今天天气"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=stream,
     )
@@ -1330,7 +1330,7 @@ async def test_tool_used_stream_deltas_never_flash_marker(monkeypatch):
     _script_execute(monkeypatch, [("晴，25度", None)])
     _script_char_stream(monkeypatch, "今天挺晴朗的～{false}")
 
-    gen = await _make_pipeline().run_agentic_loop(
+    gen = await _make_pipeline().tools.run(
         [{"role": "user", "content": "今天天气"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
@@ -1355,7 +1355,7 @@ async def test_empty_and_exhausted_closing_strips_marker_and_drops_nudge(monkeyp
     _script_execute(monkeypatch, [("r1", None)])
     final_calls = _patch_final_chat(monkeypatch, text="收尾回复{false}")
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一次"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
     assert result == "收尾回复"
@@ -1366,7 +1366,7 @@ async def test_empty_and_exhausted_closing_strips_marker_and_drops_nudge(monkeyp
         ChatTurn(content="", tool_calls=[], assistant_message={"role": "assistant", "content": ""}),
     ])
     empty_calls = _patch_final_chat(monkeypatch, text="降级后的正常回复{true: 再查一次}")
-    empty_result = await _make_pipeline().run_agentic_loop(
+    empty_result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
     assert empty_result == "降级后的正常回复"
@@ -1391,7 +1391,7 @@ async def test_budget_timeout_closing_strips_marker(monkeypatch):
     _script_execute(monkeypatch, [("r1", None)])
     final_calls = _patch_final_chat(monkeypatch, text="超时收尾{false}")
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
     assert result == "超时收尾"
@@ -1413,7 +1413,7 @@ async def test_inner_chat_timeout_is_not_logged_as_total_budget(monkeypatch, cap
     final_calls = _patch_final_chat(monkeypatch, text="内层超时收尾")
     caplog.set_level(logging.WARNING, logger="core.pipeline")
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
     assert result == "内层超时收尾"
@@ -1440,7 +1440,7 @@ async def test_anti_collapse_retry_strips_marker(monkeypatch):
         return "嗯。换了个说法{false}"
 
     monkeypatch.setattr("core.llm_client.chat", _retry)
-    result = await pipeline._anti_collapse_prefix_retry(
+    result = await pipeline.generation._anti_collapse_prefix_retry(
         [{"role": "assistant", "content": "嗯。历史", "_layer": "9_history"}],
         "嗯。原始回复{false}",
     )
@@ -1466,7 +1466,7 @@ async def test_stream_zero_output_fallback_strips_marker(monkeypatch):
     monkeypatch.setattr("core.llm_client.chat_stream", _empty_stream)
     _patch_final_chat(monkeypatch, text="降级后的正常回复{false}")
 
-    gen = await _make_pipeline().run_agentic_loop(
+    gen = await _make_pipeline().tools.run(
         [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
@@ -1492,7 +1492,7 @@ async def test_stream_cut_mid_marker_does_not_flash_prefix(monkeypatch):
     _script_execute(monkeypatch, [("搜索结果", None)])
     _script_char_stream(monkeypatch, "你好呀{false}", raise_after=len("你好呀{fa"))
 
-    gen = await _make_pipeline().run_agentic_loop(
+    gen = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
@@ -1518,7 +1518,7 @@ async def test_unknown_tool_outcome_stops_the_loop_before_any_repeat(monkeypatch
         assistant_message={"role": "assistant", "content": None},
     )])
     effects = _script_execute(monkeypatch, [ToolExecutionOutcome("outcome_unknown")])
-    reply = await _make_pipeline().run_agentic_loop(
+    reply = await _make_pipeline().tools.run(
         [{"role": "user", "content": "fixture"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(),
     )
@@ -1542,7 +1542,7 @@ async def test_ordinary_braces_survive_stream_and_closing(monkeypatch):
     text = "集合 {a, b} 和字面 {falsehood} 都要保留"
     _script_char_stream(monkeypatch, text)
 
-    gen = await _make_pipeline().run_agentic_loop(
+    gen = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
@@ -1565,7 +1565,7 @@ async def test_display_defense_does_not_replay_true_marker_as_tool(monkeypatch):
     execute_calls = _script_execute(monkeypatch, [("ok", None)])
     _patch_final_chat(monkeypatch, text="收尾{true: 再搜一次}")
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
     assert result == "收尾"
@@ -1661,7 +1661,7 @@ async def test_failover_continues_real_tool_loop_without_repeating_write(
     monkeypatch.setattr("core.llm_client.get_model_client", lambda *a, **k: primary)
     monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (fallback, ""))
     try:
-        result = await _make_pipeline().run_agentic_loop(
+        result = await _make_pipeline().tools.run(
             [{"role": "user", "content": "Save the fixture."}], uid="fixture-owner", char_id=TEST_CHAR_ID,
             session_state=SessionState())
         assert result == "The fixture is ready."

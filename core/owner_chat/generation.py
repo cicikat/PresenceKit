@@ -117,7 +117,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
         _t_first_delta_ts = None
         try:
             if _loop_active:
-                _stream_source = await pipeline.run_agentic_loop(
+                _stream_source = await pipeline.tools.run(
                     messages, uid=user_id, char_id=_frozen_scope.character_id,
                     session_state=_loop_session_state, is_group=False, stream=True,
                     tool_event_observer=_tool_status_observer,
@@ -129,7 +129,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
                     allowed_tool_names=allowed_tool_names,
                 )
             else:
-                _stream_source = pipeline.run_llm_stream(
+                _stream_source = pipeline.generation.run_llm_stream(
                     messages, char_id=_frozen_scope.character_id, user_id=user_id,
                 )
             async for piece in _stream_source:
@@ -193,7 +193,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
         _stream_msg_id = None
         _t0 = time.monotonic()
         if _loop_active:
-            reply = await pipeline.run_agentic_loop(
+            reply = await pipeline.tools.run(
                 messages, uid=user_id, char_id=_frozen_scope.character_id,
                 session_state=_loop_session_state, is_group=False,
                 tool_event_observer=_tool_status_observer,
@@ -206,7 +206,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
             )
         else:
             if provenance_source or turn_source != "user_chat":
-                reply = await pipeline.run_llm(
+                reply = await pipeline.generation.run_llm(
                     messages,
                     char_id=_frozen_scope.character_id,
                     is_proactive=turn_source != "user_chat",
@@ -216,13 +216,13 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
                 # test/extension seams with the historical one-argument
                 # signature working without weakening the production route.
                 import inspect as _inspect
-                _params = _inspect.signature(pipeline.run_llm).parameters
+                _params = _inspect.signature(pipeline.generation.run_llm).parameters
                 if "char_id" in _params:
-                    reply = await pipeline.run_llm(
+                    reply = await pipeline.generation.run_llm(
                         messages, char_id=_frozen_scope.character_id,
                     )
                 else:
-                    reply = await pipeline.run_llm(messages)
+                    reply = await pipeline.generation.run_llm(messages)
         _t_llm = time.monotonic() - _t0
     from core.llm_reasoning_store import finish_turn_capture
     finish_turn_capture()

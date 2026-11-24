@@ -313,7 +313,8 @@ class TestMoodGate:
 
         p = Pipeline(_FakeChar(), lore_engine=None)
         env = WriteEnvelope(can_write_memory=True, can_affect_mood=False)
-        await p.post_process("u1", "你好", "在呢", envelope=env)
+        _critical_result = await p.effects.capture_critical('u1', '你好', '在呢', envelope=env)
+        await p.effects.run_deferred_effects('u1', '你好', '在呢', critical_result=_critical_result, envelope=env)
 
         assert mood_calls == [], "can_affect_mood=False 时 mood_state.update 不应被调用"
 
@@ -349,6 +350,7 @@ class TestMoodGate:
             name = "Companion"
 
         p = Pipeline(_FakeChar(), lore_engine=None)
-        await p.post_process("u1", "你好", "在呢", envelope=stamp_user_chat())
+        _critical_result = await p.effects.capture_critical('u1', '你好', '在呢', envelope=stamp_user_chat())
+        await p.effects.run_deferred_effects('u1', '你好', '在呢', critical_result=_critical_result, envelope=stamp_user_chat())
 
         assert len(mood_calls) >= 1, "can_affect_mood=True 时 mood_state.update 应被调用"

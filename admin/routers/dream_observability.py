@@ -1,4 +1,5 @@
 """Dream observability API responsibilities; legacy names re-exported by dream.py."""
+from admin.character_dependencies import require_character_reader
 
 from admin.routers import dream_archives
 from admin.routers import dream_common
@@ -17,9 +18,11 @@ logger = logging.getLogger("admin.routers.dream")
 async def dream_invariants_get(
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     from core.dream.invariants import load
-    selected_char = dream_common._validated_live_char_id(char_id)
+    selected_char = dream_common._validated_live_char_id(char_id, read_character=read_character)
     entries = load(dream_common._owner_uid(), char_id=selected_char)
     entries.sort(key=lambda item: (bool(item.get("contradicted_by")), int(item.get("count") or 0)), reverse=True)
     return {"entries": entries}
@@ -29,6 +32,8 @@ async def dream_invariants_get(
 async def dream_state_get(
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     """
     Read-only UI panel. Returns safe defaults when no dream is active.
@@ -45,7 +50,7 @@ async def dream_state_get(
       physiological_arousal — all int 0–100.
     """
     uid = dream_common._owner_uid()
-    selected_char = dream_common._validated_live_char_id(char_id)
+    selected_char = dream_common._validated_live_char_id(char_id, read_character=read_character)
     from core.dream.dream_state import (
         read_state, DreamStatus, DreamGuardStatus,
         derive_dream_state_projection, get_reality_guard_status,
@@ -142,7 +147,9 @@ async def dream_state_get(
 
 
 @router.get("/dream/operations", summary="读取梦境退出与明信片运维状态（只读）")
-async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
+async def dream_operations_get(_auth=Depends(require_scopes("activity")),
+    *, read_character=Depends(require_character_reader),
+):
     """Return bounded lifecycle metadata for the management surface.
 
     This endpoint deliberately omits archive turns, postcard letter text,
@@ -155,7 +162,7 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
     from core.dream.scenario_progress_audit import list_records as list_scenario_progress
     from core.sandbox import get_paths as _get_paths
 
-    char_id = dream_common._active_dream_char_id()
+    char_id = dream_common._active_dream_char_id(read_character=read_character)
     state = read_state(uid)
     lifecycle = list_records(char_id=char_id, limit=50)
     continuation_lifecycle = list_records(
@@ -199,7 +206,7 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         "stale_count": sum(1 for status in reconciler_statuses if status == "stale"),
         "failed_count": sum(1 for status in reconciler_statuses if status == "failed"),
     }
-    archive_page = await dream_archives.dream_archive_list(offset=0, limit=20, char_id=char_id)
+    archive_page = await dream_archives.dream_archive_list(offset=0, limit=20, char_id=char_id, read_character=read_character)
     last_dream_id = str(state.get("last_dream_id") or "")
     latest_archive = next(
         (item for item in archive_page["items"] if item.get("dream_id") == last_dream_id),
@@ -301,7 +308,9 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
 async def dream_stats_get(
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     from core.dream.dream_log import count_valid_dreams
-    selected_char = dream_common._validated_live_char_id(char_id)
+    selected_char = dream_common._validated_live_char_id(char_id, read_character=read_character)
     return count_valid_dreams(char_id=selected_char)

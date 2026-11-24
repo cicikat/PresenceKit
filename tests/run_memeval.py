@@ -5,7 +5,7 @@ tests/run_memeval.py — memeval 离线 runner，不依赖 pytest 收集，供�
     python tests/run_memeval.py
 
 对每条 tests/memeval/cases/*.yaml 用例，播种记忆 → 跑
-Pipeline.fetch_context() / episodic_memory.retrieve() / Pipeline.build_prompt() →
+Pipeline.context.fetch() / episodic_memory.retrieve() / Pipeline.build_prompt() →
 按 case 的 expect 字段做确定性断言。xfail 用例失败视为预期，不计入退出码。
 """
 

@@ -9,7 +9,7 @@ import pytest
 async def test_delivery_receipt_distinguishes_acceptance_and_unknown(sandbox, monkeypatch, outcome):
     from core.autonomy import store, talk_gate
     monkeypatch.setattr(talk_gate, "check", lambda *a, **k: ("allow", "ok"))
-    monkeypatch.setattr("core.pipeline_registry.get", lambda: object())
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: SimpleNamespace(effects=object()))
     monkeypatch.setattr("channels.registry.get_active", lambda: [object()])
     monkeypatch.setattr("core.scheduler.proactive_ledger.record_send", lambda *a, **k: None)
     calls = []

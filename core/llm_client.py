@@ -642,7 +642,7 @@ def _prepare_call(
 
     monologue 注入不在此处做：chat_turn() 被 tool loop 逐步调用，_prepare_call
     每步都会拿到一份新的临时消息列表（不会把注入结果写回调用方持有的 loop_msgs），
-    在这里注入会导致"每步都独白一次"。monologue 由调用方（pipeline.run_agentic_loop）
+    在这里注入会导致"每步都独白一次"。monologue 由调用方（pipeline.tools.run）
     在进入循环前对 messages 做一次性注入，之后原样带过每一步。
     """
     mc: ModelClient = get_model_client(call_category, char_id=char_id)

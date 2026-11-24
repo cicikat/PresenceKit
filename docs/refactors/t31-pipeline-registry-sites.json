@@ -1,0 +1,528 @@
+{
+  "baseline_ref": "72545bae10085be7b1040748e5091f9cd84affbb",
+  "scan": "All Git-visible production Python AST; scoped imports, local aliases, simple assignment aliases and recognizable dynamic loads/members. No arbitrary runtime-string proof.",
+  "baseline_python_files": 698,
+  "baseline_calls": 49,
+  "current_calls": 31,
+  "removed_calls": 18,
+  "removed": [
+    {
+      "source": "admin/routers/chat.py",
+      "owner": "_ingest_chat_upload",
+      "operation": "get",
+      "line": 485,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/chat.py",
+      "owner": "_ingest_chat_upload",
+      "operation": "get",
+      "line": 539,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/coplay.py",
+      "owner": "_active_char_id",
+      "operation": "get",
+      "line": 42,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/dream_common.py",
+      "owner": "_active_dream_char_id",
+      "operation": "get",
+      "line": 31,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/dream_rpg.py",
+      "owner": "_char_id",
+      "operation": "get",
+      "line": 80,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/dream_sessions.py",
+      "owner": "dream_enter",
+      "operation": "get",
+      "line": 39,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/dream_sessions.py",
+      "owner": "dream_chat",
+      "operation": "get",
+      "line": 110,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/lorebook.py",
+      "owner": "_reload_lore_engine",
+      "operation": "get",
+      "line": 77,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "owner": "dream_settings_observability",
+      "operation": "get",
+      "line": 32,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/observability.py",
+      "owner": "character_file_autonomy_observability",
+      "operation": "get",
+      "line": 390,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/settings_mcp.py",
+      "owner": "_current_mcp_exposure_names",
+      "operation": "get",
+      "line": 394,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/settings_prompt_assets.py",
+      "owner": "_reload_lore_engine",
+      "operation": "get",
+      "line": 101,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "admin/routers/settings_prompt_assets.py",
+      "owner": "patch_prompt_assets",
+      "operation": "get",
+      "line": 311,
+      "decision": "removed",
+      "replacement": "explicit HTTP character-session dependency"
+    },
+    {
+      "source": "channels/qq.py",
+      "owner": "QQChannel.send",
+      "operation": "get",
+      "line": 62,
+      "decision": "removed",
+      "replacement": "formal character loader/name owner"
+    },
+    {
+      "source": "core/autonomy/runner.py",
+      "owner": "_character_for",
+      "operation": "get",
+      "line": 1206,
+      "decision": "removed",
+      "replacement": "formal character loader/name owner"
+    },
+    {
+      "source": "core/dream/dream_pipeline.py",
+      "owner": "enter_dream",
+      "operation": "get",
+      "line": 1069,
+      "decision": "removed",
+      "replacement": "formal character loader/name owner"
+    },
+    {
+      "source": "core/scheduler/loop.py",
+      "owner": "_char_name",
+      "operation": "get",
+      "line": 330,
+      "decision": "removed",
+      "replacement": "formal character loader/name owner"
+    },
+    {
+      "source": "core/turn_sink.py",
+      "owner": "_require_pipeline",
+      "operation": "get",
+      "line": 58,
+      "decision": "removed",
+      "replacement": "explicit caller effects"
+    }
+  ],
+  "retained": [
+    {
+      "source": "core/agent_runtime/computer_use.py",
+      "owner": "principal",
+      "operation": "get",
+      "line": 202,
+      "decision": "retain",
+      "classification": "device authority",
+      "chain": "durable computer-use job -> principal",
+      "capability": "loaded role used to validate device principal",
+      "reason": "Configured selection alone does not prove the live owner of a resumed computer-use job; changing this could grant stale device authority.",
+      "exit_condition": "Bind an active-role predicate at supervisor startup and verify restart/revocation across the durable queue."
+    },
+    {
+      "source": "core/autonomy/effective_state.py",
+      "owner": "build_effective_state",
+      "operation": "get",
+      "line": 243,
+      "decision": "retain",
+      "classification": "availability",
+      "chain": "Admin effective state / scheduler -> autonomy effective state",
+      "capability": "running executor availability",
+      "reason": "This shared status builder is called by HTTP and background admission; a selected card cannot establish that a runtime exists.",
+      "exit_condition": "Thread executor availability through both status callers and admission from their lifecycle owner."
+    },
+    {
+      "source": "core/autonomy/talk_gate.py",
+      "owner": "send",
+      "operation": "get",
+      "line": 77,
+      "decision": "retain",
+      "classification": "delivery admission",
+      "chain": "talk_owner Invocation -> talk_gate.send -> turn_sink",
+      "capability": "turn effects for accepted proactive delivery",
+      "reason": "Invocation carries principal and scope, not a live effects owner; adding an ad-hoc global effects handle would create a second registry.",
+      "exit_condition": "Bind effects at the tool invocation composition boundary and preserve receipt/idempotency and revocation tests."
+    },
+    {
+      "source": "core/character_cleanup.py",
+      "owner": "_active_reasons",
+      "operation": "get",
+      "line": 85,
+      "decision": "retain",
+      "classification": "destructive-operation guard",
+      "chain": "character deletion -> active reasons",
+      "capability": "identity of the loaded card",
+      "reason": "A configured selection can differ from a card still in use; substituting the selected id could allow deleting live assets.",
+      "exit_condition": "Supply the CharacterSession active-role predicate to the deletion transaction, including standalone Admin."
+    },
+    {
+      "source": "core/character_loader.py",
+      "owner": "_active_character_id",
+      "operation": "get",
+      "line": 38,
+      "decision": "retain",
+      "classification": "load diagnostics",
+      "chain": "character_loader.load -> active identity diagnostic",
+      "capability": "currently loaded role for edge logging",
+      "reason": "Loading also occurs before runtime registration; the diagnostic distinguishes configured selection from already loaded ownership.",
+      "exit_condition": "Pass a loaded-role diagnostic capability at all load call boundaries without introducing a module binding."
+    },
+    {
+      "source": "core/character_loader.py",
+      "owner": "is_proactive_disabled",
+      "operation": "get",
+      "line": 203,
+      "decision": "retain",
+      "classification": "legacy unscoped card policy",
+      "chain": "proactive admission -> is_proactive_disabled(None)",
+      "capability": "loaded card proactive override",
+      "reason": "The None-character API intentionally reads the loaded card; disk selection can change before the live card refreshes.",
+      "exit_condition": "Migrate remaining None-character policy callers to explicit frozen cards/scopes, then delete the unscoped branch."
+    },
+    {
+      "source": "core/character_loader.py",
+      "owner": "reload_active_character",
+      "operation": "get",
+      "line": 301,
+      "decision": "retain",
+      "classification": "authored-asset lifecycle",
+      "chain": "character asset edits -> reload_active_character",
+      "capability": "reload the actual live CharacterSession",
+      "reason": "Edit operations use a module API outside HTTP startup injection and must update the existing instance, not load an unused replacement card.",
+      "exit_condition": "Pass the CharacterSession reloader through every authored-asset edit composition path; retain standalone no-live-session semantics."
+    },
+    {
+      "source": "core/character_name_provider.py",
+      "owner": "get_char_name",
+      "operation": "get",
+      "line": 27,
+      "decision": "retain",
+      "classification": "legacy unscoped presentation",
+      "chain": "display / QQ / scheduler -> formal name provider(None)",
+      "capability": "name of the loaded card",
+      "reason": "This is the existing formal presentation owner; None preserves the pre-start unavailable marker and loaded-card semantics.",
+      "exit_condition": "Migrate unscoped callers to explicit card identity at their ingress; do not recreate a name cache."
+    },
+    {
+      "source": "core/character_name_provider.py",
+      "owner": "get_char_pronoun",
+      "operation": "get",
+      "line": 60,
+      "decision": "retain",
+      "classification": "legacy unscoped presentation",
+      "chain": "prompt / presentation -> formal pronoun provider(None)",
+      "capability": "pronoun of the loaded card",
+      "reason": "Selection-file resolution is not equivalent to the live card during hot switches and before startup.",
+      "exit_condition": "Pass explicit frozen character ids at remaining pronoun call sites, then retire the None lookup."
+    },
+    {
+      "source": "core/companion/service.py",
+      "owner": "_runtime_context",
+      "operation": "get",
+      "line": 79,
+      "decision": "retain",
+      "classification": "cross-entry admission",
+      "chain": "external companion opportunity / phone request -> runtime context",
+      "capability": "scope admission, context, prompt, generation and effects",
+      "reason": "This existing orchestration boundary freezes scope and checks runtime availability before invoking multiple real operations; a mere card reader is insufficient.",
+      "exit_condition": "Bind narrow per-operation capabilities at external-companion ingress startup and preserve ingress receipts, admission and restart behavior."
+    },
+    {
+      "source": "core/companion/service.py",
+      "owner": "observability",
+      "operation": "get",
+      "line": 349,
+      "decision": "retain",
+      "classification": "availability",
+      "chain": "Admin companion observability -> service.observability",
+      "capability": "runtime availability flag",
+      "reason": "The endpoint reports live startup status independently of stored companion receipts; selected assets cannot prove readiness.",
+      "exit_condition": "Supply live availability from the companion ingress lifecycle owner, including the standalone Admin case."
+    },
+    {
+      "source": "core/control_center/effective_state.py",
+      "owner": "_tool_loop_row",
+      "operation": "get",
+      "line": 96,
+      "decision": "retain",
+      "classification": "loaded-card effective policy",
+      "chain": "global effective overview -> tool-loop row",
+      "capability": "loaded card tool_loop override",
+      "reason": "tool_loop_active uses the loaded card; reading a selected disk card here would mislabel the same effective value during a switch.",
+      "exit_condition": "Inject the same loaded-card reader used by policy into all overview callers, retaining absent-runtime behavior."
+    },
+    {
+      "source": "core/coplay/device_collection.py",
+      "owner": "_active",
+      "operation": "get",
+      "line": 49,
+      "decision": "retain",
+      "classification": "device authority",
+      "chain": "coplay device collection polling -> active check",
+      "capability": "current live device collection role",
+      "reason": "Queued device observations must be rejected after the live owner changes, rather than trusting an earlier selected id.",
+      "exit_condition": "Bind active-role authority through collection lifecycle and verify disconnect, switch and queued-observation rejection."
+    },
+    {
+      "source": "core/dream/dream_pipeline.py",
+      "owner": "_generate_retention_line",
+      "operation": "get",
+      "line": 1497,
+      "decision": "retain",
+      "classification": "dream retention execution",
+      "chain": "Dream wake -> session_control.request_wake -> retention line",
+      "capability": "loaded/session card and runtime availability for retention",
+      "reason": "The wake state machine invokes this after changing exit status; preserving unavailable-runtime hard exit and the frozen session card requires migrating the full wake chain, not only the HTTP request.",
+      "exit_condition": "Inject a session-card reader and availability capability through request_wake and the retention helper; verify hard exit on unavailable/model failure and role switches."
+    },
+    {
+      "source": "core/dream/dream_pipeline.py",
+      "owner": "dream_turn",
+      "operation": "get",
+      "line": 438,
+      "decision": "retain",
+      "classification": "cross-entry dream admission",
+      "chain": "Dream HTTP / direct dream callers -> dream_turn",
+      "capability": "live availability and scoped character for an active dream",
+      "reason": "Direct and HTTP Dream entry paths share this core function; an injected HTTP snapshot alone does not cover the direct callers or their availability checks.",
+      "exit_condition": "Pass an explicit Dream card reader and availability capability through all core Dream ingress paths; preserve dream session scope and guard semantics."
+    },
+    {
+      "source": "core/dream/reality_continuation.py",
+      "owner": "_run_once",
+      "operation": "get",
+      "line": 254,
+      "decision": "retain",
+      "classification": "durable asynchronous execution",
+      "chain": "dream close -> continuation queue -> _run_once",
+      "capability": "Reality context, prompt, generation and effects after dream exit",
+      "reason": "The task runs after the original request and can be re-enqueued independently; a request snapshot cannot own its execution lifetime.",
+      "exit_condition": "Bind narrow continuation operations at worker startup and verify cancellation, new-turn races and restart delivery receipts."
+    },
+    {
+      "source": "core/memory/health_state.py",
+      "owner": "_resolve_character",
+      "operation": "get",
+      "line": 93,
+      "decision": "retain",
+      "classification": "legacy unscoped storage",
+      "chain": "health-state API(char_id=None) -> character resolution",
+      "capability": "loaded character bucket identity",
+      "reason": "Replacing the loaded role with newly selected assets can redirect existing unscoped writes to another bucket.",
+      "exit_condition": "Migrate unscoped health-state callers to explicit MemoryScope before removing this compatibility branch."
+    },
+    {
+      "source": "core/model_registry.py",
+      "owner": "_active_char_model_routing",
+      "operation": "get",
+      "line": 144,
+      "decision": "retain",
+      "classification": "legacy unscoped routing",
+      "chain": "model route resolution(char_id=None) -> active card",
+      "capability": "loaded-card model-routing override",
+      "reason": "An unscoped request still uses live-card overrides; selected assets may not yet be loaded and cannot safely change an in-flight route.",
+      "exit_condition": "Carry explicit frozen character ids through remaining unscoped model requests and remove this branch."
+    },
+    {
+      "source": "core/owner_chat/service.py",
+      "owner": "run_owner_chat_turn",
+      "operation": "get",
+      "line": 68,
+      "decision": "retain",
+      "classification": "cross-entry admission",
+      "chain": "desktop / mobile / IM / background owner-chat -> admission",
+      "capability": "context, prompt, generation, tools and effects executor",
+      "reason": "This real admission boundary supports an explicit pipeline_override already; other ingress lifetimes are not all bound by HTTP dependencies.",
+      "exit_condition": "Bind narrow turn operations at each ingress lifecycle and migrate callers before deleting the default admission lookup."
+    },
+    {
+      "source": "core/perception/phone_ambient.py",
+      "owner": "source_active",
+      "operation": "get",
+      "line": 126,
+      "decision": "retain",
+      "classification": "device authority",
+      "chain": "phone ambient signal admission -> source_active",
+      "capability": "live role and source enablement",
+      "reason": "A stale phone source must not be accepted for a new live role; configured selection is not authoritative runtime ownership.",
+      "exit_condition": "Pass active-role capability through the ambient source lifecycle and verify source revocation and switch races."
+    },
+    {
+      "source": "core/prompt_ablation.py",
+      "owner": "_active_char_disabled_layers",
+      "operation": "get",
+      "line": 52,
+      "decision": "retain",
+      "classification": "legacy unscoped prompt policy",
+      "chain": "prompt build(char_id=None) -> layer overrides",
+      "capability": "loaded-card disabled prompt layers",
+      "reason": "Disk selection during a role switch must not silently alter layers for a still-loaded unscoped prompt.",
+      "exit_condition": "Eliminate unscoped prompt builds in favor of ingress-frozen card identity, then remove this branch."
+    },
+    {
+      "source": "core/resource_completeness.py",
+      "owner": "_check_active_character_assets",
+      "operation": "get",
+      "line": 243,
+      "decision": "retain",
+      "classification": "loaded asset diagnostics",
+      "chain": "resource completeness -> active character assets",
+      "capability": "live loaded card and asset health",
+      "reason": "This diagnostic compares the actual loaded runtime with authored assets; simply loading selected assets would hide missing/stale live state.",
+      "exit_condition": "Pass a loaded-card snapshot into completeness from both startup and Admin diagnostic callers."
+    },
+    {
+      "source": "core/scheduler/loop.py",
+      "owner": "_compose_trigger_reply",
+      "operation": "get",
+      "line": 788,
+      "decision": "retain",
+      "classification": "background generation",
+      "chain": "scheduler stimulus executor -> compose trigger reply",
+      "capability": "context, prompt and tool-aware generation",
+      "reason": "Module-level scheduler execution is outside a request lifetime and must retain current live executor selection.",
+      "exit_condition": "Bind narrow reply operations in scheduler startup and preserve frozen trigger scope, tool permissions and hot-swap behavior."
+    },
+    {
+      "source": "core/scheduler/loop.py",
+      "owner": "_pipeline_send",
+      "operation": "get",
+      "line": 441,
+      "decision": "retain",
+      "classification": "background delivery",
+      "chain": "legacy execution-only scheduler trigger -> pipeline send",
+      "capability": "context, prompt, generation and explicit effects",
+      "reason": "This execution entry serves independently registered triggers; passing only a field cannot replace its executor lifetime.",
+      "exit_condition": "Bind scheduler turn capabilities at scheduler startup after migrating all execution-only trigger callers."
+    },
+    {
+      "source": "core/scheduler/triggers/coplay_watch.py",
+      "owner": "_check_coplay_watch",
+      "operation": "get",
+      "line": 36,
+      "decision": "retain",
+      "classification": "background loaded-card gate",
+      "chain": "coplay watch tick -> check",
+      "capability": "live character availability and id",
+      "reason": "A polling tick must not propose a watch action for a configured card before its runtime is loaded.",
+      "exit_condition": "Bind a loaded-role reader through trigger registration and keep pre-start/role-switch negative coverage."
+    },
+    {
+      "source": "core/scheduler/triggers/festival.py",
+      "owner": "_active_character_card",
+      "operation": "get",
+      "line": 20,
+      "decision": "retain",
+      "classification": "background loaded-card policy",
+      "chain": "festival tick -> active character card",
+      "capability": "loaded card birthday/festival policy",
+      "reason": "The existing active-card override is evaluated outside HTTP or a frozen turn; disk selection can be newer than the running card.",
+      "exit_condition": "Pass an explicit card reader through festival trigger registration and preserve the no-runtime policy."
+    },
+    {
+      "source": "core/session_scope.py",
+      "owner": "owner_media_scope",
+      "operation": "get",
+      "line": 320,
+      "decision": "retain",
+      "classification": "deferred T4 compatibility",
+      "chain": "legacy media HTTP requests without Session -> owner_media_scope",
+      "capability": "legacy live owner media bucket",
+      "reason": "Session-less owner media compatibility is explicitly deferred to T4; removing it here changes external admission and bucket selection.",
+      "exit_condition": "Complete the separately authorized Session ingress migration in T4 and retire this exact legacy branch."
+    },
+    {
+      "source": "core/thinking_voice.py",
+      "owner": "preview",
+      "operation": "get",
+      "line": 105,
+      "decision": "retain",
+      "classification": "legacy unscoped preview",
+      "chain": "thinking preview -> current card",
+      "capability": "loaded character for preview voice/preset",
+      "reason": "Preview may run from standalone Admin and must reflect the loaded card when present, not just selected authored assets.",
+      "exit_condition": "Pass an explicit preview card/availability capability from the settings composition path."
+    },
+    {
+      "source": "core/tool_runtime/context.py",
+      "owner": "_active_char_id",
+      "operation": "get",
+      "line": 10,
+      "decision": "retain",
+      "classification": "legacy unscoped tool context",
+      "chain": "legacy tool exposure/probe -> active char id",
+      "capability": "live tool-context identity",
+      "reason": "This is a fallback for callers without explicit invocation scope; changing it to selected id can redirect tool scope.",
+      "exit_condition": "Migrate remaining unscoped tool callers to explicit Invocation/char_id, then delete the fallback."
+    },
+    {
+      "source": "core/tool_runtime/policy.py",
+      "owner": "_effective_tool_loop_enabled",
+      "operation": "get",
+      "line": 233,
+      "decision": "retain",
+      "classification": "legacy unscoped tool policy",
+      "chain": "tool_loop_active -> effective loop enablement",
+      "capability": "loaded card tool_loop override",
+      "reason": "The formal tool policy evaluates the live card, including pre-start absence; disk-card substitution would alter admission.",
+      "exit_condition": "Pass explicit frozen card identity through loop admission and overview together, then retire the live lookup."
+    },
+    {
+      "source": "main.py",
+      "owner": "_init_modules",
+      "operation": "register",
+      "line": 188,
+      "decision": "retain",
+      "classification": "composition root",
+      "chain": "main startup -> one Pipeline construction -> register",
+      "capability": "publish the sole process runtime",
+      "reason": "Registration only follows successful construction; no lookup or business dispatch is performed by this call.",
+      "exit_condition": "Retain while the sole runtime registry exists; remove only after all independently owned ingress lifetimes are explicitly composed."
+    }
+  ]
+}

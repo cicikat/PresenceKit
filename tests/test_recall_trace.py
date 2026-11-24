@@ -329,7 +329,7 @@ class TestLoreEngineMatchTrace:
 # core/memory/vector_store.query_async() 返回 (source_id, distance, ts) 三元组
 # （docstring 明确写着），但 fetch_context 里拼 recall trace 字典那一行曾经
 # `for _sid, _dist in _semantic_hits` 按二元解包，线上日志天天报
-# "[pipeline.fetch_context] recall trace write failed: too many values to
+# "[pipeline.context.fetch] recall trace write failed: too many values to
 # unpack (expected 2, got 3)"（茶茶反馈实际线上日志）。修复为按下标取值，
 # 与旁边 debug log 那行（line 359）一直用的写法保持一致。
 
@@ -372,7 +372,7 @@ class TestFetchContextSemanticHitsTraceUnpack:
 
     def test_semantic_hits_with_ts_field_do_not_break_trace_write(self, sandbox, monkeypatch):
         """query_async 返回三元组 (id, distance, ts) 时，recall trace 必须正常写入，
-        不得触发 '[pipeline.fetch_context] recall trace write failed' 警告。"""
+        不得触发 '[pipeline.context.fetch] recall trace write failed' 警告。"""
         self._stub_everything_else(monkeypatch)
 
         import core.memory.embedding as _emb
@@ -395,7 +395,7 @@ class TestFetchContextSemanticHitsTraceUnpack:
         pipeline_logger.addHandler(handler)
         try:
             pipeline = self._make_pipeline()
-            asyncio.run(pipeline.fetch_context(
+            asyncio.run(pipeline.context.fetch(
                 user_id="u_semhits", content="帮我回忆一下之前聊过的西瓜和绍兴的事情",
             ))
         finally:

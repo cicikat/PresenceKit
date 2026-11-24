@@ -115,8 +115,8 @@ async def test_desktop_explicit_expression_sticker_still_schedules(sandbox, monk
     monkeypatch.setattr('core.output.sticker.maybe_send_sticker', sent)
     monkeypatch.setattr('core.memory.mood_state.update', lambda *args, **kwargs: None)
     pipeline = Pipeline(SimpleNamespace(name='Companion'), lore_engine=None)
-    await pipeline.post_process('desktop-owner', 'hello', '<feel>开心</feel><say>hello</say>',
-                                target_id='', envelope=stamp_user_chat())
+    _critical_result = await pipeline.effects.capture_critical('desktop-owner', 'hello', '<feel>开心</feel><say>hello</say>', target_id='', envelope=stamp_user_chat())
+    await pipeline.effects.run_deferred_effects('desktop-owner', 'hello', '<feel>开心</feel><say>hello</say>', critical_result=_critical_result, target_id='', envelope=stamp_user_chat())
     await asyncio.sleep(0)
     sent.assert_awaited_once()
     assert sent.call_args.args[1] is None

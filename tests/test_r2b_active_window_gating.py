@@ -28,7 +28,10 @@ ROOT = pathlib.Path(__file__).parent.parent
 # ─────────────────────────────────────────────────────────────────────────────
 
 class _FakePipeline:
-    async def fetch_context(self, uid, query, **kwargs):
+    effects = property(lambda self: self)
+    generation = property(lambda self: self)
+    context = property(lambda self: self)
+    async def fetch(self, uid, query, **kwargs):
         return {}
 
     def build_prompt(self, uid, prompt, context, **kwargs):
@@ -340,6 +343,7 @@ class TestMaintenanceTriggerIsolation:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestPipelineSendR2C:
+    effects = property(lambda self: self)
     """R2-C: _pipeline_send no longer re-gates triggers; gating._decide is the sole authority."""
 
     def test_pipeline_send_has_no_legacy_active_window_blocks_call(self):

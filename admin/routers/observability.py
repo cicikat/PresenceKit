@@ -1,3 +1,4 @@
+from admin.character_dependencies import require_character_reader
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -18,19 +19,20 @@ async def dream_settings_observability(
     uid: str = "",
     char_id: str = "",
     _auth=Depends(require_scopes("state.read")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     from core.dream.dream_settings import observability_snapshot
     from core.config_loader import get_config
     from core.data_paths import DEFAULT_CHAR_ID
-    from core.pipeline_registry import get as _get_pipeline
 
     owner = uid.strip() or str(get_config().get("scheduler", {}).get("owner_id", "") or "").strip()
     if not owner:
         raise HTTPException(status_code=422, detail="uid 未提供且 owner_id 未配置")
     selected = char_id.strip()
     if not selected:
-        pl = _get_pipeline()
-        selected = str((getattr(pl, "_active_character_id", None) if pl else None) or DEFAULT_CHAR_ID)
+        pl = read_character()
+        selected = str((getattr(pl, "active_character_id", None) if pl else None) or DEFAULT_CHAR_ID)
     return observability_snapshot(owner, char_id=selected)
 
 
@@ -376,20 +378,21 @@ async def character_file_autonomy_observability(
     uid: str = Query("", max_length=128),
     char_id: str = Query("", max_length=128),
     _auth=Depends(require_scopes("state.read")),
+
+    *, read_character=Depends(require_character_reader),
 ):
     from core.agent_runtime.agent_tasks import capability_snapshot as agent_task_snapshot
     from core.character_self import observability_snapshot as self_snapshot
     from core.config_loader import get_config
     from core.data_paths import DEFAULT_CHAR_ID
-    from core.pipeline_registry import get as get_pipeline
     from core.tools.fs_browse import observability_snapshot as backend_snapshot
 
     owner = uid.strip() or str((get_config().get("scheduler") or {}).get("owner_id") or "").strip()
     selected = char_id.strip()
     if not selected:
-        pipeline = get_pipeline()
+        pipeline = read_character()
         selected = str(
-            (getattr(pipeline, "_active_character_id", None) if pipeline else None)
+            (getattr(pipeline, "active_character_id", None) if pipeline else None)
             or DEFAULT_CHAR_ID
         )
     backend = backend_snapshot()

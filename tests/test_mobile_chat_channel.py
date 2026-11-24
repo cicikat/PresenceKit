@@ -92,12 +92,16 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
         name = "Companion"
 
     class _Pipeline:
+        effects = property(lambda self: self)
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
         character = _Character()
 
-        def _current_reality_scope(self, _uid):
+        def reality_scope(self, _uid):
             return SimpleNamespace(character_id="companion")
 
-        async def fetch_context(self, *_args, **_kwargs):
+        async def fetch(self, *_args, **_kwargs):
             return {}
 
         def build_prompt(self, _uid, _message, _context, **kwargs):
@@ -231,13 +235,18 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
         name = "Companion"
 
     class _Pipeline:
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
+        effects = property(lambda self: self)
+        tools = property(lambda self: self)
         character = _Character()
         _active_character_id = "companion"
 
-        def _current_reality_scope(self, uid):
+        def reality_scope(self, uid):
             return MemoryScope.reality_scope(uid, "companion")
 
-        async def fetch_context(self, *_args, **_kwargs):
+        async def fetch(self, *_args, **_kwargs):
             return {}
 
         def build_prompt(self, *_args, **_kwargs):
@@ -258,17 +267,18 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
                 raise UpstreamResponseFormatError("fixture disconnected")
             yield value or ""
 
-        async def run_agentic_loop(self, _messages, *, stream=False, **_kwargs):
+        async def run(self, _messages, *, stream=False, **_kwargs):
             if stream:
                 if empty_reply == "__buffered_failure__" and not failed_generation:
                     return next_reply()
-                return self.run_llm_stream(_messages)
-            return await self.run_llm(_messages)
+                return self.generation.run_llm_stream(_messages)
+            return await self.generation.run_llm(_messages)
 
-        async def post_process_critical(self, uid, content, reply, **kwargs):
+        async def capture_critical(self, uid, content, reply, **kwargs):
             # Bind against the production method instead of accepting arbitrary
             # kwargs silently. This catches turn_sink/Pipeline signature drift.
-            inspect.signature(Pipeline.post_process_critical).bind(
+            from core.post_process.turn_effects import TurnEffects
+            inspect.signature(TurnEffects.capture_critical).bind(
                 None, uid, content, reply, **kwargs
             )
             critical_calls.append(kwargs)
@@ -282,7 +292,7 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
                 "profile_recent": [],
             }
 
-        async def post_process_slow(self, *_args, **_kwargs):
+        async def run_deferred_effects(self, *_args, **_kwargs):
             return {"emotion": "neutral", "turn_id": "turn-mobile-real-chain"}
 
     async def fake_probe(*_args, **_kwargs):

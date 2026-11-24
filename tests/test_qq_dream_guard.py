@@ -51,16 +51,16 @@ def _patch_pipeline(monkeypatch, uid: str = _OWNER_ID):
     fake.author_note_extra = ""
     fake._active_character_id = TEST_CHAR_ID
     # N1: _current_reality_scope must return a real MemoryScope so char_id is a string.
-    fake._current_reality_scope = MagicMock(
+    fake.character_state.reality_scope = MagicMock(
         return_value=MemoryScope.reality_scope(str(uid), TEST_CHAR_ID)
     )
-    fake.fetch_context = AsyncMock(return_value={})
+    fake.context.fetch = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value="回复内容")
+    fake.generation.run_llm = AsyncMock(return_value="回复内容")
     # Brief 37: record_assistant_turn calls post_process_critical (awaited) then
     # post_process_slow (fire-and-forget after send) — both must exist.
-    fake.post_process_critical = AsyncMock(return_value={"turn_id": "t1", "critical_written": True, "emotion": "neutral"})
-    fake.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake.effects.capture_critical = AsyncMock(return_value={"turn_id": "t1", "critical_written": True, "emotion": "neutral"})
+    fake.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake)
     return fake
 
@@ -145,8 +145,8 @@ async def test_dream_active_rejects_owner_message(sandbox, monkeypatch):
     import main as _main
     await _main.handle_message(_make_msg())
 
-    fake_pipeline.run_llm.assert_not_called()
-    fake_pipeline.post_process_critical.assert_not_called()
+    fake_pipeline.generation.run_llm.assert_not_called()
+    fake_pipeline.effects.capture_critical.assert_not_called()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -165,7 +165,7 @@ async def test_dream_closing_rejects_owner_message(sandbox, monkeypatch):
     import main as _main
     await _main.handle_message(_make_msg())
 
-    fake_pipeline.run_llm.assert_not_called()
+    fake_pipeline.generation.run_llm.assert_not_called()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -192,7 +192,7 @@ async def test_dream_guard_no_post_process(sandbox, monkeypatch):
     import main as _main
     await _main.handle_message(_make_msg())
 
-    fake_pipeline.post_process_critical.assert_not_called()
+    fake_pipeline.effects.capture_critical.assert_not_called()
     st_append.assert_not_called()
     el_append.assert_not_called()
 
@@ -233,7 +233,7 @@ async def test_reality_chat_passes_through(sandbox, monkeypatch):
     import main as _main
     await _main.handle_message(_make_msg())
 
-    fake_pipeline.run_llm.assert_called_once()
+    fake_pipeline.generation.run_llm.assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -265,7 +265,7 @@ async def test_non_owner_not_blocked_by_dream_guard(sandbox, monkeypatch):
     await _main.handle_message(_make_msg(user_id=_OTHER_ID))
 
     # pipeline should be entered for non-owner
-    fake_pipeline.run_llm.assert_called_once()
+    fake_pipeline.generation.run_llm.assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -289,7 +289,7 @@ async def test_dream_guard_fail_closed_on_exception(sandbox, monkeypatch):
     await _main.handle_message(_make_msg())
 
     # Fail-closed: pipeline not reached
-    fake_pipeline.run_llm.assert_not_called()
+    fake_pipeline.generation.run_llm.assert_not_called()
     # User-visible rejection message sent
     assert len(sent) == 1
 
@@ -329,19 +329,19 @@ async def test_stamp_qq_used_in_reality_chat(sandbox, monkeypatch):
     fake.author_note_extra = ""
     fake._active_character_id = TEST_CHAR_ID
     # N1 fix: _current_reality_scope must return a real MemoryScope
-    fake._current_reality_scope = MagicMock(
+    fake.character_state.reality_scope = MagicMock(
         return_value=MemoryScope.reality_scope(_OWNER_ID, TEST_CHAR_ID)
     )
-    fake.fetch_context = AsyncMock(return_value={})
+    fake.context.fetch = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
-    fake.run_llm = AsyncMock(return_value="回复内容")
+    fake.generation.run_llm = AsyncMock(return_value="回复内容")
 
     async def fake_post_process(uid, content, reply, *args, **kwargs):
         captured_envelopes.append(kwargs.get("envelope"))
         return {"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
 
-    fake.post_process_critical = fake_post_process
-    fake.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
+    fake.effects.capture_critical = fake_post_process
+    fake.effects.run_deferred_effects = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main.handle_message(_make_msg())

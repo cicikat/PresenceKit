@@ -186,7 +186,7 @@ def test_fetch_context_ordinary_question_has_no_span_and_default_window(chars_tr
 
 def _run_fetch_kw(pipeline, content, **kw):
     import asyncio
-    return asyncio.run(pipeline.fetch_context(user_id="u1", content=content, **kw))
+    return asyncio.run(pipeline.context.fetch(user_id="u1", content=content, **kw))
 
 
 def test_s1_query_free_fallback_true_runs_fallback(chars_tree, monkeypatch, sandbox, registry):

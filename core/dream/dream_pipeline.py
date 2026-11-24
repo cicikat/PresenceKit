@@ -1065,9 +1065,8 @@ async def enter_dream(
         return {"ok": True, "dream_id": dream_id, "dream_mode": "rpg", "script_id": script_id}
 
     dream_id = f"dream_{uid}_{int(time.time())}"
-    from core.pipeline_registry import get as _get_pl_enter
-    _pl_enter = _get_pl_enter()
-    char_name = (getattr(getattr(_pl_enter, "character", None), "name", None) or "(角色未加载)") if _pl_enter else "(角色未加载)"
+    from core.character_name_provider import get_active_char_name
+    char_name = get_active_char_name() or "(角色未加载)"
     snapshot = await build_snapshot(uid, entry_reason=entry_reason, char_id=char_id, char_name=char_name)
 
     # Freeze world_layer and lucid_mode from settings for this dream session

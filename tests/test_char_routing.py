@@ -9,6 +9,7 @@ tests/test_char_routing.py — Brief 30 · LLM 路由的 char 维度穿线
 5. 缓存：两个 preset 交替解析，client 实例各自稳定复用、互不串。
 """
 from __future__ import annotations
+from core.owner_chat.reply_generation import ReplyGeneration
 
 import types
 from dataclasses import dataclass, field
@@ -450,7 +451,7 @@ async def test_anti_collapse_prefix_retry_forwards_owned_char(monkeypatch):
     _patch_char_card(monkeypatch, {TEST_CHAR_ID: {"model_routing": "claude-main"}})
     _register_active_char(model_routing="default")
     seen = _spy_get_model_client(monkeypatch)
-    pipeline = Pipeline.__new__(Pipeline)
+    pipeline = Pipeline(character=None, lore_engine=None)
     messages = [
         {"role": "assistant", "content": "嗯。第一条", "_layer": "9_history"},
         {"role": "assistant", "content": "第二条", "_layer": "9_history", "_raw_content": "嗯。第二条"},
@@ -467,7 +468,7 @@ async def test_anti_collapse_prefix_retry_forwards_owned_char(monkeypatch):
         return "换了个开头说话"
 
     monkeypatch.setattr("core.llm_client.chat", _chat)
-    result = await pipeline._anti_collapse_prefix_retry(
+    result = await pipeline.generation._anti_collapse_prefix_retry(
         messages, "嗯。原始回复", char_id=TEST_CHAR_ID, is_proactive=False,
     )
     assert result == "换了个开头说话"
@@ -546,10 +547,10 @@ async def test_agentic_final_run_llm_forwards_owned_char(monkeypatch):
     ])
     monkeypatch.setattr("core.llm_client.chat_turn", _fake_chat_turn)
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", _fake_execute)
-    monkeypatch.setattr(Pipeline, "run_llm", _fake_run_llm)
+    monkeypatch.setattr(ReplyGeneration, "run_llm", _fake_run_llm)
 
-    pipeline = Pipeline.__new__(Pipeline)
-    result = await pipeline.run_agentic_loop(
+    pipeline = Pipeline(character=None, lore_engine=None)
+    result = await pipeline.tools.run(
         [{"role": "user", "content": "查一下"}],
         uid="u1",
         char_id=TEST_CHAR_ID,
@@ -570,7 +571,11 @@ async def test_pipeline_send_run_llm_uses_frozen_scope_char(monkeypatch):
     captured: dict = {}
 
     class _FakePipelineSend:
-        async def fetch_context(self, uid, content, *a, **kw):
+        character_state = property(lambda self: self)
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
+        effects = property(lambda self: self)
+        async def fetch(self, uid, content, *a, **kw):
             return {}
 
         def build_prompt(self, uid, content, context, **kw):
@@ -583,13 +588,13 @@ async def test_pipeline_send_run_llm_uses_frozen_scope_char(monkeypatch):
                 raise AssertionError("frozen scope char_id was not passed into run_llm")
             return "ok"
 
-        async def post_process_critical(self, *a, **kw):
+        async def capture_critical(self, *a, **kw):
             return {"turn_id": "t-test", "critical_written": True, "emotion": "neutral"}
 
-        async def post_process_slow(self, *a, **kw):
+        async def run_deferred_effects(self, *a, **kw):
             return {"emotion": "neutral"}
 
-        def _current_reality_scope(self, uid):
+        def reality_scope(self, uid):
             return MemoryScope.reality_scope(uid, TEST_CHAR_ID)
 
     monkeypatch.setattr(

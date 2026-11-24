@@ -5,7 +5,7 @@ tests/test_impression_char_scope.py — P0-T05: impression char_id scope isolati
 Covers:
 1.  impression_store writer routes to correct char_id bucket
 2.  impression_store reader isolates by char_id
-3.  pipeline.fetch_context passes active char_id to impression_loader
+3.  pipeline.context.fetch passes active char_id to impression_loader
 4.  Character switch: fetch_context uses new char_id for impression
 5.  Invalid active_character: fetch_context raises, impression reader not called
 6.  distill_impression writer uses explicit char_id param
@@ -93,7 +93,7 @@ def _write_active(sandbox, char_id: str) -> None:
 
 
 def _run_fetch(pipeline, user_id=_UID, content="hello"):
-    return asyncio.run(pipeline.fetch_context(user_id=user_id, content=content))
+    return asyncio.run(pipeline.context.fetch(user_id=user_id, content=content))
 
 
 def _apply_base_stubs(monkeypatch) -> None:

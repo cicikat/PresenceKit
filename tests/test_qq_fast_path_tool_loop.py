@@ -21,10 +21,10 @@ def _make_pipeline():
     pipeline.character = MagicMock()
     pipeline.character.name = "TestChar"
     pipeline.character.presence_ext = {}
-    pipeline._current_reality_scope.return_value = MemoryScope.reality_scope(_USER_ID, "test_char")
-    pipeline.fetch_context = AsyncMock(return_value={})
+    pipeline.character_state.reality_scope.return_value = MemoryScope.reality_scope(_USER_ID, "test_char")
+    pipeline.context.fetch = AsyncMock(return_value={})
     pipeline.build_prompt.return_value = ([{"role": "user", "content": "现在几点"}], {"pending_paths": []})
-    pipeline.run_agentic_loop = AsyncMock(return_value="自然语言回复")
+    pipeline.tools.run = AsyncMock(return_value="自然语言回复")
     return pipeline
 
 
@@ -78,7 +78,7 @@ async def test_successful_fast_path_excludes_get_time_from_native_loop(monkeypat
 
     execute.assert_awaited_once()
     assert pipeline.build_prompt.call_args.kwargs["tool_result"] == _SUCCESS_RESULT
-    assert pipeline.run_agentic_loop.call_args.kwargs["exclude_tools"] == {"get_time"}
+    assert pipeline.tools.run.call_args.kwargs["exclude_tools"] == {"get_time"}
     assert "fast_path_matched=True" in caplog.text
     assert "fast_path_tool_excluded_from_loop=True" in caplog.text
 
@@ -93,7 +93,7 @@ async def test_fast_path_miss_leaves_get_time_available_to_native_fc(monkeypatch
     await main.handle_message(_PLAIN_MESSAGE)
 
     execute.assert_not_awaited()
-    assert pipeline.run_agentic_loop.call_args.kwargs["exclude_tools"] == set()
+    assert pipeline.tools.run.call_args.kwargs["exclude_tools"] == set()
 
 
 @pytest.mark.asyncio
@@ -106,7 +106,7 @@ async def test_failed_fast_path_does_not_exclude_get_time(monkeypatch):
     await main.handle_message(_TIME_MESSAGE)
 
     execute.assert_awaited_once()
-    assert pipeline.run_agentic_loop.call_args.kwargs["exclude_tools"] == set()
+    assert pipeline.tools.run.call_args.kwargs["exclude_tools"] == set()
 
 
 @pytest.fixture(autouse=True)

@@ -395,7 +395,7 @@ class TestPipelineFetchContext:
         from core.character_loader import Character
         from core.memory.scope import MemoryScope
 
-        pipeline = Pipeline.__new__(Pipeline)
+        pipeline = Pipeline(character=None, lore_engine=None)
         pipeline.character = Character(name=CHAR_NAMES.get(char_id, char_id))
         pipeline._active_character_id = char_id
         pipeline.author_note_extra = ""
@@ -405,7 +405,7 @@ class TestPipelineFetchContext:
 
         # Stub _current_reality_scope to bypass active_prompt_assets.json
         scope = MemoryScope.reality_scope(OWNER_UID, char_id)
-        pipeline._current_reality_scope = mock.MagicMock(return_value=scope)
+        pipeline.context._resolve_scope = mock.MagicMock(return_value=scope)
 
         return pipeline
 
@@ -428,7 +428,7 @@ class TestPipelineFetchContext:
                 mock.patch("core.memory.diary_context.load", return_value=""),
                 mock.patch("core.dream.impression_loader.load_impression_text", return_value=""),
             ):
-                return await pipeline.fetch_context(
+                return await pipeline.context.fetch(
                     user_id=uid,
                     content="hello",
                     group_id=None,
@@ -485,7 +485,7 @@ class TestPipelineFetchContext:
                     mock.patch("core.memory.diary_context.load", return_value=""),
                     mock.patch("core.dream.impression_loader.load_impression_text", return_value=""),
                 ):
-                    return await pipeline.fetch_context(
+                    return await pipeline.context.fetch(
                         user_id=OWNER_UID,
                         content="hello",
                         group_id=None,

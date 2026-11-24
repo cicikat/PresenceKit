@@ -43,7 +43,7 @@ async def test_context_and_event_search_baseline(sandbox, monkeypatch):
         events, _ = await event_log.search(uid, query, char_id=TEST_CHAR_ID, return_trace=True)
         duration_event = (perf_counter() - t) * 1_000
         t = perf_counter()
-        context = await pipeline.fetch_context(user_id=uid, content=query, frozen_scope=scope)
+        context = await pipeline.context.fetch(user_id=uid, content=query, frozen_scope=scope)
         duration_context = (perf_counter() - t) * 1_000
         assert reply in events and peer not in events
         assert reply in str(context["history"]) and peer not in str(context)
@@ -51,7 +51,7 @@ async def test_context_and_event_search_baseline(sandbox, monkeypatch):
             event_elapsed.append(duration_event)
             context_elapsed.append(duration_context)
     report("event_log.search", event_elapsed)
-    report("Pipeline.fetch_context", context_elapsed)
+    report("Pipeline.context.fetch", context_elapsed)
 
 
 async def test_vector_baseline(tmp_path):

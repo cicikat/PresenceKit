@@ -256,7 +256,7 @@ Author's Note 放在历史之后、用户消息之前，对模型影响最大，
 倒计时，不与 Author's Note 的裁剪/组装逻辑耦合。
 
 Path A 的工具由 pre-pipeline 探针触发，结果以 `tool_result` 参数进入层10。
-Path C 使用经过 effective exposure 过滤的 tools schema，通过 `run_agentic_loop`
+Path C 使用经过 effective exposure 过滤的 tools schema，通过 `ToolTurnRunner.run`
 调用并以 tool 消息返回；工具类别与执行权限仍由 dispatcher/exposure 决定。
 R5 禁止强制调用不存在的能力；249 删除了无生产调用的旧工具名单 helper 及其专用测试。
 
@@ -953,11 +953,11 @@ PUT /prompt-ablation    body: {"disabled_layers": [...], "perception_block_disab
 
 ### 角色看到的工具形态（Path C 轮内）
 
-`11.6_tool_discovery` 与 `11.5_tool_nudge` 只存在于 `run_agentic_loop()` 的 `loop_msgs` 副本，不进 `KNOWN_LAYERS`，也不经 builder 消融。`11.6_tool_discovery` 末尾带一行路由表（T1：「想长期记住或整理自己的东西 → self；想起以前的事 → memory；答应了到点提醒 → schedule …」，只列本轮暴露的分类，只补方向不加限制）。首轮 `tools[]` 通常只提供 `load_tools_<category>`（description「加载…的工具定义」，参数 `{}`）；加载后下一轮该分类换成具体 function schema，其余分类仍是入口。普通私聊中，明确的画图或改图请求若通过调用方、角色和模型工具过滤，并有可用生图预设，首轮直接提供 `generate_image` 定义与预设提示。本轮 Path C 业务结果是 `role=tool`（`frame_tool_message`）；builder 带入的本轮 `tool_result` 才是 system `10_tool_result`；跨轮自主结果是 `10.8_recent_tool_results`。假数据示例见 [tool-discovery.md](tool-discovery.md)#角色实际看到的形态。
+`11.6_tool_discovery` 与 `11.5_tool_nudge` 只存在于 `ToolTurnRunner.run()` 的 `loop_msgs` 副本，不进 `KNOWN_LAYERS`，也不经 builder 消融。`11.6_tool_discovery` 末尾带一行路由表（T1：「想长期记住或整理自己的东西 → self；想起以前的事 → memory；答应了到点提醒 → schedule …」，只列本轮暴露的分类，只补方向不加限制）。首轮 `tools[]` 通常只提供 `load_tools_<category>`（description「加载…的工具定义」，参数 `{}`）；加载后下一轮该分类换成具体 function schema，其余分类仍是入口。普通私聊中，明确的画图或改图请求若通过调用方、角色和模型工具过滤，并有可用生图预设，首轮直接提供 `generate_image` 定义与预设提示。本轮 Path C 业务结果是 `role=tool`（`frame_tool_message`）；builder 带入的本轮 `tool_result` 才是 system `10_tool_result`；跨轮自主结果是 `10.8_recent_tool_results`。假数据示例见 [tool-discovery.md](tool-discovery.md)#角色实际看到的形态。
 
 ### 与 tool loop 的 `11.5_tool_nudge` 层的区别
 
-`core/pipeline.py::run_agentic_loop()` 注入的 `11.5_tool_nudge`（工具意愿软提示，见
+`core/owner_chat/tool_loop.py::ToolTurnRunner.run()` 注入的 `11.5_tool_nudge`（工具意愿软提示，见
 `docs/tools.md`）**不在这套消融机制的管辖范围内**：它不经过 `prompt_builder.build()`，
 只存在于 loop 的一次性 `loop_msgs` 副本里，因此故意不登记进 `KNOWN_LAYERS`——登记了也不会
 有任何过滤效果，属于两条独立链路。控制它的开关是 `config.tool_loop.nudge_hint`。
@@ -972,7 +972,7 @@ thinking.enabled 生效，详情见 [角色心声文风](thinking-voice.md)。mo
 当轮人设。没有后处理、强制 reasoning 字段或新记忆写入。
 
 `core/thinking.py::maybe_apply()` 在 `llm_client.chat()` / `chat_stream()` 以及
-`pipeline.run_agentic_loop()` 进入循环前注入，同样**不经过 `prompt_builder.build()`**，
+`pipeline.tools.run()` 进入循环前注入，同样**不经过 `prompt_builder.build()`**，
 不登记进 `KNOWN_LAYERS`，与 `11.5_tool_nudge` 是同一类"消融机制管辖范围外"的层。
 
 内容是一次轻量 LLM 调用（`call_category="monologue"`）产出的角色内心活动，以

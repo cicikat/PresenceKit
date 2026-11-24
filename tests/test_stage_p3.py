@@ -48,7 +48,9 @@ async def test_stage_character_view_uses_explicit_scope_and_prompt_context(sandb
     captured = {}
 
     class FakePipeline:
-        async def fetch_context(self, uid, content, *, frozen_scope):
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
+        async def fetch(self, uid, content, *, frozen_scope):
             captured["scope"] = frozen_scope
             return {"history": []}
 
@@ -95,7 +97,9 @@ async def test_stage_character_view_skips_fetch_context_for_peer_triggered_reply
     captured = {}
 
     class FakePipeline:
-        async def fetch_context(self, uid, content, *, frozen_scope):
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
+        async def fetch(self, uid, content, *, frozen_scope):
             raise AssertionError("Phase B continuation must not call fetch_context")
 
         def build_prompt(self, uid, content, context, **kwargs):
@@ -140,7 +144,9 @@ async def test_stage_character_view_injects_directed_block_for_peer_reply(sandbo
     captured = {}
 
     class FakePipeline:
-        async def fetch_context(self, uid, content, *, frozen_scope):
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
+        async def fetch(self, uid, content, *, frozen_scope):
             raise AssertionError("peer reply must use the lightweight path")
 
         def build_prompt(self, uid, content, context, **kwargs):
@@ -174,7 +180,9 @@ async def test_stage_character_view_omits_directed_block_for_owner_reply(sandbox
     captured = {}
 
     class FakePipeline:
-        async def fetch_context(self, uid, content, *, frozen_scope):
+        generation = property(lambda self: self)
+        context = property(lambda self: self)
+        async def fetch(self, uid, content, *, frozen_scope):
             return {"history": []}
 
         def build_prompt(self, uid, content, context, **kwargs):

@@ -8,7 +8,7 @@ import pytest
 
 def _make_pipeline():
     from core.pipeline import Pipeline
-    return Pipeline.__new__(Pipeline)
+    return Pipeline(character=None, lore_engine=None)
 
 
 def _patch_loop(monkeypatch):
@@ -61,7 +61,7 @@ async def test_path_c_native_result_is_framed_and_truncated(monkeypatch):
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
     monkeypatch.setattr("core.llm_client.chat", _chat)
 
-    result = await _make_pipeline().run_agentic_loop(
+    result = await _make_pipeline().tools.run(
         [{"role": "user", "content": "查一下"}], uid="u1", char_id="c1", session_state=object(),
     )
 

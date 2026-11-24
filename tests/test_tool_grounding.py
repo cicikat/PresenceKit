@@ -64,7 +64,7 @@ async def test_pipeline_guard_rewrites_once_with_nudge_and_records_trace(monkeyp
         return "唔，这个我还没查成，等下再试试。"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._guard_unverified_claim(_grounding_messages(), "已经查到北京天气了。")
+    result = await pipeline.generation._guard_unverified_claim(_grounding_messages(), "已经查到北京天气了。")
     assert result == "唔，这个我还没查成，等下再试试。"
     assert seen["n"] == 1
     assert "没有得到可确认的成功结果" in seen["last"]
@@ -83,7 +83,7 @@ async def test_pipeline_guard_passes_through_when_retry_still_claims(monkeypatch
         return "已经查到了呀"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._guard_unverified_claim(_grounding_messages(), "已经查到了")
+    result = await pipeline.generation._guard_unverified_claim(_grounding_messages(), "已经查到了")
     assert result == "已经查到了呀"
     assert calls["n"] == 1  # 最多重写 1 次
 
@@ -96,7 +96,7 @@ async def test_pipeline_guard_no_llm_call_when_no_claim(monkeypatch):
         raise AssertionError("must not call")
 
     monkeypatch.setattr("core.llm_client.chat", _boom)
-    assert await pipeline._guard_unverified_claim(_grounding_messages(), "我在想怎么说") == "我在想怎么说"
+    assert await pipeline.generation._guard_unverified_claim(_grounding_messages(), "我在想怎么说") == "我在想怎么说"
 
 
 @pytest.mark.parametrize("text", [
@@ -223,7 +223,7 @@ def test_detect_tool_meta_leak_does_not_flag_ordinary_mentions_of_tools():
 
 def _make_pipeline():
     from core.pipeline import Pipeline
-    return Pipeline.__new__(Pipeline)
+    return Pipeline(character=None, lore_engine=None)
 
 
 _LEAKED = ("加载电脑桌面与应用操作的工具定义。含：desktop_minimize。"
@@ -240,7 +240,7 @@ async def test_guard_tool_meta_leak_passes_clean_reply_without_retry(monkeypatch
         return "不该被调用"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._guard_tool_meta_leak([], "今天天气不错，出去走走吧")
+    result = await pipeline.generation._guard_tool_meta_leak([], "今天天气不错，出去走走吧")
     assert result == "今天天气不错，出去走走吧"
     assert called["chat"] == 0
 
@@ -255,7 +255,7 @@ async def test_guard_tool_meta_leak_retries_once_and_accepts_clean_retry(monkeyp
         return "好呀，我们聊聊别的"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._guard_tool_meta_leak([{"role": "user", "content": "hi"}], _LEAKED)
+    result = await pipeline.generation._guard_tool_meta_leak([{"role": "user", "content": "hi"}], _LEAKED)
     assert result == "好呀，我们聊聊别的"
     # 重试请求里显式要求不得提及工具内部结构
     assert seen["messages"][-1]["role"] == "system"
@@ -270,7 +270,7 @@ async def test_guard_tool_meta_leak_falls_back_when_retry_still_leaks(monkeypatc
         return _LEAKED
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    result = await pipeline._guard_tool_meta_leak([], _LEAKED)
+    result = await pipeline.generation._guard_tool_meta_leak([], _LEAKED)
     assert "只发现工具" not in result
     assert "load_tools_" not in result
     assert result  # 兜底话术非空
@@ -284,7 +284,7 @@ async def test_guard_tool_meta_leak_is_fail_open_on_retry_error(monkeypatch):
         raise RuntimeError("upstream down")
 
     monkeypatch.setattr("core.llm_client.chat", _boom)
-    result = await pipeline._guard_tool_meta_leak([], _LEAKED)
+    result = await pipeline.generation._guard_tool_meta_leak([], _LEAKED)
     assert result and result != _LEAKED
 
 
@@ -298,7 +298,7 @@ async def test_guard_tool_meta_leak_is_counted_in_runtime_signals(monkeypatch):
         return "好呀"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
-    await pipeline._guard_tool_meta_leak([], _LEAKED)
+    await pipeline.generation._guard_tool_meta_leak([], _LEAKED)
     codes = {(s["category"], s["code"]): s["count"] for s in obs.snapshot()["signals"]}
     assert codes[("tool_loop_discovery", "tool_meta_leak")] == 1
 

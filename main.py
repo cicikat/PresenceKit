@@ -181,12 +181,24 @@ def _init_modules():
         lore_engine.load_entries(character.world_book)
 
     logger.info("正在初始化 Pipeline...")
-    from core.pipeline import Pipeline, register_slow_handlers
+    from core.pipeline import Pipeline
+    from core.post_process.handlers import register_slow_handlers
     _pipeline = Pipeline(character, lore_engine, active_character_id=char_ref)
     from core.pipeline_registry import register as _reg
     _reg(_pipeline)
 
-    register_slow_handlers()
+    register_slow_handlers(
+        read_character=_pipeline.character_state.consistency_character,
+        write_author_note=_pipeline.character_state.write_author_note,
+    )
+    from admin.admin_server import app as admin_app
+    from admin.activity_dialogue import require_turn_effects
+    turn_effects = _pipeline.effects
+    admin_app.dependency_overrides[require_turn_effects] = lambda: turn_effects
+    from admin.character_dependencies import require_character_reader, require_character_reloader
+    character_state = _pipeline.character_state
+    admin_app.dependency_overrides[require_character_reader] = lambda: character_state.context_snapshot
+    admin_app.dependency_overrides[require_character_reloader] = lambda: character_state.reload_character
     logger.info("慢任务 handler 已注册")
 
     from core.memory.pending_perception import cleanup_stale as _cleanup_stale
@@ -355,7 +367,7 @@ async def handle_message(message: dict, *, ingress=None):
     if is_group:
         if _pipeline is None:
             return
-        _pipeline._refresh_character_if_needed()
+        _pipeline.character_state.refresh()
         group_char_id = _pipeline._active_character_id
         group_context.append(group_id, sender_name, content, char_id=group_char_id)
         # 群聊走隔离路径，不进 reality 主链
@@ -370,7 +382,7 @@ async def handle_message(message: dict, *, ingress=None):
         logger.error("[handle_message] pipeline 未初始化，跳过本轮")
         return
     try:
-        _frozen_scope = _pipeline._current_reality_scope(user_id)
+        _frozen_scope = _pipeline.character_state.reality_scope(user_id)
     except (ValueError, RuntimeError) as _char_err:
         _log_error("main.handle_message.char_refresh", _char_err)
         return
@@ -498,7 +510,7 @@ async def handle_message(message: dict, *, ingress=None):
 
         # ── 步骤4：拉取上下文（并发）────────────────────────────────────────
         logger.debug("[handle_message] 并发拉取上下文...")
-        context = await _pipeline.fetch_context(user_id, content, group_id, frozen_scope=_frozen_scope)
+        context = await _pipeline.context.fetch(user_id, content, group_id, frozen_scope=_frozen_scope)
 
         # ── 步骤5：组装 prompt ───────────────────────────────────────────────
         logger.debug("[handle_message] 组装 prompt...")
@@ -527,7 +539,7 @@ async def handle_message(message: dict, *, ingress=None):
         logger.debug("[handle_message] 调用主 LLM...")
         if _loop_active:
             from channels import desktop_ws as _desktop_ws
-            raw_reply = await _pipeline.run_agentic_loop(
+            raw_reply = await _pipeline.tools.run(
                 messages, uid=user_id, char_id=_char_id, session_state=state, is_group=is_group,
                 exclude_tools=_fast_path_exclude_tools,
                 tool_call_required=_pretool.must_call_tool,
@@ -537,7 +549,7 @@ async def handle_message(message: dict, *, ingress=None):
                 **({"allowed_tool_names": ingress.allowed_tool_names} if ingress else {}),
             )
         else:
-            raw_reply = await _pipeline.run_llm(messages)
+            raw_reply = await _pipeline.generation.run_llm(messages)
         try:
             from core.observe.prompt_capture import update_llm_output as _upd_prompt_out
             _upd_prompt_out(user_id, raw_reply)
@@ -604,7 +616,7 @@ async def _reply_with_tool_result(
         _char_id = frozen_scope.character_id
     else:
         try:
-            _pipeline._refresh_character_if_needed()
+            _pipeline.character_state.refresh()
         except (ValueError, RuntimeError) as _char_err:
             log_error("main._reply_with_tool_result.char_refresh", _char_err)
             return
@@ -631,7 +643,7 @@ async def _reply_with_tool_result(
             char_id=_char_id,
         )
         try:
-            raw_reply = await _pipeline.run_llm(messages)
+            raw_reply = await _pipeline.generation.run_llm(messages)
         except Exception as e:
             log_error("main._reply_with_tool_result.llm", e)
             return
@@ -717,7 +729,7 @@ async def _handle_group_message(
 
     async with conversation_lock(f"group_{group_id}"):
         try:
-            raw_reply = await _pipeline.run_llm(messages)
+            raw_reply = await _pipeline.generation.run_llm(messages)
         except Exception as _e:
             _log_error("group_message.run_llm", _e)
             return
@@ -823,7 +835,7 @@ async def _qq_reality_reply_adapter(
             is_group=is_group,
             pending_paths=pending_paths,
             frozen_scope=frozen_scope,
-            pipeline=_pipeline,
+            effects=_pipeline.effects,
             web_echo=web_echo,
             coplay_echo=coplay_echo,
             loop_executed=loop_executed,

@@ -159,16 +159,16 @@ async def test_wechat_uses_existing_tool_loop_and_turn_sink_with_canonical_ident
     def scope(uid):
         assert uid == _USER_ID and conversation_lock(uid).locked()
         return MemoryScope.reality_scope(uid, "test_char")
-    pipeline._current_reality_scope.side_effect = scope
+    pipeline.character_state.reality_scope.side_effect = scope
     record = AsyncMock()
     monkeypatch.setattr(sink, "record_assistant_turn", record)
     service = configured_service(main.handle_message)
     message = event(text="现在几点")
     assert await service.admit(message, generation=0, owner_uid=_USER_ID)
     assert not await service.admit(message, generation=0, owner_uid=_USER_ID)
-    pipeline.fetch_context.assert_awaited_once()
+    pipeline.context.fetch.assert_awaited_once()
     assert pipeline.build_prompt.call_args.kwargs["channel"] == "wechat"
-    assert pipeline.run_agentic_loop.call_args.kwargs["uid"] == _USER_ID
+    assert pipeline.tools.run.call_args.kwargs["uid"] == _USER_ID
     record.assert_awaited_once()
     assert record.call_args.kwargs["envelope"].source.value == "wechat"
     assert record.call_args.kwargs["event_channel"] == "wechat"

@@ -141,7 +141,7 @@ def test_current_reality_scope_uid_equals_user_id(chars_tree, sandbox, registry)
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     _write_active(sandbox, TEST_CHAR_ID)
 
-    scope = pipeline._current_reality_scope("u42")
+    scope = pipeline.character_state.reality_scope("u42")
 
     assert scope.uid == "u42", f"scope.uid must equal user_id, got {scope.uid!r}"
 
@@ -152,7 +152,7 @@ def test_current_reality_scope_character_id_equals_active(chars_tree, sandbox, r
     pipeline = _make_pipeline("character_b", registry)
     _write_active(sandbox, "character_b")
 
-    scope = pipeline._current_reality_scope("u1")
+    scope = pipeline.character_state.reality_scope("u1")
 
     assert scope.character_id == "character_b", (
         f"scope.character_id must equal active char, got {scope.character_id!r}"
@@ -165,7 +165,7 @@ def test_current_reality_scope_domain_is_reality(chars_tree, sandbox, registry):
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     _write_active(sandbox, TEST_CHAR_ID)
 
-    scope = pipeline._current_reality_scope("u1")
+    scope = pipeline.character_state.reality_scope("u1")
 
     assert scope.domain == "reality", f"scope.domain must be 'reality', got {scope.domain!r}"
 
@@ -181,7 +181,7 @@ def test_current_reality_scope_raises_on_invalid_active(chars_tree, sandbox, reg
     )
 
     with pytest.raises((ValueError, RuntimeError)):
-        pipeline._current_reality_scope("u1")
+        pipeline.character_state.reality_scope("u1")
 
 
 # ── 5. fetch_context stores receive scope.character_id ────────────────────────
@@ -205,7 +205,7 @@ def test_fetch_context_stores_receive_scope_char_id(chars_tree, monkeypatch, san
 
     monkeypatch.setattr(_st, "load_for_prompt", _spy)
 
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
 
     assert received_char_ids, "short_term.load_for_prompt must be called"
     assert all(c == "character_b" for c in received_char_ids), (
@@ -233,7 +233,7 @@ def test_fetch_context_scope_uid_forwarded_to_stores(chars_tree, monkeypatch, sa
 
     monkeypatch.setattr(_st, "load_for_prompt", _spy)
 
-    asyncio.run(pipeline.fetch_context(user_id="u_scope_uid", content="hello"))
+    asyncio.run(pipeline.context.fetch(user_id="u_scope_uid", content="hello"))
 
     assert received_uids, "short_term.load_for_prompt must be called"
     assert received_uids[0] == "u_scope_uid", (
@@ -264,13 +264,13 @@ def test_fetch_context_scope_char_id_follows_char_switch(
 
     monkeypatch.setattr(_st, "load_for_prompt", _spy)
 
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
     assert received and received[-1] == TEST_CHAR_ID, (
         f"First call must use yexuan, got {received}"
     )
 
     _write_active(sandbox, "character_b")
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
     assert received[-1] == "character_b", (
         f"After switch, scope.character_id must be 'character_b', got {received[-1]!r}"
     )
@@ -306,7 +306,8 @@ async def test_post_process_enqueue_scope_payload_present(
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process(user_id="u1", content="hello", reply="hi", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='hello', reply='hi', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='hello', reply='hi', envelope=env)
 
     mt_payloads = [e for e in enqueued if e["name"] == "summarize_to_midterm"]
     assert mt_payloads, "summarize_to_midterm must be enqueued"
@@ -352,7 +353,8 @@ async def test_post_process_payload_scope_consistent_with_uid_char_id(
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process(user_id="u1", content="hello", reply="hi", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='hello', reply='hi', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='hello', reply='hi', envelope=env)
 
     scoped = [e for e in enqueued if "scope" in e.get("payload", {})]
     assert scoped, "At least one enqueue must contain 'scope'"
@@ -401,7 +403,8 @@ async def test_post_process_capture_turn_retry_scope_payload(
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process(user_id="u1", content="hello", reply="hi", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='hello', reply='hi', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='hello', reply='hi', envelope=env)
 
     retry_payloads = [e for e in enqueued if e["name"] == "capture_turn_retry"]
     assert retry_payloads, "capture_turn_retry must be enqueued on capture_turn failure"
@@ -445,7 +448,7 @@ async def test_post_process_capture_turn_retry_keeps_audit_extras(
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process_critical(
+        await pipeline.effects.capture_critical(
             user_id="u1", content="hello", reply="hi", envelope=env, audit_extras=extras,
         )
 
@@ -487,7 +490,8 @@ async def test_post_process_user_profile_update_scope_payload(
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process(user_id="u1", content="hello", reply="hi", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='hello', reply='hi', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='hello', reply='hi', envelope=env)
 
     up_payloads = [e for e in enqueued if e["name"] == "user_profile_update"]
     assert up_payloads, "user_profile_update must be enqueued"
@@ -530,9 +534,8 @@ async def test_post_process_invalid_active_raises_no_enqueue(
         patch("core.post_process.slow_queue.enqueue", side_effect=_fail_enqueue),
     ):
         with pytest.raises((ValueError, RuntimeError)):
-            await pipeline.post_process(
-                user_id="u1", content="hello", reply="hi", envelope=env
-            )
+            _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='hello', reply='hi', envelope=env)
+            await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='hello', reply='hi', envelope=env)
 
     assert enqueue_called == [], (
         f"enqueue must NOT be called on invalid active_character, got {enqueue_called}"
@@ -559,7 +562,7 @@ def test_regression_fetch_context_char_id_forwarding(
 
     monkeypatch.setattr(_up, "load", _spy)
 
-    asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
+    asyncio.run(pipeline.context.fetch(user_id="u1", content="hello"))
 
     assert received and received[0] == "character_b", (
         f"Regression: user_profile.load must receive char_id='character_b', got {received}"
@@ -596,7 +599,8 @@ async def test_regression_post_process_char_id_forwarding(
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
-        await pipeline.post_process(user_id="u1", content="hello", reply="hi", envelope=env)
+        _critical_result = await pipeline.effects.capture_critical(user_id='u1', content='hello', reply='hi', envelope=env)
+        await pipeline.effects.run_deferred_effects(critical_result=_critical_result, user_id='u1', content='hello', reply='hi', envelope=env)
 
     assert captured and captured[0] == "character_b", (
         f"Regression: capture_turn must receive char_id='character_b', got {captured}"

@@ -252,7 +252,7 @@ async def test_existing_turn_sink_projects_once_without_extra_execution(monkeypa
     monkeypatch.setattr(realtime, "publish", published.append)
     await record_assistant_turn(assistant_text="Hello\nHello", uid="owner", source=TurnSource.USER_CHAT,
         user_text="question", fanout=fanout, frozen_scope=scope,
-        pipeline=SimpleNamespace(post_process_critical=critical), schedule_slow=False,
+        effects=SimpleNamespace(effects=SimpleNamespace(capture_critical=critical)).effects, schedule_slow=False,
         event_channel=channel, request_id="req-one")
     assert critical.await_count == 1
     assert len(published) == expected

@@ -1,3 +1,4 @@
+from tests.fixtures.runtime_capabilities import read_registered_character
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_state_projection.py — Brief 94 §2: GET /dream/state 结构化状态透出
@@ -24,7 +25,7 @@ _UID = "dream_proj_test"
 def _get():
     from admin.routers.dream import dream_state_get
     with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
-        return asyncio.run(dream_state_get())
+        return asyncio.run(dream_state_get(read_character=read_registered_character))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -165,7 +166,7 @@ def test_full_transition_idle_dreaming_cooldown(sandbox):
     with patch('admin.routers.dream_common._owner_uid', return_value=uid):
         from admin.routers.dream import dream_state_get
 
-        pre = asyncio.run(dream_state_get())
+        pre = asyncio.run(dream_state_get(read_character=read_registered_character))
         assert pre["dream_state"] == "idle"
         assert pre["blocks_chat"] is False
 
@@ -184,7 +185,7 @@ def test_full_transition_idle_dreaming_cooldown(sandbox):
             enter_result = asyncio.run(enter_dream(uid, char_id=TEST_CHAR_ID))
         assert enter_result.get("ok") is True
 
-        mid = asyncio.run(dream_state_get())
+        mid = asyncio.run(dream_state_get(read_character=read_registered_character))
         assert mid["dream_state"] == "dreaming"
         assert mid["blocks_chat"] is True
         assert mid["since"] is not None
@@ -198,7 +199,7 @@ def test_full_transition_idle_dreaming_cooldown(sandbox):
                 coro = mock_ct.call_args[0][0]
                 coro.close()
 
-        post = asyncio.run(dream_state_get())
+        post = asyncio.run(dream_state_get(read_character=read_registered_character))
         assert post["dream_state"] == "cooldown"
         assert post["blocks_chat"] is False
         assert post["since"] is not None
