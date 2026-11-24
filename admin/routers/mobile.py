@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Requ
 
 from admin.auth import require_scopes
 from core.audio_perception import voice_context
+from admin.session_requests import voice_scope
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
 
@@ -162,7 +163,7 @@ async def mobile_delivery_observability(auth=Depends(require_scopes("state.read"
 
 
 @router.post("/mobile/chat", summary="手机端普通对话（Bearer 鉴权）")
-@voice_context("mobile")
+@voice_context("mobile", scope_resolver=voice_scope)
 async def mobile_chat(
     body: dict,
     x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
@@ -178,7 +179,7 @@ async def mobile_chat(
 
     from core.owner_chat.service import run_owner_chat_turn
     from core.audio_perception import current_voice_extras
-    from core.owner_turn_service import legacy_mobile_context, run_legacy_owner_turn
+    from core.owner_turn_service import legacy_mobile_context
     from core.config_loader import get_config
 
     uid = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
@@ -187,17 +188,12 @@ async def mobile_chat(
     from admin.session_requests import run_session_request
     from admin.session_requests import session_grant
     grant = session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
-    if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
-        raise HTTPException(status_code=422, detail="session_scope_required")
+    if any(key in body for key in ("char_id", "session_id")):
+        raise HTTPException(422, "invalid_session_request")
 
     voice_extras = current_voice_extras()  # A3：语音回执打标
 
     async def _execute():
-        if grant is None:
-            return await run_legacy_owner_turn(
-                message, context, reply_to=reply_to, audit_extras=voice_extras,
-                executor=run_owner_chat_turn,
-            )
         return await run_owner_chat_turn(
             message, context.provenance_channel,
             live_origin_channel=context.live_origin_channel,
@@ -212,7 +208,6 @@ async def mobile_chat(
             payload={"kind": "mobile_chat", "message": message, "reply_to": reply_to},
             executor=_execute,
         )
-        if grant is not None else await _execute()
     )
 
     from core.scheduler.sensor_events import notify_chat_happened

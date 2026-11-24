@@ -1,3 +1,12 @@
+## T4 Session Scope 切断检查点（2026-11-24，partial / open）
+
+本地后端相关聊天、回执、上传、wake、媒体、产物、历史、思考与转写入口要求
+`X-Presence-Session`；不再允许缺失 Header 时使用 active character。
+桌面共享请求层及 Rust 桥已接入；手机移除 Session 失效后的自动重绑重发，转写携带 grant。
+旧版无 Session 客户端不能与本检查点后端组合使用；未部署，最终三仓 SHA matrix 未验证。
+下文旧 Session 兼容说明记录切断前状态。未完成桌面重开/失效 UI 联验与手机真机验收，
+详见 [T4 施工记录](refactors/migration-cutover-t4.md)。
+
 ## 第一轮：手机环境与 Autonomy（current / observe）
 
 R4：`/mobile/ack` 的chat scope、ack_seq、累计删除和请求/成功响应字段保持不变；

@@ -8,7 +8,8 @@
 固定会话 scope 后端已提供 `session_scope=v1`，见
 [session-scope-contract.md](session-scope-contract.md)。客户端先从 `/auth/whoami` 发现能力，
 再 `POST /v1/sessions`，后续以 `X-Presence-Session` 传不透明句柄；不要把 `char_id` 当请求权威。
-无 header 的 legacy `/desktop/chat` 与 `/mobile/chat` 仍使用 live active。
+T4 本地检查点要求 Session Header，缺失返回 `422 session_scope_required`；不再使用 live active。
+当前为 partial、未部署，验收边界见 [T4 施工记录](refactors/migration-cutover-t4.md)。
 
 ## Versioned owner turns and diary sync (Brief 171)
 

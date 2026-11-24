@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 from tests.fixtures.runtime_capabilities import read_registered_character
 import asyncio
 from copy import deepcopy
@@ -245,12 +246,12 @@ def test_disabling_audio_revokes_pending_receipt(configured):
 async def test_transcribe_compatible_text_and_receipt(configured, monkeypatch):
     from admin.routers.transcribe import transcribe_audio
     monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "tired"}))
-    value = await transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", {})
+    value = await transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", x_presence_session=issue(monkeypatch, owner="owner").session_id, _auth={})
     assert value["text"] == "hello"
     assert audio.consume_receipt(value["audio_perception_id"], "hello", "desktop") == {"tone": "tired"}
     configured["stt_presets"]["enabled"] = False
     with pytest.raises(HTTPException) as error:
-        await transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", {})
+        await transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", x_presence_session=issue(monkeypatch, owner="owner").session_id, _auth={})
     assert error.value.status_code == 422
 
 
@@ -263,11 +264,11 @@ async def test_legacy_transcribe_reports_backend_and_empty_audio(monkeypatch):
         raise RuntimeError("STT 未安装")
     monkeypatch.setattr(endpoint, "_transcribe_with_quality", unavailable)
     with pytest.raises(HTTPException) as error:
-        await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", {})
+        await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", x_presence_session=issue(monkeypatch, owner="owner").session_id, _auth={})
     assert error.value.status_code == 503
     monkeypatch.setattr(endpoint, "_transcribe_with_quality", lambda _path: ("", None))
     with pytest.raises(HTTPException) as error:
-        await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", {})
+        await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", x_presence_session=issue(monkeypatch, owner="owner").session_id, _auth={})
     assert error.value.status_code == 422
     assert "没有识别到语音" in error.value.detail
 
@@ -331,14 +332,14 @@ async def test_audio_upload_reaches_chat_without_tone_on_failure(configured, mon
     response = await chat.upload_ingest(
         file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
         files=None, message="hi", channel="desktop", request_id="", _auth={},
-     read_character=read_registered_character)
+     x_presence_session=issue(monkeypatch, owner="owner").session_id)
     assert "未能听清" in response["message"]
     assert response["hint"] is None
     monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "calm"}))
     response = await chat.upload_ingest(
         file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
         files=None, message="", channel="desktop", request_id="", _auth={},
-     read_character=read_registered_character)
+     x_presence_session=issue(monkeypatch, owner="owner").session_id)
     assert response["message"] == "hello"
     assert response["hint"]["_layer"] == "3.8_audio_impression"
 
@@ -461,7 +462,7 @@ async def test_transcribe_hides_acoustic_payload(configured, monkeypatch):
         AsyncMock(return_value={"analysis_status": "failed", "quality": "insufficient",
                                 "pitch_summary": {}, "pace": {}, "energy": {}, "voiced_ratio": {}}),
     )
-    value = await transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", {})
+    value = await transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", x_presence_session=issue(monkeypatch, owner="owner").session_id, _auth={})
     assert set(value) == {"text", "tone", "audio_perception_id"}
     assert value["text"] == "hello"
     assert value["tone"] == "unclear"

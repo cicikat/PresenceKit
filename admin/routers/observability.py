@@ -154,15 +154,13 @@ async def chat_turn_reasoning(
     from core.llm_reasoning_store import query_turn
     if not turn_id.strip() or len(turn_id) > 128:
         raise HTTPException(422, "无效的回合编号")
-    grant = None
-    if x_presence_session:
-        from admin.session_requests import session_grant
-        grant = session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    from admin.session_requests import session_grant
+    grant = session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     try:
         from core.thinking import display_prefer_monologue
         entries = await asyncio.to_thread(
             query_turn, turn_id, prefer_monologue=display_prefer_monologue(),
-            char_id=grant.char_id if grant is not None else None,
+            char_id=grant.char_id,
         )
     except Exception:
         raise HTTPException(503, "思考存储暂时不可读取") from None

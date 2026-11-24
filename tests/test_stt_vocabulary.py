@@ -119,7 +119,7 @@ async def test_continuous_voice_receipt_uses_only_transcript_contained_in_messag
     from core import audio_perception
 
     checked = []
-    monkeypatch.setattr(audio_perception, "consume_receipt", lambda key, text, channel: checked.append((key, text, channel)) or None)
+    monkeypatch.setattr(audio_perception, "consume_receipt", lambda key, text, channel, **kwargs: checked.append((key, text, channel)) or None)
 
     @audio_perception.voice_context("desktop")
     async def endpoint(*, body):
@@ -134,7 +134,7 @@ async def test_continuous_voice_receipt_uses_only_transcript_contained_in_messag
 async def test_audio_receipt_reports_prompt_injection_only_when_built(monkeypatch):
     from core import audio_perception
 
-    monkeypatch.setattr(audio_perception, "consume_receipt", lambda *_args: {"tone": "unclear", "acoustic": {"quality": "insufficient"}})
+    monkeypatch.setattr(audio_perception, "consume_receipt", lambda *_args, **_kwargs: {"tone": "unclear", "acoustic": {"quality": "insufficient"}})
 
     @audio_perception.voice_context("desktop")
     async def endpoint(*, body):

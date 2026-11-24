@@ -14,7 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 
 from admin.auth import require_scopes
 
@@ -109,8 +109,11 @@ def _timeout_seconds() -> float:
 async def transcribe_audio(
     file: UploadFile = File(...),
     channel: str = Form("desktop"),
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
     _auth=Depends(require_scopes("chat")),
 ):
+    from admin.session_requests import session_grant
+    grant = session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     data = await file.read(MAX_AUDIO_BYTES + 1)
 
     if len(data) > MAX_AUDIO_BYTES:
@@ -128,7 +131,7 @@ async def transcribe_audio(
         response = {
             "text": result["text"],
             "tone": result["tone"],
-            "audio_perception_id": issue_receipt(result, channel),
+            "audio_perception_id": issue_receipt(result, channel, scope=grant.memory_scope),
         }
         if result.get("asr_quality"):
             response["asr_quality"] = result["asr_quality"]
@@ -182,10 +185,10 @@ async def transcribe_audio(
         acoustic = await _attach_acoustic(data, file.filename or "voice.webm", "unclear")
         result = {"text": text, **acoustic, "asr_quality": quality}
         response = {"text": text, "tone": result["tone"],
-                    "audio_perception_id": issue_receipt(result, channel)}
+                    "audio_perception_id": issue_receipt(result, channel, scope=grant.memory_scope)}
     else:
         result = {"text": text, "tone": "unclear", "voice_only": True, "asr_quality": quality}
-        response = {"text": text, "audio_perception_id": issue_receipt(result, channel)}
+        response = {"text": text, "audio_perception_id": issue_receipt(result, channel, scope=grant.memory_scope)}
     if quality:
         response["asr_quality"] = quality
     return response

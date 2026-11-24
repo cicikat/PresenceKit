@@ -21,7 +21,7 @@ def test_csv_upload_reaches_turn_and_archives_full_text(sandbox, monkeypatch, ch
     monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', turn)
     monkeypatch.setattr('core.config_loader.get_config', lambda: {'scheduler': {'owner_id': 'reader'}})
     monkeypatch.setattr('core.pipeline_registry.get', lambda: SimpleNamespace(_active_character_id='char-test'))
-    client = _client(monkeypatch)
+    client = _client(monkeypatch, owner="reader", char="char-test")
     _scoped(sandbox, 'emt_chat', ['chat'])
     response = client.post('/upload/ingest', headers={'Authorization': 'Bearer emt_chat'},
                            files=[('files', ('ledger.CSV', '项目,金额\n午餐,25\n'.encode('gb18030'), 'text/csv'))],

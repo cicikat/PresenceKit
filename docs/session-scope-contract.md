@@ -1,3 +1,15 @@
+## T4 本地施工变更（2026-11-24，partial）
+
+本检查点已删除相关 HTTP 入口的无 Session → active-character 分支；缺少 Header 返回
+422 `session_scope_required`，未知/过期返回 404 `session_not_found`，跨 token/角色返回明确拒绝。
+产物下载/预览与转写也要求同一 grant；桌面持久回执加入角色命名空间。
+桌面按连接和角色持有内存 grant；过期或拒绝不自动新建并重放请求，重新打开窗口才重新绑定。
+手机同步停止失效后的自动重绑重发。mobile poll/ACK 仍为 owner 共享游标。
+
+完整设备验收、三仓最终 matrix 与下方历史加法兼容描述清理尚未完成；下方关于
+“无 Header 继续 legacy”的文字只描述切断前版本，不能用于本检查点。
+见 [T4 施工记录](refactors/migration-cutover-t4.md)。本地实现未推送或部署。
+
 ## 安全失败重试（2026-10-08，271）
 
 mobile/desktop chat 在工具执行与 turn sink 前失败时标记 retryable_failed，同 request_id/payload 可以重跑；已开始工具/回合写入、未知入口和 upload 保留 execution_outcome_unknown。context/probe 并发失败会取消并等待另一任务，避免重试与残留工具交错。completed/in_flight/409、token+owner+char+domain 隔离和 30 分钟进程内保留不变；旧 failed 无阶段证据不重跑。既有 /observability/session-scope 可见 request_failed 原因 retryable_failed/failed 及 request_retry，无新持久状态或开关。chat-log plain/display 均取 ledger visible_text；记忆存储与原文不改。真机/真实模型观察仍 open。

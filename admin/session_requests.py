@@ -1,13 +1,11 @@
-"""HTTP error mapping for existing optional session grants and request receipts."""
+"""HTTP error mapping for required session grants and request receipts."""
 from fastapi import HTTPException
 from core import session_scope
 
 
 def session_grant(session_id: str | None, token_label: str):
-    # Direct unit calls see FastAPI's Header descriptor instead of an injected
-    # value; only an actual non-empty string is a session handle.
     if not isinstance(session_id, str) or not session_id:
-        return None
+        raise HTTPException(status_code=422, detail="session_scope_required")
     from core.session_scope import SessionScopeError, resolve_session
 
     try:
@@ -35,3 +33,8 @@ def owner_media_scope() -> tuple[str, str]:
         return session_scope.owner_media_scope()
     except session_scope.SessionScopeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.code) from None
+
+
+def voice_scope(arguments):
+    auth = arguments.get("_auth")
+    return session_grant(arguments.get("x_presence_session"), getattr(auth, "label", "legacy-admin")).memory_scope
