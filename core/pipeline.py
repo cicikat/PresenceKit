@@ -29,7 +29,9 @@ class Pipeline:
         from core.post_process.turn_effects import TurnEffects
 
         self.character_state = CharacterSession(character, lore_engine, active_character_id)
-        self.generation = ReplyGeneration()
+        self.generation = ReplyGeneration(
+            resolve_active_character_id=self.character_state.current_character_id,
+        )
         self._last_channel: str | None = None
         self.context = RealityContextReader(
             resolve_scope=self.character_state.reality_scope,

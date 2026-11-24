@@ -5,6 +5,11 @@ logger = logging.getLogger("core.pipeline")
 
 
 class ReplyGeneration:
+    def __init__(self, *, resolve_active_character_id):
+        if not callable(resolve_active_character_id):
+            raise TypeError("ReplyGeneration requires resolve_active_character_id capability")
+        self._resolve_active_character_id = resolve_active_character_id
+
     async def run_llm(
         self, messages: list[dict], *, char_id: str | None = None, is_proactive: bool = False,
         require_complete: bool = False,
@@ -208,13 +213,12 @@ class ReplyGeneration:
             if not prefix or not reply.strip().startswith(prefix):
                 return
 
-            _char_id = char_id or getattr(self, "_active_character_id", DEFAULT_CHAR_ID)
             logger.info(
                 "[anti_collapse] stream_soft_degrade uid=%s char_id=%s rule=homogeneity_prefix prefix=%r",
-                user_id, _char_id, prefix,
+                user_id, char_id, prefix,
             )
             from core.memory.short_term import note_stream_collapse_signal
-            note_stream_collapse_signal(user_id, prefix, char_id=_char_id)
+            note_stream_collapse_signal(user_id, prefix, char_id=char_id)
         except Exception as e:
             from core.error_handler import log_error
             log_error("pipeline._check_stream_collapse", e)
@@ -234,12 +238,17 @@ class ReplyGeneration:
         - 0 token + 异常 → 非流式 run_llm 兜底（完整输出）。
         - 部分 token + 异常 → 中止，不追加非流式文本（避免重复拼接）。
 
-        char_id: 显式指定"替谁说话"时传（Brief 30）；None（默认）按活跃角色解析。
+        char_id: 显式指定"替谁说话"时传（Brief 30）；None 且有 user_id 时，
+          请求前通过注入能力冻结已加载角色；无 user_id 时维持模型侧解析。
         is_proactive: 本次是否 scheduler 主动消息（Brief 32）。
         user_id: 反坍缩软降级信号（ACT-2）归属的用户；不传则跳过检测（无法定位下一轮读取位置）。
         """
         from core import llm_client
         from core.control_markers import ControlMarkerStreamFilter
+        if char_id is None and user_id:
+            char_id = self._resolve_active_character_id()
+            if not isinstance(char_id, str) or not char_id.strip():
+                raise ValueError("stream collapse signal requires a loaded character ID")
         got_any = False
         pieces: list[str] = []
         marker_filter = ControlMarkerStreamFilter()

@@ -4,6 +4,37 @@
 `9c72ee01fcf02c4f08918e6d345d22fc6950dcd5`。本单仅更新原 draft PR，等待独立审查，
 不合并、不推 main、不部署。用户允许原样保留工作区未跟踪的施工工单。
 
+## T3.1.1 补丁：流式角色 ID 冻结
+
+补丁基线为 `829da9c57c8d84ccce56825ec85fe22e9d835c35`。
+生成组件仍保留旧 Pipeline 已有的无效 fallback：未定义 DEFAULT_CHAR_ID 的异常
+被 fail-open 捕获，导致无显式 char_id 的 stream-collapse 信号静默缺失。
+这是遗留缺陷的收口，不将其描述为 T3.1 新引入的业务回归。
+
+CharacterSession 增加只读取已加载角色的 current_character_id；ReplyGeneration
+构造必须接收该 bound method。只有 char_id 为 None 且 user_id 非空时才解析，
+在模型流请求之前冻结；同一局部 ID 贯穿模型请求、检测和信号写入。
+显式角色与无 user_id 路径不调用 provider；provider 空值或异常在模型降级处理
+之外明确抛错，不猜默认角色，不重新解析活动角色。
+
+定向行为测试使用真实沙盒信号文件，并以事件屏障在流式期间切换真实 CharacterSession，
+验证旧角色桶有信号、新角色桶无信号。用基线两个流式方法做内存故障注入时，
+默认角色用例在“目标角色桶应有信号”断言失败，日志记录 DEFAULT_CHAR_ID NameError。
+构造及架构测试拒绝可选 provider、隐式字段、默认 ID、registry 与 Pipeline bound method；
+临时真实 Git 仓库中的同款 CI 断言拒绝 fallback / Pipeline 方法注入，撤销后恢复通过。
+
+只修改角色能力、生成组合、该流式路径、两份对应测试及本报告。
+不修改 pipeline_registry 或 31 项保留清单，不批量改造生成调用者，不改流式算法、
+控制标记、重试和同质判定。当前补丁 CI 以 PR #37 最新 Head 的检查和说明为准。
+
+本地 Python 3.12.13：上述相关回归初跑 336 passed / 2 failed，两个失败均在新增
+故障注入测试的临时仓库骨架与错误文本显示；补齐空 Pipeline 文件并显式输出完整
+组合依赖错误后，故障注入、角色依赖门禁及新正负向测试重跑 16 passed。
+生产行为回归没有失败，基线缺陷复现的预期失败单独记录，不计为通过。
+最终以 CI 同款无 conftest 入口重跑完整 Architecture：
+`python -m pytest --noconftest -c pytest.ini -q tests/test_ar02_dependency_directions.py`，
+197 passed、0 failed，146.60 秒；包含精确 fallback 与 Pipeline bound method 故障拒绝及恢复。
+
 ## 唯一所有者与依赖
 
 | 组件 | 改造前 | 当前必需依赖 |
@@ -17,7 +48,8 @@
 `core/character_session.py` 是角色、世界书和临时 author note 的唯一所有者，
 不保存 Pipeline 引用。快照只含这三个检索所需字段，不包含执行器或回指。
 `core/owner_chat/reply_generation.py` 是模型生成与输出治理的实际实现，
-没有状态或 Pipeline 引用。其七个生成方法与基线对应方法的 AST 相同。
+没有角色状态或 Pipeline 引用。T3.1 迁移时七个生成方法与基线对应方法的 AST 相同；
+T3.1.1 仅增加上述显式 ID 解析能力与流式冻结，未重写生成算法。
 Pipeline 只组合这些实例并执行 prompt 组装；四个既有字段属性直接读写同一
 CharacterSession，不保存第二份角色状态，也不提供旧操作的转发方法。
 
@@ -104,7 +136,7 @@ getattr 字面调用及可识别 importlib / __import__ / sys.modules 动态加�
 静态分析不执行任意字符串、反射元编程或完整跨函数数据流，不证明不存在一切
 动态访问；运行时 owner 检查与实际队列/HTTP 回归补充它，不能相互替代。
 
-## 验证与交付
+## 验证与交付（T3.1 基线记录）
 
 环境：Windows、项目 Python 3.12.13，公开测试资产及函数级可写沙盒。
 

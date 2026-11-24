@@ -352,6 +352,7 @@ def registry_scan(root=ROOT):
 
 
 T31_CONSTRUCTOR_CAPABILITIES = {
+    "ReplyGeneration": {"resolve_active_character_id"},
     "RealityContextReader": {"resolve_scope", "read_snapshot"},
     "ToolTurnRunner": {"run_llm", "run_llm_stream", "guard_tool_meta_leak", "guard_unverified_claim", "anti_collapse_prefix_retry"},
     "TurnEffects": {"resolve_scope", "is_active_character"},
@@ -366,6 +367,13 @@ def narrow_component_violations(source, module):
     if module not in T31_COMPONENT_MODULES:
         return errors
     for node in ast.walk(tree):
+        if module == "core.owner_chat.reply_generation":
+            forbidden = {"_active_character_id", "DEFAULT_CHAR_ID"}
+            if (isinstance(node, ast.Name) and node.id in forbidden
+                or isinstance(node, ast.alias) and node.name in forbidden
+                or isinstance(node, ast.Attribute) and node.attr in forbidden
+                or isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in forbidden):
+                errors.append((node.lineno, "generation cannot read or guess character state"))
         if isinstance(node, ast.Attribute) and node.attr in {"pipeline", "runtime", "generator", "__self__", "__globals__", "__closure__"}:
             errors.append((node.lineno, "whole runtime/back-reference"))
         if isinstance(node, ast.Name) and node.id in {"pipeline", "runtime", "_pipeline"}:
@@ -379,7 +387,10 @@ def narrow_component_violations(source, module):
             }:
                 errors.append((node.lineno, "reflective runtime access"))
         if isinstance(node, ast.ClassDef) and node.name in T31_CONSTRUCTOR_CAPABILITIES:
-            init = next(n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
+            init = next((n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == "__init__"), None)
+            if init is None:
+                errors.append((node.lineno, "constructor must require only its narrow capabilities"))
+                continue
             if ([arg.arg for arg in init.args.args] != ["self"] or init.args.posonlyargs
                 or init.args.vararg or init.args.kwarg
                 or {arg.arg for arg in init.args.kwonlyargs} != T31_CONSTRUCTOR_CAPABILITIES[node.name]
@@ -439,6 +450,11 @@ def component_composition_violations(source):
             continue
         if node.args:
             errors.append((node.lineno, "positional whole-object dependency"))
+        if resolve(node.func).rsplit(".", 1)[-1] == "ReplyGeneration":
+            expected = "self.character_state.current_character_id"
+            if (len(node.keywords) != 1 or node.keywords[0].arg != "resolve_active_character_id"
+                or resolve(node.keywords[0].value) != expected):
+                errors.append((node.lineno, "generation requires CharacterSession.current_character_id bound method"))
         for keyword in node.keywords:
             value = keyword.value
             if isinstance(value, ast.Name) and value.id in captured:
@@ -466,7 +482,8 @@ def test_t31_domains_use_narrow_capabilities():
             errors[module] = violations
     assert errors == {}, errors
     pipeline = (ROOT / "core/pipeline.py").read_text(encoding="utf-8")
-    assert component_composition_violations(pipeline) == []
+    composition_errors = component_composition_violations(pipeline)
+    assert composition_errors == [], composition_errors
 
 
 @pytest.mark.parametrize("source", [
@@ -501,6 +518,35 @@ def test_t31_allows_required_narrow_capabilities():
     assert component_composition_violations(
         "x = RealityContextReader(resolve_scope=self.character_state.reality_scope, read_snapshot=self.character_state.context_snapshot)"
     ) == []
+
+
+@pytest.mark.parametrize("source", [
+    "class ReplyGeneration:\n def __init__(self): pass",
+    "class ReplyGeneration:\n def __init__(self, *, resolve_active_character_id=None): pass",
+    "from core.data_paths import DEFAULT_CHAR_ID as implicit\nvalue = implicit",
+    "value = self._active_character_id",
+    "value = getattr(self, '_active_character_id')",
+])
+def test_t311_generation_rejects_implicit_character_state(source):
+    assert narrow_component_violations(source, "core.owner_chat.reply_generation")
+
+
+@pytest.mark.parametrize("capability", ["self.current_character_id", "self.character_state", "pipeline.current_character_id", "lambda: self.character_state.current_character_id()"])
+def test_t311_generation_rejects_other_composition(capability):
+    assert component_composition_violations("x = ReplyGeneration(resolve_active_character_id=" + capability + ")")
+
+
+def test_t311_generation_accepts_only_required_loaded_id_capability():
+    source = "class ReplyGeneration:\n def __init__(self, *, resolve_active_character_id): self._resolve_active_character_id = resolve_active_character_id"
+    assert narrow_component_violations(source, "core.owner_chat.reply_generation") == []
+    assert component_composition_violations(
+        "from core.owner_chat.reply_generation import ReplyGeneration as Generator\nx = Generator(resolve_active_character_id=self.character_state.current_character_id)"
+    ) == []
+
+
+def test_t311_generation_cannot_restore_registry_dependency():
+    assert dependency_violations("from core.pipeline_registry import get as lookup\nlookup()",
+                                 "core.owner_chat.reply_generation")
 
 
 @pytest.mark.parametrize("source,operation", [
@@ -821,6 +867,8 @@ def test_retired_t1_debt_cannot_be_restored_with_source_and_json(cutover_git_rep
 @pytest.mark.parametrize("source,gate", [
     ("from core.pipeline_registry import get as lookup\ndef run(): return lookup()\n", "test_t31_registry_sites_match_individual_review"),
     ("from core.memory.reality_context import RealityContextReader\nx = RealityContextReader(resolve_scope=lambda uid: pipeline.scope(uid))\n", "test_t31_domains_use_narrow_capabilities"),
+    ("def check(self, char_id):\n return char_id or getattr(self, '_active_character_id', DEFAULT_CHAR_ID)\n", "test_t31_domains_use_narrow_capabilities"),
+    ("x = ReplyGeneration(resolve_active_character_id=self.current_character_id)\n", "test_t31_domains_use_narrow_capabilities"),
 ])
 def test_t31_actual_ci_assertion_rejects_fault_then_recovers(cutover_git_repository, source, gate):
     """Invoke the same pytest gate CI collects, in a real isolated Git repository."""
@@ -830,7 +878,9 @@ def test_t31_actual_ci_assertion_rejects_fault_then_recovers(cutover_git_reposit
         path = root / Path(*module.split(".")).with_suffix(".py")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"")
-    target = root / ("integrations/probe.py" if "registry" in gate else "core/pipeline.py")
+    (root / "core/pipeline.py").write_bytes(b"")
+    target = root / ("integrations/probe.py" if "registry" in gate else
+                     "core/owner_chat/reply_generation.py" if "DEFAULT_CHAR_ID" in source else "core/pipeline.py")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(source.encode())
     env = dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
@@ -843,6 +893,10 @@ def test_t31_actual_ci_assertion_rejects_fault_then_recovers(cutover_git_reposit
     if "registry" in gate:
         assert "Unreviewed or stale registry call sites" in failed.stdout
         assert "integrations/probe.py" in failed.stdout
+    elif "DEFAULT_CHAR_ID" in source:
+        assert "generation cannot read or guess character state" in failed.stdout
+    elif "ReplyGeneration" in source:
+        assert "generation requires CharacterSession.current_character_id bound method" in failed.stdout
     else:
         assert "closure captures whole Pipeline" in failed.stdout
     target.write_bytes(b"")

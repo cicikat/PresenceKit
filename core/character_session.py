@@ -23,6 +23,10 @@ class CharacterSession:
     def context_snapshot(self) -> CharacterContextSnapshot:
         return CharacterContextSnapshot(self.character, self.lore_engine, self.active_character_id)
 
+    def current_character_id(self) -> str:
+        """Return the already loaded role without refreshing configured selection."""
+        return self.active_character_id
+
     def is_active_character(self, char_id: str) -> bool:
         return self.active_character_id == char_id
 
