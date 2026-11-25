@@ -1291,3 +1291,20 @@ empty_content/quality_rejected，没有 SMTP 成功证据。本次仅 mock 回�
 
 ## 296 角色内心日记排版
 23点静默写作的时间窗口不变。感受层提示词明确要求自然段、禁止词中/句中硬折行，落盘前通过core.diary_format.normalize_diary_prose清理单换行；空行和Markdown结构保留。事实层原格式不改。日记只读接口同时修复旧内容的展示投影，源文件不变。相关证据见工单296与test_diary_format.py；不触发重写真实角色日记来做测试。
+
+## DIARY-01 白名单解析与失败重试（2026-11-25）
+
+`diary.characters` 非空时仍为显式白名单：每项必须匹配 AssetRegistry 中已存在的
+ASCII ID、唯一的精确显示名或已注册文件名。未知、重名和不安全 ID 明确失败，
+不回退到 active/default，也不改写配置。仅空白名单保留原先 active/default 选择。
+每角色的解析、路径、素材准备、Task/Work Session、lease、生成、写入和终态操作
+均隔离异常；失败不设置完成冷却。无 event_log 不创建任务、不调用模型、不写空日记。
+没有 lease 的前置失败和无素材复用 scheduler 的 15 分钟起、倍增至 2 小时上限的
+attempt backoff；取得 lease 的执行失败仍使用 Task Manager 的有界重试。
+发言 proposal 异常单独记录，不能跳过同轮静默维护。
+
+日志字段 `diary_status` 区分 scheduler_disabled、outside_window、cooldown、
+owner_missing、character_id_invalid、no_event_log、task_created、lease_unavailable、
+work_session_failed、diary_written、diary_already_exists；并附角色引用与可用的 task ID。
+持久状态仍只由现有 Task/Work Session 存储与观测接口负责，无新增台账或开关。
+验证与 23:30 模拟证据见 [DIARY-01 交付](refactors/diary-01-delivery.md)。
