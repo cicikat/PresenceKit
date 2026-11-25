@@ -29,6 +29,11 @@
 | 手机等价方法引用修补后 | 479 passed；analyze 无问题；不放宽结构/业务断言 |
 | 手机 dev APK | 构建通过；独立调试包，非正式发行，不替换生产包 |
 
+首轮远端双版本 full-pytest 在 `test_image_presets.py` 另暴露一个 SDK 夹具漂移：
+`APIConnectionError(request=None)` 在当前 CI SDK 内访问 headers 时先产生 AttributeError，
+导致原 connection_error 业务断言失败。改为合成 `httpx.Request`，保留原 reason 断言；
+本地该文件 26 passed。生产代码未改，远端结果须以修补后的当前 head 为准。
+
 旧 chat-log 测试不再把 active 当授权来源：原桶隔离、内容、日期和拒绝前不得解析路径的断言
 继续保留；缺 Session 现在断言 422 `session_scope_required`，显式角色与 grant 不符断言
 403 `character_not_authorized`，替代切断前的 503/422 状态。
@@ -38,7 +43,12 @@
 - 桌面使用指定 SHA 的真实 Tauri debug 窗口与隔离数据根、公共角色。
   角色 A 的普通聊天显示了回复；HTTP 审计确认 `/desktop/chat`、`/chat-log/dates` 带 Session。
   上游辅助调用出现鉴权失败，不能据最终回复声称全部模型链路健康。
-- 附件、思考、产物预览/下载、角色 B 隔离、重开历史与后端重启拒绝：尚未完成完整 UI 证据，保持 open。
+- 后端重启后，原窗口发送新测试请求得到带 Session 的 404，界面提示
+  “暂时无法连接当前角色。请重新打开聊天窗口后再试。”；没有自动 create 或重放。
+  随后关闭并重新打开真实窗口，审计新增一次 create 201、带 Session 的历史 dates/day 200，
+  原对话和回复恢复；没有自动重发此前拒绝的请求。
+- 附件、思考、产物预览/下载与角色 B 隔离：尚未完成完整 UI 证据，保持 open。
+  系统原生角色下拉菜单的点击被 Computer Use 目标窗口检查拒绝，未绕过该限制。
 - 手机首次 ADB 可见真实设备，但安装 dev 包前连接消失，安装命令未执行成功。
   等待用户恢复连接；普通聊天、录音/转写/语音回执、角色切换、前后台、过期、
   重启、断网恢复与不重放均为 **NOT RUN**，不能用 Flutter 测试替代。
