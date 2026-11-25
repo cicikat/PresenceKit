@@ -24,8 +24,11 @@
 | invalidate | 24 小时 TTL、后端进程重启、owner 变化、角色不可用或 token 不匹配都会拒绝；每次 ingress 重新核验 |
 | destroy | 没有独立 destroy API；本地替换/窗口进程退出丢弃引用，服务端 TTL/有界缓存回收 |
 
-聊天 request_id 与冻结 scope 共同参与 30 分钟进程内 receipt 键；换同 scope grant 不新开
-执行命名空间。stream msg_id 关联临时气泡，persisted turn_id 关联历史与思考，两者不能互代。
+手机和通用 Session request_id 与冻结 scope 共同参与 30 分钟进程内 receipt 键；换同 scope
+grant 不新开执行命名空间。桌面正式客户端另用 `X-Presence-Chat-Request` 的 `dc-...`
+ID，复用既有持久 owner-turn receipt，键含 caller label 与 owner/char/reality 摘要，
+新请求准入窗口为 24 小时；不能把这条持久路径说成仅有 30 分钟内存去重。
+stream msg_id 关联临时气泡，persisted turn_id 关联历史与思考，两者不能互代。
 媒体、产物预览/下载、历史、calendar、reasoning 与转写都核验同一 grant 的角色；
 query char_id 必须与 grant 一致（否则 403），持有 artifact/media/turn ID 不授予跨角色读取权。
 mobile poll/ACK 仍是 owner 共享游标，不能按当前角色过滤后推进 ACK。
@@ -70,7 +73,8 @@ Dream settings 归属走工单 F，本文只映射 domain 名称，不决定 Dre
   `request_id`、`char_id`、`domain`，persisted `turn_id` 仍独立。
 - `GET /observability/session-scope`（`state.read`）只返回 capability、计数、TTL、
   request/session ID 和拒绝原因等元数据，不返回正文、token、Prompt 或路径。
-- session/receipt 当前为进程内有界状态；服务重启后 session 失效，客户端重新绑定。
+- session 与通用 Session receipt 为进程内有界状态；桌面 `dc-...` receipt 独立持久化。
+  服务重启后 session 失效，客户端停止请求，明确重新打开窗口后才重新绑定。
   Dream settings 归属仍走工单 F。
 
 ---
@@ -213,7 +217,7 @@ session-scope 加法字段（旧客户端可忽略）：
 
 | 名称 | 作用 | 谁生成 | 持久化 | 当前状态 |
 |---|---|---|---|---|
-| `request_id` | 一次 HTTP/WS 尝试的关联 | 客户端或服务端 | 进程内 30 分钟有界 receipt；不进 event_log 身份 | **已上线** |
+| `request_id` | 一次请求的关联；桌面 `dc-...` 由 `X-Presence-Chat-Request` 传递 | 客户端或服务端 | 通用 Session 路径为进程内 30 分钟；桌面正式请求复用持久 owner-turn receipt | 已实现；不是 persisted turn_id |
 | `session_id` | 已授权的冻结会话 | 仅服务端 | 进程内 24 小时 session | **已上线** |
 | `client_turn_id` | owner-turn 幂等键 | 调用方，按 caller label 隔离 | receipt 30 天 / 每 caller 1000 | **已上线**，仅 `/v1/owner/turns` |
 | `msg_id` | 传输 correlator（HTTP/WS/queue `id`） | 服务端；流式可预 mint | 不作为记忆身份 | **已上线** |

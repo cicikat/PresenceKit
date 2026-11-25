@@ -15,7 +15,19 @@
 该精确组合已重新执行 [三仓 protocol contract](https://github.com/cicikat/PresenceKit/actions/runs/45629662402)，
 结果 success。这只证明该组合的协议 provider/consumer 测试，不代表完整 CI 或设备验收。
 本轮后端仅迁移旧测试前置条件和验收文档；DIARY-01 使用独立提交，不混入 T4 测试补丁。
-手机组合根的等价 Session resolver 方法引用另有配套提交；最终候选组合仍需重新固定 SHA。
+手机组合根的等价 Session resolver 方法引用另有配套提交；本轮实际验证组合固定如下。
+
+本轮代码验证组合及 [.github/protocol-matrix.json](../../.github/protocol-matrix.json)：
+backend `fcd53df8ad40b2581cc78ef2b911ee637a9f5544`、desktop
+`c497124a8876204ba1c08d2d53af137084e61ff1`、mobile
+`706fe530ce7e6bfd31624e82a663c32435aeda6d`。
+[精确组合合同](https://github.com/cicikat/PresenceKit/actions/runs/45631771422) success；
+[后端双版本全量/Smoke/Browser/Architecture](https://github.com/cicikat/PresenceKit/actions/runs/45631732610)
+及 [Offline](https://github.com/cicikat/PresenceKit/actions/runs/45631732563) 全部通过。
+[手机 Flutter/native CI](https://github.com/cicikat/PresenceKit-mobile/actions/runs/45630398563)
+全部通过；桌面 PR #14 当前指定 head 的 frontend、Windows/macOS Rust CI 均通过。
+matrix 的 compatible 只指精确组合合同；overall 仍为 not_verified，不能据此合并。
+后续文档/矩阵记录提交不自动继承代码组合的精确 SHA 合同结论。
 
 | 本轮验证 | 结果与限度 |
 |---|---|
@@ -43,11 +55,14 @@
 - 桌面使用指定 SHA 的真实 Tauri debug 窗口与隔离数据根、公共角色。
   角色 A 的普通聊天显示了回复；HTTP 审计确认 `/desktop/chat`、`/chat-log/dates` 带 Session。
   上游辅助调用出现鉴权失败，不能据最终回复声称全部模型链路健康。
+- 真实 UI 选取合成 `session-attachment.txt`，通过 `/upload/ingest` 获得 200，
+  审计确认携带 Session；回复正确读出附件内的测试词 violet。当前 grant 的只读观测
+  确认为公共测试 owner + 角色 A + reality。尚无角色 B 的 UI 越权读取证据。
 - 后端重启后，原窗口发送新测试请求得到带 Session 的 404，界面提示
   “暂时无法连接当前角色。请重新打开聊天窗口后再试。”；没有自动 create 或重放。
   随后关闭并重新打开真实窗口，审计新增一次 create 201、带 Session 的历史 dates/day 200，
   原对话和回复恢复；没有自动重发此前拒绝的请求。
-- 附件、思考、产物预览/下载与角色 B 隔离：尚未完成完整 UI 证据，保持 open。
+- 思考、产物预览/下载与角色 B 隔离：尚未完成完整 UI 证据，保持 open。
   系统原生角色下拉菜单的点击被 Computer Use 目标窗口检查拒绝，未绕过该限制。
 - 手机首次 ADB 可见真实设备，但安装 dev 包前连接消失，安装命令未执行成功。
   等待用户恢复连接；普通聊天、录音/转写/语音回执、角色切换、前后台、过期、

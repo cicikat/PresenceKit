@@ -1,9 +1,11 @@
-## T4 Session Scope 联合验收（2026-11-24，open）
+## T4 Session Scope 联合验收（2026-11-25，partial / open）
 
-三仓本地切断实现已进入提交检查点。桌面隔离真实模型对话通过，但最终版本的重开历史、
-后端重启失效反馈及附件/产物 UI 联验因用户停止 Computer Use 未完成；手机真机录音和
-生命周期尚未验收。远端 CI、最终三仓 matrix 和协议历史兼容段落清理仍 open。
-原桌面连接配置已恢复，未部署。见 [T4 施工记录](refactors/migration-cutover-t4.md)。
+三仓切断实现已推送，代码验证组合的后端双版本全量、Browser、Architecture、Offline、
+桌面 CI、手机全量及精确 SHA 合同均通过。桌面真实窗口的普通聊天、附件、历史恢复、
+后端重启拒绝及不自动重绑重放已有证据；思考/产物预览下载、角色 B 隔离仍缺 UI 验收。
+原生下拉菜单被 Computer Use 目标窗口检查拒绝，未绕过。手机在安装独立 dev 包前断连，
+普通聊天、录音和完整生命周期均 NOT RUN；独立审查未完成。matrix 的 compatible
+仅指合同，整体仍 not_verified；不合并、不部署。见 [T4 施工记录](refactors/migration-cutover-t4.md)。
 
 ## 首发额度接管与聊天上游拒绝（2026-11-22，open / observe）
 

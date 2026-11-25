@@ -3,8 +3,10 @@
 本地后端相关聊天、回执、上传、wake、媒体、产物、历史、思考与转写入口要求
 `X-Presence-Session`；不再允许缺失 Header 时使用 active character。
 桌面共享请求层及 Rust 桥已接入；手机移除 Session 失效后的自动重绑重发，转写携带 grant。
-旧版无 Session 客户端不能与本检查点后端组合使用；代码已推送，未部署，最终三仓 SHA matrix 需独立验证。
-下文旧 Session 兼容说明记录切断前状态。未完成桌面重开/失效 UI 联验与手机真机验收，
+旧版无 Session 客户端不能与本检查点后端组合使用；代码已推送、未部署。
+精确 SHA 合同及三端 CI 已通过；matrix 的 overall 仍为 not_verified，设备/独立审查门禁未关闭。
+桌面普通聊天、附件、重开历史与重启拒绝已有 UI 证据；思考/产物及角色 B 隔离、手机真机仍 open。
+下文旧 Session 兼容说明记录切断前状态，
 详见 [T4 施工记录](refactors/migration-cutover-t4.md)。
 
 ## 第一轮：手机环境与 Autonomy（current / observe）
@@ -236,6 +238,9 @@ open：部署版 wire 响应核对、跨重启去重与媒体/群聊未实现。
 reasoning 全部复用冻结 owner/char；当前无 header 返回 422 `session_scope_required`。
 `request_id` 有 30 分钟有界 receipt；同 payload 重放、冲突、in-flight 和 unknown-result
 不与 `msg_id`/`turn_id` 混用。WS start/canonical/segments 与 mobile envelope 透传关联字段。
+这条 30 分钟约束指手机及通用 Session request 路径；桌面正式客户端以
+`X-Presence-Chat-Request: dc-...` 复用持久 owner-turn receipt（caller + owner/char/reality），
+新请求 24 小时准入，且每次仍要求有效 Session。
 观测：`GET /observability/session-scope`（state.read，无正文/凭据）。provider fixture：
 `tests/protocol_fixtures/v1/session_scope.json`。
 手机 chat/upload 失败气泡保留同一 `request_id`；手动重试、会话重绑与 completed

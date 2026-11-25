@@ -15,6 +15,9 @@ grant 为 24 小时进程内授权；过期/后端重启返回 `404 session_not_
 返回 `403 character_not_authorized`。没有 refresh/destroy API；客户端不能自动创建新
 Session 后重放失败请求，用户明确重新打开窗口或选择角色/连接后才建立新绑定。
 媒体、产物预览/下载、历史、思考与转写沿用同一 owner_id/char_id/domain。
+桌面 `X-Presence-Chat-Request: dc-...` 走持久 owner-turn receipt（caller label +
+owner/char/reality 键，新请求 24 小时准入）；手机及通用 Session request_id 仍使用
+30 分钟进程内 receipt。两者都先核验 Session，不能因回执存在绕过失效 grant。
 
 ## Versioned owner turns and diary sync (Brief 171)
 
