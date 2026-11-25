@@ -35,9 +35,9 @@ async def test_display_style_reloaded_from_ledger_not_memory(sandbox, monkeypatc
     capture_turn('fixture-owner', 'Question', 'Hello', turn_id='styled-turn',
                  envelope=stamp_trigger(), char_id=DEFAULT_CHAR_ID,
                  visible_reply='<hl>Hello</hl>')
-    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'fixture-owner')
-    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda _: DEFAULT_CHAR_ID)
-    result = await chat_log.get_day(datetime.now().strftime('%Y-%m-%d'), x_presence_session=None)
+    from tests.fixtures.session_grants import issue
+    grant = issue(monkeypatch, owner='fixture-owner', char=DEFAULT_CHAR_ID)
+    result = await chat_log.get_day(datetime.now().strftime('%Y-%m-%d'), x_presence_session=grant.session_id)
     assert result['entries'][0]['assistant'] == 'Hello'
     assert result['entries'][0]['assistant_display_text'] == '<hl>Hello</hl>'
     assert '<hl>' not in str(short_term.load('fixture-owner', char_id=DEFAULT_CHAR_ID))

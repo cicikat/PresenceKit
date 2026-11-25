@@ -308,9 +308,11 @@ async def test_desktop_wake_with_last_seen_in_body_deduped(monkeypatch):
     _allow_dream_guard(monkeypatch)
 
     from admin.routers.chat import desktop_wake
+    from tests.fixtures.session_grants import issue
+    grant = issue(monkeypatch, owner="owner-ls", char="char-a")
 
-    r1 = await desktop_wake({})
-    r2 = await desktop_wake({"last_seen": time.time() - 5})
+    r1 = await desktop_wake({}, x_presence_session=grant.session_id)
+    r2 = await desktop_wake({"last_seen": time.time() - 5}, x_presence_session=grant.session_id)
 
     assert r1.get("source") == "queued_autonomy_signal"
     assert r1.get("reply") is None

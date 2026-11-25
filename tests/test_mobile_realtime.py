@@ -294,13 +294,13 @@ async def test_day_history_retains_display_and_request_after_receipts_expire(mon
     message = final()
     scope = MemoryScope.reality_scope("owner", "character_a")
     assert realtime.finals_for_turns(scope, ["turn-a"])["turn-a"] == message
-    monkeypatch.setattr(chat_log, "_owner_qq", lambda: "owner")
-    monkeypatch.setattr(chat_log, "_resolve_char_id", lambda value: "character_a")
+    from tests.fixtures.session_grants import issue
+    grant = issue(monkeypatch, owner="owner", char="character_a")
     monkeypatch.setattr(chat_log, "_parse_day", lambda text: [
         {"time": "12:00", "user": "question", "assistant": "legacy", "turn_id": "turn-a"}])
     event_log.append("owner", "assistant", "legacy", turn_id="turn-a", char_id="character_a")
     dates = event_log.list_days("owner", char_id="character_a")
     session_scope._REQUESTS.clear()
-    entries = (await chat_log.get_day(dates[0], x_presence_session=None))["entries"]
+    entries = (await chat_log.get_day(dates[0], x_presence_session=grant.session_id))["entries"]
     assert entries[0]["assistant_display_text"] == message["display_text"]
     assert entries[0]["request_id"] == "req-one"

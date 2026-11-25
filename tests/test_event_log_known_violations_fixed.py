@@ -8,10 +8,10 @@ Verifies that all three event_log direct-path known violations are fixed:
   3.  core/scheduler/last_mentioned.py — _read_recent_event_log now uses MemoryScope + resolve_path
 
 Covers:
-  A. admin chat_log: no char_id → uses active_character (active=character_b)
-  B. admin chat_log: explicit char_id=yexuan → reads yexuan event_log bucket
-  C. admin chat_log: active missing/empty → HTTP 503, no yexuan fallback
-  D. admin chat_log: invalid char_id → HTTP 422, no yexuan fallback
+  A. admin chat_log: no char_id → uses the frozen session character
+  B. admin chat_log: explicit char_id must agree with the grant's event_log bucket
+  C. admin chat_log: missing session → HTTP 422 before path resolution, no fallback
+  D. admin chat_log: invalid/unauthorized char_id → HTTP 403, no fallback
   E. scheduler loop _user_talked_today: uses resolver path with resolved char_id
   F. scheduler loop _user_talked_today: active char unavailable → returns False, no yexuan fallback
   G. scheduler loop _user_talked_today: explicit char_id bypasses active lookup
@@ -36,6 +36,7 @@ import pytest
 
 import core.asset_registry as _reg_mod
 from core.asset_registry import AssetRegistry
+from tests.fixtures.session_grants import issue
 
 # Pre-import at collection time so _CHAR is set before any fixture chdir.
 import core.memory.user_profile as _up_preimport  # noqa: F401
@@ -101,32 +102,30 @@ def _seed_event_log_day(sandbox, uid: str, char_id: str, date_str: str, content:
 _TEST_OWNER = "10000"  # fixed owner uid used across admin chat_log tests
 
 
-def test_chat_log_list_dates_uses_active_char(sandbox, registry, monkeypatch):
-    """list_dates with no char_id resolves to active_character (character_b)."""
-    import admin.routers.chat_log as _cl
-    monkeypatch.setattr(_cl, "_owner_qq", lambda: _TEST_OWNER)
+def test_chat_log_list_dates_uses_session_char(sandbox, registry, monkeypatch):
+    """The bound role supplies the bucket even if another role is active."""
+    grant = issue(monkeypatch, owner=_TEST_OWNER, char="character_b")
     from admin.routers.chat_log import list_dates
 
-    _seed_active(sandbox, "character_b")
+    _seed_active(sandbox, TEST_CHAR_ID)
     _seed_event_log_day(sandbox, _TEST_OWNER, "character_b", "2026-06-06", "## 10:00\n**用户**：test\n")
 
-    result = asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=None))
+    result = asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=grant.session_id))
 
     assert "2026-06-06" in result["dates"], (
         f"character_b event_log date must appear; got {result['dates']}"
     )
 
 
-def test_chat_log_get_day_uses_active_char(sandbox, registry, monkeypatch):
-    """get_day with no char_id resolves to active_character (character_b)."""
-    import admin.routers.chat_log as _cl
-    monkeypatch.setattr(_cl, "_owner_qq", lambda: _TEST_OWNER)
+def test_chat_log_get_day_uses_session_char(sandbox, registry, monkeypatch):
+    """Day history reads the grant's bucket, independent of the selected role."""
+    grant = issue(monkeypatch, owner=_TEST_OWNER, char="character_b")
     from admin.routers.chat_log import get_day
 
-    _seed_active(sandbox, "character_b")
+    _seed_active(sandbox, TEST_CHAR_ID)
     _seed_event_log_day(sandbox, _TEST_OWNER, "character_b", "2026-06-06", "## 10:00\n**用户**：你好\n")
 
-    result = asyncio.run(get_day("2026-06-06", char_id=None, auth="dummy", x_presence_session=None))
+    result = asyncio.run(get_day("2026-06-06", char_id=None, auth="dummy", x_presence_session=grant.session_id))
 
     assert result["date"] == "2026-06-06"
     assert not result.get("raw_fallback") or result["date"] == "2026-06-06"
@@ -138,16 +137,16 @@ def test_chat_log_get_day_uses_active_char(sandbox, registry, monkeypatch):
 
 def test_chat_log_explicit_char_id_reads_correct_bucket(sandbox, registry, monkeypatch):
     """list_dates with explicit char_id=yexuan reads yexuan bucket (active=character_b)."""
-    import admin.routers.chat_log as _cl
-    monkeypatch.setattr(_cl, "_owner_qq", lambda: _TEST_OWNER)
+    grant = issue(monkeypatch, owner=_TEST_OWNER, char=TEST_CHAR_ID)
+    peer_grant = issue(monkeypatch, owner=_TEST_OWNER, char="character_b")
     from admin.routers.chat_log import list_dates
 
     _seed_active(sandbox, "character_b")
     # Only yexuan has a log file
     _seed_event_log_day(sandbox, _TEST_OWNER, TEST_CHAR_ID, "2026-06-05", "## 09:00\n**用户**：Companion内容\n")
 
-    result_yexuan = asyncio.run(list_dates(char_id=TEST_CHAR_ID, auth="dummy", x_presence_session=None))
-    result_character_b = asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=None))
+    result_yexuan = asyncio.run(list_dates(char_id=TEST_CHAR_ID, auth="dummy", x_presence_session=grant.session_id))
+    result_character_b = asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=peer_grant.session_id))
 
     assert "2026-06-05" in result_yexuan["dates"], (
         f"yexuan bucket must contain 2026-06-05; got {result_yexuan['dates']}"
@@ -161,11 +160,9 @@ def test_chat_log_explicit_char_id_reads_correct_bucket(sandbox, registry, monke
 # C. admin chat_log: active missing/empty → HTTP 503, no yexuan fallback
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_chat_log_active_missing_returns_503(sandbox, registry, monkeypatch):
-    """list_dates with no char_id when active_character is empty → HTTP 503."""
+def test_chat_log_missing_session_rejected_before_path_resolution(sandbox, registry, monkeypatch):
+    """Missing grant is rejected before reading any bucket; active cannot authorize."""
     from fastapi import HTTPException
-    import admin.routers.chat_log as _cl
-    monkeypatch.setattr(_cl, "_owner_qq", lambda: _TEST_OWNER)
     from admin.routers.chat_log import list_dates
 
     # Seed active_prompt_assets.json with an empty active_character
@@ -185,27 +182,32 @@ def test_chat_log_active_missing_returns_503(sandbox, registry, monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=None))
 
-    assert exc_info.value.status_code == 503
-    assert not resolve_called, "resolve_path must not be called when active_character is invalid"
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "session_scope_required"
+    assert not resolve_called, "resolve_path must not be called without a grant"
+    grant = issue(monkeypatch, owner=_TEST_OWNER, char="character_b")
+    _seed_event_log_day(sandbox, _TEST_OWNER, "character_b", "2026-06-06", "test")
+    result = asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=grant.session_id))
+    assert "2026-06-06" in result["dates"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # D. admin chat_log: invalid char_id → HTTP 422, no yexuan fallback
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_chat_log_invalid_char_id_returns_422(sandbox, registry, monkeypatch):
-    """list_dates with unknown char_id → HTTP 422."""
+def test_chat_log_invalid_char_id_rejected_by_session(sandbox, registry, monkeypatch):
+    """An unknown explicit character cannot override the frozen grant."""
     from fastapi import HTTPException
-    import admin.routers.chat_log as _cl
-    monkeypatch.setattr(_cl, "_owner_qq", lambda: _TEST_OWNER)
+    grant = issue(monkeypatch, owner=_TEST_OWNER, char="character_b")
     from admin.routers.chat_log import list_dates
 
     _seed_active(sandbox, "character_b")
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(list_dates(char_id="ghost_char_xyz", auth="dummy", x_presence_session=None))
+        asyncio.run(list_dates(char_id="ghost_char_xyz", auth="dummy", x_presence_session=grant.session_id))
 
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "character_not_authorized"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -1,6 +1,49 @@
-# T4 Session Scope：本地施工检查点
+# T4 Session Scope：最终验收进行中
 
-2026-11-24；状态：partial。用户要求先提交当前施工结果；本记录不代表 T4 全部验收通过。
+更新：2026-11-25；状态：partial。原施工代码已推送后端 PR #38、桌面 PR #14、手机 PR #21；
+本记录不代表 T4 全部验收通过，也不授权生产部署。下面的 2026-11-24 数字是历史检查点，
+本轮证据单列，不能用旧 matrix 或旧 head CI 替代。
+
+## T4-01 本轮基线与结果
+
+| 仓库 | 工单指定且本地核验的完整 SHA |
+|---|---|
+| backend PR #38 | `3d24c0e077698db6e48a106146e1fdcb107b2302` |
+| desktop PR #14 | `c497124a8876204ba1c08d2d53af137084e61ff1` |
+| mobile PR #21 | `24b8867b11e43e14f130a3f63c417c3420a9275a` |
+
+该精确组合已重新执行 [三仓 protocol contract](https://github.com/cicikat/PresenceKit/actions/runs/45629662402)，
+结果 success。这只证明该组合的协议 provider/consumer 测试，不代表完整 CI 或设备验收。
+本轮后端仅迁移旧测试前置条件和验收文档；DIARY-01 使用独立提交，不混入 T4 测试补丁。
+手机组合根的等价 Session resolver 方法引用另有配套提交；最终候选组合仍需重新固定 SHA。
+
+| 本轮验证 | 结果与限度 |
+|---|---|
+| 指定六个旧测试文件，修复前 | 11 failed / 63 passed；与工单失败清单一致 |
+| 迁移真实测试 grant 后同组 | 74 passed（Python 3.12.13，Windows）；HTTP 带 Header，直接 endpoint 显式传参；未恢复 fallback/私有 owner 接口 |
+| 后端首次全量 | 9051 passed / 1 failed / 13 subtests passed；唯一失败为 Windows C/D 跨盘 relpath，非 Session 行为；按环境文档改同盘 TEMP 后重跑 |
+| 后端同盘 TEMP 全量 | 9052 passed / 13 subtests passed（447.95s，Python 3.12.13）；没有修改跨盘失败的测试或生产实现 |
+| 桌面完整 Vitest | 119 files / 653 tests passed；当前指定 desktop SHA |
+| 桌面生产 build | TypeScript 与 Vite 均通过；不能替代窗口验收 |
+| 手机首次完整 Flutter | 478 passed / 1 failed；T4 新增组合行触发 1499 行结构上限 |
+| 手机等价方法引用修补后 | 479 passed；analyze 无问题；不放宽结构/业务断言 |
+| 手机 dev APK | 构建通过；独立调试包，非正式发行，不替换生产包 |
+
+旧 chat-log 测试不再把 active 当授权来源：原桶隔离、内容、日期和拒绝前不得解析路径的断言
+继续保留；缺 Session 现在断言 422 `session_scope_required`，显式角色与 grant 不符断言
+403 `character_not_authorized`，替代切断前的 503/422 状态。
+
+## 当前真实 UI / 设备证据
+
+- 桌面使用指定 SHA 的真实 Tauri debug 窗口与隔离数据根、公共角色。
+  角色 A 的普通聊天显示了回复；HTTP 审计确认 `/desktop/chat`、`/chat-log/dates` 带 Session。
+  上游辅助调用出现鉴权失败，不能据最终回复声称全部模型链路健康。
+- 附件、思考、产物预览/下载、角色 B 隔离、重开历史与后端重启拒绝：尚未完成完整 UI 证据，保持 open。
+- 手机首次 ADB 可见真实设备，但安装 dev 包前连接消失，安装命令未执行成功。
+  等待用户恢复连接；普通聊天、录音/转写/语音回执、角色切换、前后台、过期、
+  重启、断网恢复与不重放均为 **NOT RUN**，不能用 Flutter 测试替代。
+- 两端 PR 的 reviews 在本轮检查时均为空；独立审查门禁未满足。
+- 上述未完成门禁满足前不合并相关 PR，不执行生产部署。T3.2 五项保持独立未完成。
 
 ## 实际修改与依赖
 
@@ -46,6 +89,6 @@ Windows；后端 Python 3.12.13。全部使用公共测试资产与隔离可写�
 - [ ] 最终版本桌面窗口重开后的历史恢复、服务端重启后失效反馈，以及完整附件/产物 UI 联验。用户按 Escape 停止 Computer Use，未继续操作；原桌面连接配置已逐字节恢复。
 - [ ] 手机真机对话、录音与生命周期联合验收；当前为 Flutter 合同和回归证据。
 - [ ] 三仓最终协议 fixture/matrix、文档历史兼容段落清理和完整消费者审计；旧 matrix 不代表本次组合已验收。
-- [ ] 当前提交远端 CI、PR、独立审查；本次仅本地提交，未推送、合并或部署。
+- [ ] 最终候选提交远端 CI 与独立审查；原检查点已推送 PR，尚未合并或部署。
 
 没有修改 Admin 静态资源、增加运营开关或持久台账；沿用 `/observability/session-scope`，无需新增管理面设置。

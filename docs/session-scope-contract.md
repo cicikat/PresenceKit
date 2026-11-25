@@ -1,4 +1,4 @@
-## T4 本地施工变更（2026-11-24，partial）
+## T4 当前实现与验收边界（2026-11-25，partial）
 
 本检查点已删除相关 HTTP 入口的无 Session → active-character 分支；缺少 Header 返回
 422 `session_scope_required`，未知/过期返回 404 `session_not_found`，跨 token/角色返回明确拒绝。
@@ -6,9 +6,29 @@
 桌面按连接和角色持有内存 grant；过期或拒绝不自动新建并重放请求，重新打开窗口才重新绑定。
 手机同步停止失效后的自动重绑重发。mobile poll/ACK 仍为 owner 共享游标。
 
-完整设备验收、三仓最终 matrix 与下方历史加法兼容描述清理尚未完成；下方关于
-“无 Header 继续 legacy”的文字只描述切断前版本，不能用于本检查点。
-见 [T4 施工记录](refactors/migration-cutover-t4.md)。本地实现未推送或部署。
+实现已推送：后端 PR #38（基线 `3d24c0e077698db6e48a106146e1fdcb107b2302`）、
+桌面 PR #14（`c497124a8876204ba1c08d2d53af137084e61ff1`）、手机配套基线
+`24b8867b11e43e14f130a3f63c417c3420a9275a`。没有生产部署授权。
+最终三仓 matrix、独立审查及完整设备验收是独立门禁；自动测试通过不等于设备通过。
+见 [T4 施工记录](refactors/migration-cutover-t4.md)。下方明确标为历史的 B 阶段表格
+仅记录切断前实现，不能据此接入当前后端。
+
+### 当前会话生命周期
+
+| 操作 | 实际实现 |
+|---|---|
+| discover | `GET /auth/whoami` 的 `capabilities.session_scope=v1`；缺失时客户端停止发送 |
+| create | `POST /v1/sessions`，`chat` scope；服务器校验角色资产后冻结 token label、owner_id、char_id、domain=reality |
+| hold | 客户端内存持有 grant；桌面按连接及角色缓存，手机按当前连接/角色持有；请求 Header 为 `X-Presence-Session` |
+| refresh | 没有 refresh API；过期不能自动签发后重放旧请求。用户明确重新打开桌面窗口或切换角色/连接，可走 create |
+| invalidate | 24 小时 TTL、后端进程重启、owner 变化、角色不可用或 token 不匹配都会拒绝；每次 ingress 重新核验 |
+| destroy | 没有独立 destroy API；本地替换/窗口进程退出丢弃引用，服务端 TTL/有界缓存回收 |
+
+聊天 request_id 与冻结 scope 共同参与 30 分钟进程内 receipt 键；换同 scope grant 不新开
+执行命名空间。stream msg_id 关联临时气泡，persisted turn_id 关联历史与思考，两者不能互代。
+媒体、产物预览/下载、历史、calendar、reasoning 与转写都核验同一 grant 的角色；
+query char_id 必须与 grant 一致（否则 403），持有 artifact/media/turn ID 不授予跨角色读取权。
+mobile poll/ACK 仍是 owner 共享游标，不能按当前角色过滤后推进 ACK。
 
 ## 安全失败重试（2026-10-08，271）
 
@@ -21,7 +41,7 @@ request receipt 内部键改为 token_label+owner_id+char_id+domain+request_id�
 
 状态：后端 `current`（`session_scope=v1`）；手机消费者已接入发现/绑定/角色归属/
 失败气泡 `request_id` 复用（2026-09-19 自动化验收见
-[runtime-recovery-257.md](runtime-recovery-257.md)）；桌面消费者接入待完成。
+[runtime-recovery-257.md](runtime-recovery-257.md)）；桌面消费者代码已接入，完整设备验收仍 open。
 日期：2026-09-19。
 本文是给 C 与桌面/手机接入评审的合同，不是已发布协议，也不是 OpenAPI 现状。
 本页第 1 节保留 B 阶段的上线前基线，后续章节保留设计理由；当前实现差异以紧随其后的清单为准。
@@ -33,8 +53,9 @@ Dream settings 归属走工单 F，本文只映射 domain 名称，不决定 Dre
 
 现有 `tests/protocol_fixtures/v1/` 是 owner-turn / 桌面 HTTP-WS / 手机 poll-ack 的 **已冻结** 合同。
 当前 provider fixture 为 `tests/protocol_fixtures/v1/session_scope.json`。B 阶段评审夹具仍保留在
-`tests/protocol_fixtures/session-scope-proposed/` 作为决策记录。三仓消费者尚未同时升级，
-所以固定 SHA 的 `.github/protocol-matrix.json` 仍保持上一轮三端兼容快照，不伪报联调完成。
+`tests/protocol_fixtures/session-scope-proposed/` 作为决策记录。三仓基线已升级；
+`.github/protocol-matrix.json` 只对明确记录并实际测试的 SHA 提供证据，
+不把旧组合兼容结果用作 T4 设备验收。
 
 ## 0. 后端 current（工单 C）
 
@@ -42,7 +63,7 @@ Dream settings 归属走工单 F，本文只映射 domain 名称，不决定 Dre
   按有效 chat token、服务端 owner 与已安装非隐藏角色签发 24 小时不透明 session。
 - 后续请求用 `X-Presence-Session`。`/desktop/chat`、`/mobile/chat`、`/upload/ingest`、
   `/desktop/wake`、媒体、历史、calendar 与 reasoning 均从同一 grant 解析 owner/char；
-  无 header 的旧客户端保持 live-active 兼容。
+  缺失 Header 的旧客户端返回 422 `session_scope_required`，没有 live-active fallback。
 - chat/upload 接受 `request_id`，30 分钟有界 receipt 实现 completed replay、并发
   `in_flight`、payload conflict 与保守 unknown-result；不承诺 exactly-once。
 - HTTP、WS stream start/canonical/segments 与 mobile durable envelope 携带可用的
@@ -54,9 +75,9 @@ Dream settings 归属走工单 F，本文只映射 domain 名称，不决定 Dre
 
 ---
 
-## 1. 当前事实（B1 端点矩阵）
+## 1. 历史事实（B1 切断前端点矩阵，不是当前协议）
 
-下表描述 HEAD 实现，不是拟议字段。scope 来源以 router / pipeline 代码为准。
+下表保留 B1 设计审计时的实现；T4 当前受影响入口以第 0 节和页面顶部为准。
 
 | 端点 | 当前 scope 来源 | 权限 | 缺口 | 消费者 |
 |---|---|---|---|---|
@@ -98,7 +119,7 @@ Dream settings 归属走工单 F，本文只映射 domain 名称，不决定 Dre
 
 ### 2.1 当前
 
-Owner 来自进程配置 `scheduler.owner_id`。角色来自 live `active_character`（`active_prompt_assets.json` / `pipeline._active_character_id`）。
+Owner 来自进程配置 `scheduler.owner_id`。当前角色来自服务端 grant；旧 B 阶段角色来自 live active。
 客户端 body 不能指定 owner。legacy chat 也不读 body `char_id`。可见列表 `GET /characters` 只是 persona 可读资产。
 
 ### 2.2 已落地的授权模型
@@ -137,7 +158,7 @@ Authorization: Bearer <desktop-or-mobile-token>
 
 成功：`201`/`200`，body 含服务端签发的 `session_id`、冻结后的 `owner_id`/`char_id`/`domain`、可选 `expires_at`。
 `char_id` 在这里是 **请求**，不是权威；权威是返回的 session 与服务端 grant。
-后续写/读以 `X-Presence-Session` header 带 `session_id`。缺失 session 的 legacy 路由保持今天的 active 语义。
+后续写/读以 `X-Presence-Session` header 带 `session_id`。缺失 session 返回 422，不使用 active。
 
 chat / 上传 / wake / 历史 / reasoning / 媒体使用同一冻结会话；实现不修改 active。
 
@@ -151,9 +172,9 @@ chat / 上传 / wake / 历史 / reasoning / 媒体使用同一冻结会话；实
 |---|---|---|
 | `owner_id` | `scheduler.owner_id` | 禁止 body 覆盖 |
 | `domain` | 由入口决定，见下表 | 客户端不能用 body 把 Reality 写成 Dream |
-| `char_id` | 会话 grant / 冻结 session；legacy 无 session 时仍为当时 active | 冻结后本请求内不变 |
+| `char_id` | 会话 grant / 冻结 session | 冻结后本请求内不变 |
 | `request_id` | 客户端可选提交不透明 ID，否则服务端 mint | 只关联这一次尝试，不是记忆身份 |
-| `session_id` | 服务端签发 | 有则覆盖 live active；无则 legacy |
+| `session_id` | 服务端签发 | 当前相关入口强制要求；缺失即拒绝 |
 
 ### 3.1 domain 与内部 realm / MemoryScope
 
@@ -208,7 +229,7 @@ session-scope 加法字段（旧客户端可忽略）：
 - 传输 `msg_id` 不得填充缺失的 canonical `turn_id`。
 - owner-turn 的幂等窗口与语义不自动套到 legacy `/desktop/chat` `/mobile/chat`。
 
-### 4.2 session request 重试与错误（legacy chat 仍无幂等）
+### 4.2 当前 session request 重试与错误
 
 | 情况 | 拟议行为 | 错误码 / HTTP |
 |---|---|---|
@@ -222,9 +243,9 @@ session-scope 加法字段（旧客户端可忽略）：
 | 旧服务端无 session_scope | 客户端禁止发 `session_id`/`char_id` | 客户端本地 `session_scope_unsupported`（旧服务端不会发此码） |
 | 角色不存在 / 文件缺失 | 拒绝 | `404`/`422` `character_unavailable` |
 | 角色已从 grant 撤销 | 拒绝 | `403` `character_revoked` |
-| 会话过期或未知 | 拒绝 | `409`/`404` `session_not_found` |
+| 会话过期或未知（包括后端重启） | 拒绝，客户端显示会话不可用且不自动重绑重发 | `404` `session_not_found` |
 | 请求角色无授权 | 拒绝 | `403` `character_not_authorized` |
-| live active 损坏且无 session | 与今天一致中止 | `503` `active_character_unusable` |
+| 缺少 Session Header | ingress 处中止，不检查 active 来授权 | `422` `session_scope_required` |
 
 `/v1/owner/turns` 保持现有：同 ID 同 payload 幂等、冲突 409、in_flight 202、expired 410、unknown 503 `execution_outcome_unknown`、`upload_id_not_available`。不要把 `client_turn_id` 改名为 `request_id`。
 
@@ -275,22 +296,21 @@ session-scope 加法字段（旧客户端可忽略）：
 
 ---
 
-## 7. 兼容矩阵
+## 7. 当前兼容矩阵
 
-| 客户端 | 无 `session_scope` 的后端（含今日 HEAD） | 已广告 `session_scope=v1` 的后端 |
+| 客户端 | 无 `session_scope` 的旧后端 | 当前 T4 后端 |
 |---|---|---|
-| 今日桌面 / 手机 | 继续 legacy：对话走 live active；上传/媒体/wake/历史省略 char 时跟 active。**不要**往 `/desktop/chat` `/mobile/chat` 塞 `char_id` | 未升级客户端仍走 legacy 缺省，行为与今日相同 |
-| 升级后桌面 / 手机 | 发现失败 → 明确提示不支持固定会话；用户本地选了非 active 角色时 **禁止发送**，禁止静默发给 active | 先 `POST /v1/sessions`，再带 `session_id` 走 versioned 写/读 |
+| 未升级的无 Session 桌面 / 手机 | 历史行为：跟随 live active | 相关入口 422 拒绝，必须协调升级 |
+| 已接入 Session 的桌面 / 手机 | 发现失败 → 明确停止发送，禁止静默发给 active | 先 `POST /v1/sessions`，后续以 Header 携带 grant |
 | owner-input 适配器 | 保持禁止 body `char_id`；角色仍为当时 active | 若 C 给 owner-turn 接 session，必须另开字段/header 与 grant，不能把 `client_turn_id` 当 session |
 
-分类：对未升级客户端是 `backward-compatible`；对要固定角色的新客户端是 `consumer-update-required`。
-这是对旧客户端 backward-compatible、对固定角色客户端 consumer-update-required 的加法能力。
+分类：T4 是 `consumer-update-required`，已经切断早期加法兼容路径；不能滚动到只升级后端的组合。
 
 手机 22 号工单依赖：发现、错误码、`request_id`、共享 seq 规则、本 fixtures。桌面沿原会话交接接入，本会话不改桌面仓。
 
 ---
 
-## 8. 错误码汇总（拟议 + 已有）
+## 8. 当前错误码汇总
 
 | 码 | HTTP 建议 | 新/旧 | 含义 |
 |---|---|---|---|
@@ -300,7 +320,7 @@ session-scope 加法字段（旧客户端可忽略）：
 | `character_unavailable` | 404/422 | 新 | 删除或无法加载 |
 | `session_not_found` | 404 | 新 | 未知或过期 session |
 | `request_payload_conflict` | 409 | 新 | 同 request_id 不同负载 |
-| `active_character_unusable` | 503 | 拟议名；今日 detail 为中文「active character 状态异常」 | 无 session 且 active 坏 |
+| `session_scope_required` | 422 | T4 | 未携带 Session Header，入业务前拒绝 |
 | `in_flight` | 202 | 已有 owner-turn | 同幂等键执行中 |
 | `client_turn_id payload conflict` | 409 | 已有 | owner-turn 负载冲突 |
 | `upload_id_not_available` | 409 | 已有 | owner-turn 附件未落地 |
@@ -319,7 +339,7 @@ session-scope 加法字段（旧客户端可忽略）：
 3. 历史 / reasoning / 媒体：授权的同一 owner/char；持有 `turn_id`/`sha256` 不够。
 4. 新增 receipt/队列/trace 配只读观测；优先管理面，无正文无凭据；展示 capability/effective state 与拒绝原因。
 5. 观测不得复用 deployment-capabilities 语义。
-6. provider fixture 已进入 v1；固定 SHA matrix 等桌面/手机消费者接入后统一更新。
+6. provider fixture 已进入 v1；固定 SHA matrix 只在三仓精确组合实际测试后更新，设备验收另外记录。
 
 ---
 
@@ -328,7 +348,7 @@ session-scope 加法字段（旧客户端可忽略）：
 | 仓 | 依赖本文之后才能做的 | 本会话 |
 |---|---|---|
 | Emerald-presence C | 实现发现、session、冻结贯穿、错误码、观测 | backend current |
-| PresenceKit-desktop | 发现失败提示；禁止 legacy body `char_id`；stream 早期绑定；历史/思考/媒体走同一会话 | **不改代码** |
-| Emerald-mobile 22 | 发现、错误码、request_id、poll/ack 不得按角色跳 seq、附件 scope | 本单不修改手机仓，只列依赖 |
+| PresenceKit-desktop | 发现失败提示；stream 早期绑定；历史/思考/媒体走同一会话 | PR #14 已实现，完整 UI 验收 open |
+| Emerald-mobile | 发现、错误码、request_id、poll/ack 不得按角色跳 seq、附件与转写 scope | 配套已实现，完整真机验收 open |
 
 F（Dream settings）、E（specialized LLM 路由）、G/H/I/J 不在本合同决定。

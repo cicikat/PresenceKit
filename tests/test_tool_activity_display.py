@@ -120,14 +120,14 @@ def test_receipt_history_recovers_without_a_chat_file(sandbox, monkeypatch, tmp_
     from admin.routers import chat_log
     import time
     monkeypatch.setattr(action_trace, '_enabled', lambda: True)
-    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
-    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: 'char')
+    from tests.fixtures.session_grants import issue
+    grant = issue(monkeypatch, owner='owner', char='char')
     event = {'type': 'tool_activity', 'event_id': 'a', 'chain_id': 'c', 'char_id': 'char',
              'source': 'reality', 'origin': 'autonomy', 'tool_name': 'get_time', 'status': 'error', 'ts': time.time()}
     action_trace.finalize_display('owner', 'char', event)
     day = datetime.fromtimestamp(event['ts']).strftime('%Y-%m-%d')
-    assert day in asyncio.run(chat_log.list_dates(x_presence_session=None))['dates']
-    result = asyncio.run(chat_log.get_day(day, x_presence_session=None))
+    assert day in asyncio.run(chat_log.list_dates(x_presence_session=grant.session_id))['dates']
+    result = asyncio.run(chat_log.get_day(day, x_presence_session=grant.session_id))
     assert result['entries'][0]['tool_activity'] == event
     action_trace.finalize_display('owner', 'char', {**event, 'status': 'success'})
-    assert len(asyncio.run(chat_log.get_day(day, x_presence_session=None))['entries']) == 1
+    assert len(asyncio.run(chat_log.get_day(day, x_presence_session=grant.session_id))['entries']) == 1
