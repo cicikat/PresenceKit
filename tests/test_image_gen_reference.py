@@ -77,6 +77,14 @@ def test_reference_from_artifact(sandbox):
     assert source == "artifact"
 
 
+@pytest.mark.parametrize("uid,char_id", [("u1", "c2"), ("u2", "c1"), (None, None)])
+def test_reference_artifact_id_cannot_override_callers_scope(sandbox, uid, char_id):
+    """Opaque generated-image IDs cannot authorize reference bytes in another scope."""
+    payload = chat_artifacts.store_generated_image(b"\x89PNGprivate-ref", ext=".png", user_id="u1", char_id="c1")
+    with pytest.raises(ValueError):
+        image_gen.image_reference_bytes(user_id=uid, char_id=char_id, artifact_id=payload["id"])
+
+
 def test_reference_from_sha256(monkeypatch):
     from core.chat_media import ChatMediaRecord
 

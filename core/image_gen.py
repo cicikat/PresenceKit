@@ -241,14 +241,12 @@ def image_reference_bytes(
         ArtifactError,
         artifact_file_path,
         get_artifact_record,
-        resolve_artifact_scope,
     )
 
-    scope = resolve_artifact_scope(str(artifact_id))
-    if scope is None:
+    if not user_id or not char_id:
         raise ValueError("生成图不存在或不在当前账号下。")
     try:
-        record = get_artifact_record(scope["id"], uid=scope["uid"], char_id=scope["char_id"])
+        record = get_artifact_record(str(artifact_id), uid=str(user_id), char_id=str(char_id))
     except ArtifactError as exc:
         raise ValueError(f"生成图不存在或不在当前账号下。") from exc
     if record is None:

@@ -77,6 +77,53 @@ def test_artifact_id_never_authorizes_another_character(client, monkeypatch):
         assert "private" in allowed.text
 
 
+def test_media_digest_never_authorizes_another_character(client, monkeypatch, sandbox):
+    """A global inbox blob is readable only through its retained owner/role evidence."""
+    import hashlib
+    from core.memory.event_store import append_event, tombstone_event
+    from core.memory.scope import MemoryScope
+    from tests.test_chat_media import PNG
+    first = issue(monkeypatch, owner="owner", char="first", label="fixture")
+    other = issue(monkeypatch, owner="owner", char="second", label="fixture")
+    digest = hashlib.sha256(PNG).hexdigest()
+    (sandbox.inbox_dir() / "sample.png").write_bytes(PNG)
+    scope = MemoryScope.reality_scope("owner", "first")
+    append_event(scope, {
+        "event_id": "media-event", "turn_id": "media-turn", "kind": "user_message",
+        "actor": "user", "visible_text": "sample", "memory_text": "sample",
+        "media_refs_json": [{"kind": "image", "filename": "sample.png", "sha256": digest}],
+    })
+    first_headers = {"Authorization": "Bearer fixture", "X-Presence-Session": first.session_id}
+    other_headers = {"Authorization": "Bearer fixture", "X-Presence-Session": other.session_id}
+    allowed = client.get("/chat/media/" + digest, headers=first_headers)
+    assert allowed.status_code == 200
+    assert allowed.content == PNG
+    denied = client.get("/chat/media/" + digest, headers=other_headers)
+    missing = client.get("/chat/media/" + "f" * 64, headers=other_headers)
+    assert denied.status_code == missing.status_code == 410
+    assert denied.json() == missing.json()
+    assert denied.content != PNG
+    tombstone_event(scope, "media-event")
+    assert client.get("/chat/media/" + digest, headers=first_headers).status_code == 410
+
+
+def test_scoped_upload_index_authorizes_inbox_before_turn_capture(client, monkeypatch, sandbox):
+    """A newly ingested own-role upload remains usable before its turn is captured."""
+    import hashlib
+    from core.character_document_library import store_upload
+    from tests.test_chat_media import PNG
+    grant = issue(monkeypatch, owner="owner", char="first", label="fixture")
+    digest = hashlib.sha256(PNG).hexdigest()
+    (sandbox.inbox_dir() / "fresh.png").write_bytes(PNG)
+    store_upload(uid="owner", char_id="first", filename="fresh.png", media_type="image/png",
+                 sha256=digest, searchable_text="newly received image", source="upload_image")
+    response = client.get("/chat/media/" + digest, headers={
+        "Authorization": "Bearer fixture", "X-Presence-Session": grant.session_id,
+    })
+    assert response.status_code == 200
+    assert response.content == PNG
+
+
 def test_desktop_receipt_and_generation_are_character_scoped(client, monkeypatch):
     from core.owner_chat import service
     first = issue(monkeypatch, owner="owner", char="first", label="fixture")
