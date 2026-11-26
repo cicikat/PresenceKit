@@ -127,3 +127,18 @@ ModuleNotFoundError/SyntaxError/startup failed 五类启动错误计数均为 0�
 部署与独立验证记录保存在本机服务运维目录；服务器 stage 保留程序回滚副本，
 失败恢复不会自动回滚用户数据。本次只部署后端，没有发布 APK、桌面安装包或 GitHub Release。
 前端应重新打开聊天窗口以签发新 Session。手机真机、独立审查及原人工缺口仍未关闭。
+
+## T4.1 A 后端语音回执修补（未部署）
+
+2026-11-26 后续工单 A：`core/audio_perception.py` 原先先 pop 再检查 scope；
+新用例在旧实现实际失败四次：错误 owner/角色/通道销毁合法回执，错误 domain 甚至取得 payload。
+现在先核验 owner/角色/domain/world/通道与有效期，再原子 pop。没有 await 或网络临界区，
+并发合法消费者只有一个获得 payload。过期清理、合法 scope 的改文/分析关闭销毁、多段与 marker-only
+沿用原安全语义。Session grant ID 仍不作为回执业务主键，同 frozen scope 更换 grant 不改变归属。
+QQ 使用直接 impression，未经过此一次性 HTTP 回执缓存；无显式 scope 的原路径仍解析 Reality 身份。
+
+`python -m pytest -n 4 tests/test_audio_perception.py tests/test_a3_voice_marking.py
+tests/test_session_scope_cutover.py tests/test_mobile_chat_channel.py tests/test_ar02_dependency_directions.py
+-q --tb=short`：Windows / Python 3.12.13，335 passed（48.32s）。
+没有新增 API、配置、持久数据、facade、兼容 fallback 或第二份所有者；手机修补单独交付。
+本项尚未生产部署，不把此前 VPS 部署证据转记为本补丁已上线。
