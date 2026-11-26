@@ -1,3 +1,5 @@
+from tests.fixtures.session_grants import issue
+from core.memory.scope import MemoryScope
 """Contract tests for the separate mobile reality-chat endpoint."""
 
 from core.owner_chat.service import run_owner_chat_turn
@@ -30,7 +32,7 @@ async def test_mobile_chat_uses_mobile_provenance_and_durable_mirror(monkeypatch
 
     result = await mobile.mobile_chat(
         {"message": "你好", "reply_to": {"text": "上一条", "ts": 1}},
-        _auth=True,
+        _auth=True, x_presence_session=issue(monkeypatch, owner="owner").session_id,
     )
 
     assert result["msg_id"] == "turn-mobile"
@@ -43,6 +45,8 @@ async def test_mobile_chat_uses_mobile_provenance_and_durable_mirror(monkeypatch
                 "live_origin_channel": "mobile",
                 "durable_mobile_mirror": True,
                 "reply_to": {"text": "上一条", "ts": 1},
+                "frozen_scope": MemoryScope.reality_scope("owner", "fixture_character"),
+                "request_id": "", "audit_extras": None,
             },
         )
     ]
@@ -65,9 +69,9 @@ async def test_desktop_chat_keeps_desktop_provenance(monkeypatch):
     )
     monkeypatch.setattr("core.scheduler.sensor_events.notify_chat_happened", lambda: None)
 
-    await chat.desktop_chat({"message": "你好"}, _auth=True)
+    await chat.desktop_chat({"message": "你好"}, _auth=True, x_presence_session=issue(monkeypatch, owner="owner").session_id)
 
-    assert calls == [("你好", "desktop", {"reply_to": None, "trusted_user_text": "你好"})]
+    assert calls == [("你好", "desktop", {"reply_to": None, "trusted_user_text": "你好", "frozen_scope": MemoryScope.reality_scope("owner", "fixture_character"), "request_id": "", "audit_extras": None})]
 
 
 def test_mobile_probe_prompt_excludes_desktop_tools(monkeypatch):
@@ -199,7 +203,7 @@ async def test_mobile_chat_dream_guard_blocks_before_owner_turn(sandbox, monkeyp
     from admin.routers import mobile
 
     with pytest.raises(HTTPException) as exc:
-        await mobile.mobile_chat({"message": "你好"}, _auth=True)
+        await mobile.mobile_chat({"message": "你好"}, _auth=True, x_presence_session=issue(monkeypatch).session_id)
     assert exc.value.status_code == 409
 
 
@@ -326,7 +330,7 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
     from core.llm_protocol import UpstreamResponseFormatError
     expected_error = UpstreamResponseFormatError if origin == "mobile" and empty_reply in ("__buffered_failure__", "__stream_failure__") else HTTPException
     with pytest.raises(expected_error) as exc:
-        await endpoint({"message": "first attempt"}, _auth=True)
+        await endpoint({"message": "first attempt"}, _auth=True, x_presence_session=issue(monkeypatch, char="companion").session_id)
     if isinstance(exc.value, HTTPException):
         assert exc.value.status_code == 502
     else:
@@ -349,7 +353,7 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
     assert len(stream_ends) == (1 if origin == "desktop" else 0)
 
     import asyncio
-    result = await asyncio.wait_for(endpoint({"message": "hello"}, _auth=True), timeout=5)
+    result = await asyncio.wait_for(endpoint({"message": "hello"}, _auth=True, x_presence_session=issue(monkeypatch, char="companion").session_id), timeout=5)
 
     assert result["turn_id"] == "turn-mobile-real-chain"
     assert result["msg_id"] == (stream_ends[-1] if origin == "desktop" else result["turn_id"])

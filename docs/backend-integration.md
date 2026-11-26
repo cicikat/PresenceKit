@@ -8,7 +8,16 @@
 固定会话 scope 后端已提供 `session_scope=v1`，见
 [session-scope-contract.md](session-scope-contract.md)。客户端先从 `/auth/whoami` 发现能力，
 再 `POST /v1/sessions`，后续以 `X-Presence-Session` 传不透明句柄；不要把 `char_id` 当请求权威。
-无 header 的 legacy `/desktop/chat` 与 `/mobile/chat` 仍使用 live active。
+T4 要求 Session Header，缺失返回 `422 session_scope_required`；不再使用 live active。
+代码已在后端 PR #38、桌面 PR #14 及手机配套提交推送；当前为 partial、未部署，
+完整设备验收与精确 SHA 组合证据见 [T4 施工记录](refactors/migration-cutover-t4.md)。
+grant 为 24 小时进程内授权；过期/后端重启返回 `404 session_not_found`，不同 token
+返回 `403 character_not_authorized`。没有 refresh/destroy API；客户端不能自动创建新
+Session 后重放失败请求，用户明确重新打开窗口或选择角色/连接后才建立新绑定。
+媒体、产物预览/下载、历史、思考与转写沿用同一 owner_id/char_id/domain。
+桌面 `X-Presence-Chat-Request: dc-...` 走持久 owner-turn receipt（caller label +
+owner/char/reality 键，新请求 24 小时准入）；手机及通用 Session request_id 仍使用
+30 分钟进程内 receipt。两者都先核验 Session，不能因回执存在绕过失效 grant。
 
 ## Versioned owner turns and diary sync (Brief 171)
 

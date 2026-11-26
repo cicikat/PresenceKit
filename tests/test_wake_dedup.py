@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 验收测试：desktop_wake 重复显示修复
@@ -158,7 +159,7 @@ async def test_desktop_wake_path_a_returns_canonical_ids(sandbox, monkeypatch):
 
     from admin.routers.chat import desktop_wake
 
-    result = await desktop_wake({"last_seen": time.time() - 60})
+    result = await desktop_wake({"last_seen": time.time() - 60}, x_presence_session=issue(monkeypatch).session_id)
 
     assert result["reply"] == "离线问候"
     assert result["turn_id"] == result["msg_id"] == "turn-wake-path-a"
@@ -192,8 +193,8 @@ async def test_desktop_wake_path_a_replay_is_at_most_once(sandbox, monkeypatch):
 
     from admin.routers.chat import desktop_wake
 
-    first = await desktop_wake({"last_seen": now - 60})
-    second = await desktop_wake({"last_seen": now - 60})
+    first = await desktop_wake({"last_seen": now - 60}, x_presence_session=issue(monkeypatch).session_id)
+    second = await desktop_wake({"last_seen": now - 60}, x_presence_session=issue(monkeypatch).session_id)
 
     assert first["source"] == "pending_trigger"
     assert second == {"reply": None, "source": "wake_already_delivered"}
@@ -231,8 +232,8 @@ async def test_desktop_wake_path_a_concurrent_replay_is_at_most_once(sandbox, mo
     from admin.routers.chat import desktop_wake
 
     results = await asyncio.gather(
-        desktop_wake({"last_seen": now - 60}),
-        desktop_wake({"last_seen": now - 60}),
+        desktop_wake({"last_seen": now - 60}, x_presence_session=issue(monkeypatch).session_id),
+        desktop_wake({"last_seen": now - 60}, x_presence_session=issue(monkeypatch).session_id),
     )
 
     assert [result["source"] for result in results].count("pending_trigger") == 1

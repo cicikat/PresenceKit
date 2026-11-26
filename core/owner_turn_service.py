@@ -296,15 +296,18 @@ def _project_canonical_result(turn_id: object, canonical_char_id: object = None)
     candidates: list[str] = []
     if isinstance(canonical_char_id, str) and canonical_char_id:
         candidates.append(canonical_char_id)
-    active = _canonical_character_id()
-    if active and active not in candidates:
-        candidates.append(active)
-    try:
-        for char_id in get_paths()._memory_character_ids():
-            if char_id not in candidates:
-                candidates.append(char_id)
-    except Exception:
-        pass
+    else:
+        # Unversioned owner-input receipts may predate canonical character
+        # metadata. A scoped desktop receipt must never enter this search.
+        active = _canonical_character_id()
+        if active:
+            candidates.append(active)
+        try:
+            for char_id in get_paths()._memory_character_ids():
+                if char_id not in candidates:
+                    candidates.append(char_id)
+        except Exception:
+            pass
     for char_id in candidates:
         try:
             entries = load(uid, char_id=char_id)

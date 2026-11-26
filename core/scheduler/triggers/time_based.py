@@ -360,7 +360,7 @@ def _open_authored_diary_task(principal, char_id: str, logical_date: str):
 
 
 def _diary_char_ids() -> list[str]:
-    """返回本晚需要生成日记的角色列表。
+    """返回本晚需要生成日记的角色引用，逐角色解析后才能用于路径。
 
     读 config.diary.characters 白名单；非空时按白名单逐个生成；
     空列表时仅返回当前 active char。
@@ -370,6 +370,28 @@ def _diary_char_ids() -> list[str]:
     if whitelist:
         return list(whitelist)
     return [_active_char_id_or_none() or DEFAULT_CHAR_ID]
+
+
+def _resolve_diary_character(value: str) -> str:
+    """Resolve an explicit ID, exact label or registered filename; never guess."""
+    from core.asset_registry import get_registry
+    from core.data_paths import safe_user_id
+
+    entries = get_registry().list_all("character")
+    for entry in entries:
+        if entry.id == value:
+            return safe_user_id(entry.id)
+    matches = {entry.id for entry in entries if value in (entry.label, entry.filename)}
+    if len(matches) != 1:
+        raise ValueError(f"diary character reference is unknown or ambiguous: {value!r}")
+    return safe_user_id(matches.pop())
+
+
+def _diary_status(status: str, *, character: str = "", **fields) -> None:
+    logger.info(
+        "[inner_diary_write] status=%s character=%s", status, character,
+        extra={"diary_status": status, "diary_character": character, **fields},
+    )
 
 
 def _prepare_diary_work_context(
@@ -626,25 +648,51 @@ async def _generate_and_store_diary(
 
 async def _check_inner_diary_write():
     """静默写各角色内心日记。与 daily_journal 主动发言完全解耦。"""
+    from core.autonomy.effective_state import scheduler_enabled
+    from core.scheduler.loop import (
+        _attempt_cooldown_ready, _record_attempt_failure, _clear_attempt_backoff,
+    )
+    if not scheduler_enabled(_cfg()):
+        _diary_status("scheduler_disabled")
+        return
     now = datetime.now()
     # 窗口：23:00 起，跨午夜宽限到次日 05:00（LOGICAL_DAY_CUTOFF_HOUR）
     if not (now.hour >= 23 or now.hour < LOGICAL_DAY_CUTOFF_HOUR):
+        _diary_status("outside_window")
         return
     if not _is_ready("inner_diary_write"):
+        _diary_status("cooldown")
         return
     oid = _owner_id()
     if not oid:
+        _diary_status("owner_missing")
         return
     from core.sandbox import get_paths
     from core.scheduler.rhythm import logical_day
 
     retry_pending = False
-    for _cid in _diary_char_ids():
-        # 幂等主闸：当日（logical day）文件已存在则跳过，不发 LLM 调用
-        diary_file = get_paths().character_inner_diary(char_id=_cid) / f"{logical_day().strftime('%Y-%m-%d')}.md"
-        if diary_file.exists():
+    for reference in _diary_char_ids():
+        _cid = None
+        lease = None
+        # Invalid references use the same bounded scheduler backoff, without
+        # ever becoming a runtime character ID or filesystem component.
+        attempt_scope = str(reference)
+        if not _attempt_cooldown_ready("inner_diary_write", char_id=attempt_scope):
+            retry_pending = True
+            _diary_status("cooldown", character=attempt_scope)
             continue
         try:
+            try:
+                _cid = _resolve_diary_character(reference)
+            except Exception:
+                _diary_status("character_id_invalid", character=str(reference))
+                raise
+            logical_date = logical_day(now).strftime("%Y-%m-%d")
+            diary_file = get_paths().character_inner_diary(char_id=_cid) / f"{logical_date}.md"
+            if diary_file.exists():
+                _clear_attempt_backoff("inner_diary_write", char_id=attempt_scope)
+                _diary_status("diary_already_exists", character=_cid)
+                continue
             # A diary is an authored artifact, not a chat turn.  Register a
             # Reality task and an independent bounded work session so restart
             # recovery/observability never touches EventContext or memory.
@@ -655,12 +703,15 @@ async def _check_inner_diary_write():
             from core.agent_runtime.work_sessions import (
                 create_work_session, run_work_session,
             )
-            logical_date = logical_day().strftime("%Y-%m-%d")
             work_context = _prepare_diary_work_context(oid, _cid)
             if not work_context:
+                retry_pending = True
+                _record_attempt_failure("inner_diary_write", char_id=attempt_scope)
+                _diary_status("no_event_log", character=_cid)
                 continue
             principal = TaskPrincipal.reality(oid, _cid)
             task_receipt, idem = _open_authored_diary_task(principal, _cid, logical_date)
+            _diary_status("task_created", character=_cid, diary_task_id=task_receipt["task_id"])
             session = create_work_session(
                 principal,
                 task_id=task_receipt["task_id"],
@@ -675,6 +726,7 @@ async def _check_inner_diary_write():
             lease = claim_next(principal, task_id=task_receipt["task_id"], capabilities={"authored_diary"})
             if lease is None:
                 retry_pending = True
+                _diary_status("lease_unavailable", character=_cid)
                 continue
 
             async def _worker():
@@ -687,6 +739,8 @@ async def _check_inner_diary_write():
                     lease,
                     result_metadata={"outcome_code": "authored_diary", "artifact_ids": [f"diary-{logical_date}"]},
                 )
+                _clear_attempt_backoff("inner_diary_write", char_id=attempt_scope)
+                _diary_status("diary_written", character=_cid)
             except Exception:
                 try:
                     fail_task(
@@ -698,7 +752,13 @@ async def _check_inner_diary_write():
                 retry_pending = True
                 raise
         except Exception as e:
-            log_error(f"scheduler._check_inner_diary_write[{_cid}]", e)
+            retry_pending = True
+            # Leased workers already use Task Manager's bounded 300s retry.
+            # Setup/material failures have no lease; use scheduler backoff.
+            if lease is None:
+                _record_attempt_failure("inner_diary_write", char_id=attempt_scope)
+            _diary_status("work_session_failed", character=_cid or str(reference), diary_error_type=type(e).__name__)
+            log_error(f"scheduler._check_inner_diary_write[{reference}]", e)
     if not retry_pending:
         _mark("inner_diary_write")
 

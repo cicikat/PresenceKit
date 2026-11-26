@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 """工单 A3：语音输入标记、ASR 置信度提示、多回执合并、记忆打标。"""
 import io
 from copy import deepcopy
@@ -25,7 +26,7 @@ async def test_local_stt_issues_marker_receipt_with_quality(legacy, monkeypatch)
     from admin.routers import transcribe as endpoint
     quality = {"avg_logprob_mean": -1.0, "avg_logprob_min": -1.2, "no_speech_max": 0.1, "dropped_segments": 0}
     monkeypatch.setattr(endpoint, "_transcribe_with_quality", lambda _p: ("你好", quality))
-    value = await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", {})
+    value = await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", x_presence_session=issue(monkeypatch, owner="owner").session_id, _auth={})
     assert value["text"] == "你好" and value["asr_quality"] == quality
     got = audio.consume_receipt(value["audio_perception_id"], "你好", "desktop")
     assert got["voice_only"] is True and got["asr_quality"] == quality

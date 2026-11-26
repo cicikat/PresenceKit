@@ -1,5 +1,6 @@
 """Regression coverage for malformed OpenAI-compatible chat responses."""
 from __future__ import annotations
+from tests.fixtures.session_grants import issue
 
 import asyncio
 from types import SimpleNamespace
@@ -75,7 +76,7 @@ def test_desktop_chat_maps_an_incompatible_gateway_response_to_502(monkeypatch):
     monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fail_turn)
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(chat.desktop_chat({"message": "hello"}, _auth="dummy"))
+        asyncio.run(chat.desktop_chat({"message": "hello"}, _auth="dummy", x_presence_session=issue(monkeypatch).session_id))
 
     assert exc.value.status_code == 502
     assert "API 协议" in exc.value.detail
@@ -96,7 +97,7 @@ def test_desktop_chat_preserves_model_not_found_as_404(monkeypatch):
     monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', fail_turn)
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(chat.desktop_chat({"message": "hello"}, _auth="dummy"))
+        asyncio.run(chat.desktop_chat({"message": "hello"}, _auth="dummy", x_presence_session=issue(monkeypatch).session_id))
 
     assert exc.value.status_code == 404
     assert "模型" in exc.value.detail

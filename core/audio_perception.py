@@ -562,7 +562,9 @@ def prompt_hint():
     return {"role": "system", "_layer": PROMPT_LAYER, "content": "".join(parts)}
 
 
-def _scope(channel):
+def _scope(channel, scope=None):
+    if scope is not None:
+        return (scope.uid, scope.character_id, channel)
     from core.character_context import selected_character_id_or_none
     uid = str((get_config().get("scheduler") or {}).get("owner_id") or "")
     return (uid, selected_character_id_or_none(), channel)
@@ -596,7 +598,7 @@ def _receipt_payload(result):
     return payload
 
 
-def issue_receipt(result, channel):
+def issue_receipt(result, channel, *, scope=None):
     now = time.monotonic()
     for key, row in list(_receipts.items()):
         if row[0] <= now:
@@ -606,18 +608,18 @@ def issue_receipt(result, channel):
     key = secrets.token_urlsafe(24)
     _receipts[key] = (
         now + RECEIPT_TTL_S,
-        _scope(channel),
+        _scope(channel, scope),
         hashlib.sha256(result["text"].strip().encode()).hexdigest(),
         _receipt_payload(result),
     )
     return key
 
 
-def consume_receipt(key, text, channel):
+def consume_receipt(key, text, channel, *, scope=None):
     if not isinstance(key, str) or len(key) > 128:
         return None
     row = _receipts.pop(key, None)
-    if not row or row[0] <= time.monotonic() or row[1] != _scope(channel):
+    if not row or row[0] <= time.monotonic() or row[1] != _scope(channel, scope):
         return None
     payload = row[3]
     # 仅标记语音来源的回执（本地 STT、未开声学分析）不依赖 stt_presets / 声学开关。
@@ -636,7 +638,7 @@ def consume_receipt(key, text, channel):
     return dict(payload)
 
 
-def consume_receipts(keys, texts, channel, fallback_text=""):
+def consume_receipts(keys, texts, channel, fallback_text="", *, scope=None):
     """合并一条消息的多个回执（A3）：逐个按各自分段原文校验，质量取最差。
 
     texts 与 keys 按位置对应；缺失位置用 fallback_text。至少一个回执有效才返回。
@@ -644,7 +646,7 @@ def consume_receipts(keys, texts, channel, fallback_text=""):
     values = []
     for index, key in enumerate(keys):
         text = texts[index] if index < len(texts) and texts[index].strip() else fallback_text
-        value = consume_receipt(key, text, channel)
+        value = consume_receipt(key, text, channel, scope=scope)
         if value:
             values.append(value)
     if not values:
@@ -687,7 +689,7 @@ def _body_receipts(body, message):
     return [], []
 
 
-def voice_context(channel):
+def voice_context(channel, *, scope_resolver=None):
     def decorate(func):
         @wraps(func)
         async def wrapped(*args, **kwargs):
@@ -696,7 +698,8 @@ def voice_context(channel):
             ids, texts = _body_receipts(body, message)
             # 每个分段原文必须出现在 message 里，否则退回整条 message 校验（必然不匹配）。
             texts = [t if t.strip() and t.strip() in message else message for t in texts]
-            value = consume_receipts(ids, texts, channel, fallback_text=message)
+            scope = scope_resolver(kwargs) if scope_resolver is not None else None
+            value = consume_receipts(ids, texts, channel, fallback_text=message, scope=scope)
             with impression(value):
                 result = await func(*args, **kwargs)
             if channel == "desktop" and isinstance(result, dict) and ids:

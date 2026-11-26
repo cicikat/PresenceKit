@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -15,8 +16,7 @@ def test_same_minute_receipts_sort_before_reply_with_exact_ledger_time(sandbox, 
     from core.memory import action_trace
     from core.memory.event_store import append_event
     from core.memory.scope import MemoryScope
-    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
-    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: 'char')
+    grant = issue(monkeypatch, owner='owner', char='char', label='fixture')
     monkeypatch.setattr(chat_log, '_parse_day', lambda text: [
         {'time': '12:00', 'user': 'question', 'assistant': 'answer', 'turn_id': 'turn'},
     ])
@@ -31,7 +31,7 @@ def test_same_minute_receipts_sort_before_reply_with_exact_ledger_time(sandbox, 
                         'actor': 'assistant', 'occurred_at': base + 40, 'visible_text': 'answer'})
     append_event(scope, {'event_id': 'turn:user', 'turn_id': 'turn', 'kind': 'user_message',
                         'actor': 'user', 'occurred_at': base + 1, 'visible_text': 'question'})
-    rows = asyncio.run(chat_log.get_day('2026-10-07', x_presence_session=None))['entries']
+    rows = asyncio.run(chat_log.get_day('2026-10-07', x_presence_session=grant.session_id, auth=SimpleNamespace(label='fixture')))['entries']
     assert rows[0]['tool_activity']['event_id'] == 'tool'
     assert rows[1]['assistant'] == 'answer'
     assert rows[1]['request_id'] == 'req_fixture'
@@ -83,8 +83,7 @@ def test_untrusted_or_ambiguous_id_is_absent(footer):
 
 def test_history_http_scope_dates_and_character_isolation(sandbox, monkeypatch):
     from admin import auth
-    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'fixture-owner')
-    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: value or DEFAULT_CHAR_ID)
+    grant = issue(monkeypatch, owner='fixture-owner', char=DEFAULT_CHAR_ID, label='fixture')
     monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
     for char, turn in [(DEFAULT_CHAR_ID, 'first'), ('other-character', 'second')]:
         event_log.append('fixture-owner', 'user', 'Question', turn_id='user-id', char_id=char)
@@ -94,9 +93,10 @@ def test_history_http_scope_dates_and_character_isolation(sandbox, monkeypatch):
     app = FastAPI()
     app.include_router(chat_log.router, prefix='/chat-log')
     with TestClient(app) as client:
-        headers = {'Authorization': 'Bearer memory.read'}
+        headers = {'Authorization': 'Bearer memory.read', 'X-Presence-Session': grant.session_id}
         assert client.get('/chat-log/dates', headers=headers).json()['dates'] == [path.stem]
         for char, turn in [(DEFAULT_CHAR_ID, 'first'), ('other-character', 'second')]:
+            headers['X-Presence-Session'] = issue(monkeypatch, owner='fixture-owner', char=char, label='fixture').session_id
             response = client.get(f'/chat-log/{path.stem}', params={'char_id': char}, headers=headers)
             assert response.status_code == 200
             assert response.json()['entries'][0]['turn_id'] == turn
@@ -134,8 +134,7 @@ def test_history_http_projects_media_refs_without_disk_paths(sandbox, monkeypatc
     from core.memory.event_store import append_event
     from core.memory.scope import MemoryScope
 
-    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'fixture-owner')
-    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: value or DEFAULT_CHAR_ID)
+    grant = issue(monkeypatch, owner='fixture-owner', char=DEFAULT_CHAR_ID, label='fixture')
     monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
     event_log.append('fixture-owner', 'user', 'Question', turn_id='media-turn', char_id=DEFAULT_CHAR_ID)
     event_log.append('fixture-owner', 'assistant', 'Answer', turn_id='media-turn', char_id=DEFAULT_CHAR_ID)
@@ -171,7 +170,7 @@ def test_history_http_projects_media_refs_without_disk_paths(sandbox, monkeypatc
         response = client.get(
             f'/chat-log/{path.stem}',
             params={'char_id': DEFAULT_CHAR_ID},
-            headers={'Authorization': 'Bearer memory.read'},
+            headers={'Authorization': 'Bearer memory.read', 'X-Presence-Session': grant.session_id},
         )
     assert response.status_code == 200
     entry = response.json()['entries'][0]
@@ -190,8 +189,7 @@ def test_history_plain_and_styled_copy_share_visible_paragraphs(sandbox, monkeyp
     import asyncio
     from core.memory.event_store import append_event
     from core.memory.scope import MemoryScope
-    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
-    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: 'char')
+    grant = issue(monkeypatch, owner='owner', char='char', label='fixture')
     monkeypatch.setattr(chat_log, '_parse_day', lambda text: [
         {'time': '12:00', 'user': 'question', 'assistant': 'firstsecond', 'turn_id': 'split'},
     ])
@@ -204,7 +202,7 @@ def test_history_plain_and_styled_copy_share_visible_paragraphs(sandbox, monkeyp
     directory = event_log._event_log_read_dir('owner', char_id='char')
     directory.mkdir(parents=True, exist_ok=True)
     (directory / '2026-10-08.md').write_text('fixture', encoding='utf-8')
-    row = asyncio.run(chat_log.get_day('2026-10-08', x_presence_session=None))['entries'][0]
+    row = asyncio.run(chat_log.get_day('2026-10-08', x_presence_session=grant.session_id, auth=SimpleNamespace(label='fixture')))['entries'][0]
     assert row['assistant'] == 'first\nsecond'
     assert row['assistant_display_text'] == '<hl>first</hl>\nsecond'
 

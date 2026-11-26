@@ -1,3 +1,12 @@
+## T4 Session Scope 联合验收（2026-11-25，partial / open）
+
+三仓切断实现已推送，代码验证组合的后端双版本全量、Browser、Architecture、Offline、
+桌面 CI、手机全量及精确 SHA 合同均通过。桌面真实窗口的普通聊天、附件、历史恢复、
+后端重启拒绝及不自动重绑重放已有证据；思考/产物预览下载、角色 B 隔离仍缺 UI 验收。
+原生下拉菜单被 Computer Use 目标窗口检查拒绝，未绕过。手机在安装独立 dev 包前断连，
+普通聊天、录音和完整生命周期均 NOT RUN；独立审查未完成。matrix 的 compatible
+仅指合同，整体仍 not_verified；不合并、不部署。见 [T4 施工记录](refactors/migration-cutover-t4.md)。
+
 ## 首发额度接管与聊天上游拒绝（2026-11-22，open / observe）
 
 结构化额度拒绝的同轮接管和冷却期错误回执已修复并上线。后端运行时隔离验证通过，打包桌面与生产新后端的真实联验待完成。近期线上聊天 500 另有上游 403、400 与 5xx，尚待确认上游 400 的请求或适配原因。单独复测的中转站目录可读而生成返回 403，未证实具体拒绝原因。详见 [首发额度接管](refactors/first-send-quota-failover.md)。

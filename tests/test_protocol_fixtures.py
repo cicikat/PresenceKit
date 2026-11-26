@@ -1,6 +1,7 @@
 """Provider-side validation for the versioned cross-repository fixtures."""
 
 from __future__ import annotations
+from tests.fixtures.session_grants import issue
 
 import json
 from pathlib import Path
@@ -118,7 +119,7 @@ async def test_mobile_chat_provider_uses_the_canonical_fixture(monkeypatch):
     )
     monkeypatch.setattr("core.scheduler.sensor_events.notify_chat_happened", lambda: None)
 
-    result = await mobile.mobile_chat(fixture["request"]["body"], _auth=True)
+    result = await mobile.mobile_chat(fixture["request"]["body"], _auth=True, x_presence_session=issue(monkeypatch).session_id)
     assert result["turn_id"] == expected["turn_id"]
     assert result["msg_id"] == expected["msg_id"]
 
@@ -144,6 +145,6 @@ async def test_desktop_http_provider_uses_the_canonical_fixture(monkeypatch):
     )
     monkeypatch.setattr("core.scheduler.sensor_events.notify_chat_happened", lambda: None)
 
-    result = await chat.desktop_chat(fixture["request"]["body"], _auth=True)
+    result = await chat.desktop_chat(fixture["request"]["body"], _auth=True, x_presence_session=issue(monkeypatch).session_id)
     assert result["turn_id"] == expected["turn_id"]
     assert result["msg_id"] == expected["msg_id"]

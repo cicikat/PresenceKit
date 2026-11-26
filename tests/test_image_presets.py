@@ -208,6 +208,7 @@ async def test_missing_vision_route_never_falls_back_to_the_text_model(monkeypat
 @pytest.mark.asyncio
 async def test_vision_failure_reason_reaches_the_caller(monkeypatch):
     """非 video_call 分支此前把异常吞成空串，真实原因只剩在 api_call_log。"""
+    import httpx
     from openai import APIConnectionError
     from core import llm_client, media_processor
 
@@ -221,7 +222,9 @@ async def test_vision_failure_reason_reaches_the_caller(monkeypatch):
             class completions:
                 @staticmethod
                 async def create(**kwargs):
-                    raise APIConnectionError(request=None)
+                    raise APIConnectionError(request=httpx.Request(
+                        "POST", "http://127.0.0.1:8000/v1/chat/completions",
+                    ))
 
     monkeypatch.setattr(llm_client, "_get_vision_client", lambda cfg=None: _Client)
     with pytest.raises(llm_client.VisionRouteError) as exc:

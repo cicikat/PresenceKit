@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 """Sandbox chat artifacts: write/read/list, payload strip, download scopes."""
 
 from tests.fixtures.public_assets import TEST_CHAR_ID
@@ -326,7 +327,7 @@ async def test_artifact_tools_are_path_c_not_probe(sandbox, monkeypatch):
 def _client(monkeypatch):
     monkeypatch.setattr("admin.auth.get_admin_secret", lambda: "artifact-admin-secret")
     from admin.admin_server import app
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers={"X-Presence-Session": issue(monkeypatch, owner="u1", label="t-artifact").session_id})
 
 
 def _scoped(sandbox, raw, scopes):

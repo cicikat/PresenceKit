@@ -1,3 +1,14 @@
+## T4 Session Scope 切断验收（2026-11-25，partial / open）
+
+本地后端相关聊天、回执、上传、wake、媒体、产物、历史、思考与转写入口要求
+`X-Presence-Session`；不再允许缺失 Header 时使用 active character。
+桌面共享请求层及 Rust 桥已接入；手机移除 Session 失效后的自动重绑重发，转写携带 grant。
+旧版无 Session 客户端不能与本检查点后端组合使用；代码已推送、未部署。
+精确 SHA 合同及三端 CI 已通过；matrix 的 overall 仍为 not_verified，设备/独立审查门禁未关闭。
+桌面普通聊天、附件、重开历史与重启拒绝已有 UI 证据；思考/产物及角色 B 隔离、手机真机仍 open。
+下文旧 Session 兼容说明记录切断前状态，
+详见 [T4 施工记录](refactors/migration-cutover-t4.md)。
+
 ## 第一轮：手机环境与 Autonomy（current / observe）
 
 R4：`/mobile/ack` 的chat scope、ack_seq、累计删除和请求/成功响应字段保持不变；
@@ -215,18 +226,21 @@ open：部署版 wire 响应核对、跨重启去重与媒体/群聊未实现。
 [`runtime-recovery-257.md`](runtime-recovery-257.md)。手机 session-scope 消费者（发现/
 绑定/角色归属/失败气泡 `request_id` 复用）与日记/花园/mood/activity/Dream `char_id`
 查询已自动化覆盖。天气直连开关与模型分类超时已单独诊断，不并入架构回归。
-`open`：桌面 session-scope 消费者；固定 SHA 三仓 matrix；真机冷启动、前后台、重连、
+`open`（257 当时记录，T4 更新见顶部）：桌面消费者代码现已接入；固定 SHA 三仓 matrix；真机冷启动、前后台、重连、
 后台、撤权。手机 `seq` 仍是 owner 共享游标。天气实网与 LLM 超时 soak 为 `observe`。
 本轮不宣称其余功能全部正常。
 
-## 固定会话 scope（2026-09-17，backend current / mobile current / desktop open）
+## 固定会话 scope（T4 更新：三仓代码 current，设备验收 open）
 
 `current`：`GET /auth/whoami` 广告 `capabilities.session_scope=v1`；`POST /v1/sessions`
 按 chat token、服务端 owner 与角色资产签发 24 小时进程内 grant。带
 `X-Presence-Session` 的 desktop/mobile chat、upload、wake、media、chat-log/calendar 与
-reasoning 全部复用冻结 owner/char；无 header 仍是 legacy live active。
+reasoning 全部复用冻结 owner/char；当前无 header 返回 422 `session_scope_required`。
 `request_id` 有 30 分钟有界 receipt；同 payload 重放、冲突、in-flight 和 unknown-result
 不与 `msg_id`/`turn_id` 混用。WS start/canonical/segments 与 mobile envelope 透传关联字段。
+这条 30 分钟约束指手机及通用 Session request 路径；桌面正式客户端以
+`X-Presence-Chat-Request: dc-...` 复用持久 owner-turn receipt（caller + owner/char/reality），
+新请求 24 小时准入，且每次仍要求有效 Session。
 观测：`GET /observability/session-scope`（state.read，无正文/凭据）。provider fixture：
 `tests/protocol_fixtures/v1/session_scope.json`。
 手机 chat/upload 失败气泡保留同一 `request_id`；手动重试、会话重绑与 completed
@@ -237,8 +251,8 @@ receipt 回放都复用该 ID，不另 mint。手机端消息状态 sending → 
 状态；历史条目若带 `request_id`（可选，后端暂未提供，缺失时按文本+时钟/turn_id 对账）同理。
 响应缺 `turn_id` 不再算失败；不再有「最近一条」兜底标记。`/mobile/chat`、`/upload/ingest`
 对同 session 同 `request_id` 已幂等（completed 回放、in-flight 202、payload 冲突 409），
-重试不会重复跑回合。桌面消费者接入及真实重连/后台/撤权联调仍 `open`；固定 SHA matrix
-保留上一轮快照，待三仓同时升级后再更新。手机 `seq` 仍是 owner 共享游标，不能按角色
+retained receipt 阻止重复执行，但不提供跨进程 exactly-once。桌面消费者已接入；真实重连/后台/撤权联调仍 `open`。
+固定 SHA matrix 仅对实际运行的组合有效，最终组合未验收时保持 `not_verified`。手机 `seq` 仍是 owner 共享游标，不能按角色
 跳过后推进 ack。
 Dream settings 归属为 per-character：`GET/PATCH /dream/settings` 读写当前角色树，
 旧 uid-only 文件仅冻结历史默认角色可读。观测：`GET /observability/dream-settings`

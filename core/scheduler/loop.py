@@ -1111,7 +1111,10 @@ async def _loop():
                     # The gate queues migrated speech signals without running
                     # their callbacks. Native mail delivery (letters/postcards)
                     # must still execute when autonomy is enabled.
-                    await run_shadow_tick(oid)
+                    try:
+                        await run_shadow_tick(oid)
+                    except Exception as exc:
+                        logger.error("[scheduler] speech proposal tick failed: %s", exc, exc_info=True)
 
                 # Wake Bridge owns durable receipt/disposition state, but its
                 # eligible records must still re-enter through this scheduler

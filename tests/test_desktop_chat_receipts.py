@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 from admin.session_requests import owner_media_scope
 import asyncio
 import time
@@ -22,6 +23,7 @@ def app(monkeypatch, sandbox):
         return None
 
     monkeypatch.setattr(auth, "resolve_token", token_info)
+    monkeypatch.setattr(__import__(__name__, fromlist=["headers"]), "_session_header", lambda token: issue(monkeypatch, label=token).session_id)
     app = FastAPI()
     app.include_router(chat.router)
     return app
@@ -31,8 +33,11 @@ def request_id():
     return f"dc-{int(time.time() * 1000)}-{uuid4().hex}"
 
 
+_session_header = None
+
+
 def headers(rid, token="fixture-desktop"):
-    return {"Authorization": f"Bearer {token}", "X-Presence-Chat-Request": rid}
+    return {"Authorization": f"Bearer {token}", "X-Presence-Chat-Request": rid, "X-Presence-Session": _session_header(token)}
 
 
 async def test_disconnect_recovery_and_duplicate_post_keep_one_effect(app, monkeypatch):
@@ -203,13 +208,14 @@ async def test_upload_reserves_before_ingesting_file(app, monkeypatch):
     assert seen == [(b"public fixture", "fixture.txt")]
 
 
-async def test_legacy_text_ingress_still_works_without_receipt_header(app, monkeypatch):
+async def test_missing_session_rejects_even_without_receipt_header(app, monkeypatch):
+    calls = []
     async def execute(message, channel, **kwargs):
-        assert "request_id" not in kwargs
-        return {"reply": message, "turn_id": "legacy-turn"}
-
+        calls.append(message)
+        return {"reply": message}
     monkeypatch.setattr('core.owner_chat.service.run_owner_chat_turn', execute)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/desktop/chat", headers={"Authorization": "Bearer fixture-desktop"},
-                                     json={"message": "Legacy fixture"})
-    assert response.json()["reply"] == "Legacy fixture"
+                                     json={"message": "Scoped fixture"})
+    assert (response.status_code, response.json()["detail"]) == (422, "session_scope_required")
+    assert calls == []

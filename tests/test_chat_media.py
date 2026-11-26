@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 """Canonical chat media identity, live-ref GC, and authenticated download."""
 
 from pathlib import Path
@@ -36,14 +37,14 @@ def _append_ref(uid: str, digest: str, filename: str = "photo.png"):
     })
 
 
-def _client(monkeypatch):
+def _client(monkeypatch, *, owner="test_owner", char=TEST_CHAR_ID):
     monkeypatch.setattr("admin.auth.get_admin_secret", lambda: "media-admin-secret")
     from admin.admin_server import app
     from fastapi.testclient import TestClient
     from tests.fixtures.runtime_capabilities import read_registered_character
     from admin.character_dependencies import require_character_reader
     monkeypatch.setitem(app.dependency_overrides, require_character_reader, lambda: read_registered_character)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers={"X-Presence-Session": issue(monkeypatch, owner=owner, char=char, label="t-media").session_id})
 
 
 def _scoped(sandbox, raw, scopes):

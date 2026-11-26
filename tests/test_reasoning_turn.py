@@ -103,12 +103,14 @@ def test_client_reader_scope(monkeypatch):
     from fastapi.testclient import TestClient
     from admin import auth
     from admin.routers.observability import router
+    from tests.fixtures.session_grants import issue
+    grant = issue(monkeypatch, label='fixture')
     monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    assert client.get('/chat/turns/example/reasoning', headers={'Authorization': 'Bearer sensor.write'}).status_code == 403
-    response = client.get('/chat/turns/example/reasoning', headers={'Authorization': 'Bearer memory.read'})
+    assert client.get('/chat/turns/example/reasoning', headers={'Authorization': 'Bearer sensor.write', 'X-Presence-Session': grant.session_id}).status_code == 403
+    response = client.get('/chat/turns/example/reasoning', headers={'Authorization': 'Bearer memory.read', 'X-Presence-Session': grant.session_id})
     assert response.status_code == 200
     assert response.json()['available'] is False
     assert client.get('/observability/llm-reasoning', headers={'Authorization': 'Bearer memory.read'}).status_code == 403
@@ -121,23 +123,27 @@ async def test_chat_turn_reasoning_prefers_monologue_by_display_setting(monkeypa
     from admin import auth
     from admin.routers.observability import router
     from core import thinking
+    from tests.fixtures.session_grants import issue
+    grant = issue(monkeypatch, label='fixture')
 
     @store.associate_owner_turn
-    async def run(message, provenance_channel):
+    async def run(message, provenance_channel, *, frozen_scope):
         native = store.Capture(SimpleNamespace(name='example', model='example', api_protocol='chat_completions'))
         native.add('thinking', 'native later')
         await native.save()
         await store.archive_text('monologue', 'inner voice')
         return {'turn_id': 'owner'}
 
-    await run('hi', 'desktop')
+    await run('hi', 'desktop', frozen_scope=grant.memory_scope)
     monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
     monkeypatch.setattr(thinking, 'display_prefer_monologue', lambda: True)
-    preferred = client.get('/chat/turns/owner/reasoning', headers={'Authorization': 'Bearer memory.read'})
+    preferred = client.get('/chat/turns/owner/reasoning', headers={'Authorization': 'Bearer memory.read', 'X-Presence-Session': grant.session_id})
+    assert preferred.status_code == 200
     assert [entry['parts'][0]['text'] for entry in preferred.json()['entries']] == ['inner voice', 'native later']
     monkeypatch.setattr(thinking, 'display_prefer_monologue', lambda: False)
-    native_first = client.get('/chat/turns/owner/reasoning', headers={'Authorization': 'Bearer memory.read'})
+    native_first = client.get('/chat/turns/owner/reasoning', headers={'Authorization': 'Bearer memory.read', 'X-Presence-Session': grant.session_id})
+    assert native_first.status_code == 200
     assert [entry['parts'][0]['text'] for entry in native_first.json()['entries']] == ['native later', 'inner voice']

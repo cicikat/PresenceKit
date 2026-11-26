@@ -1,3 +1,4 @@
+from tests.fixtures.session_grants import issue
 """
 tests/test_dream_guard_fail_closed.py — P2.4: Dream guard fail-closed semantics
 
@@ -207,7 +208,7 @@ async def test_desktop_wake_path_b_blocked_when_dream_active(sandbox, monkeypatc
     monkeypatch.setattr(_reg, "_pipeline", _FakePipeline())
 
     from admin.routers.chat import desktop_wake
-    result = await desktop_wake({})
+    result = await desktop_wake({}, x_presence_session=issue(monkeypatch).session_id)
 
     assert result["source"] == "dream_guard_blocked"
     assert result["reply"] is None
@@ -244,7 +245,7 @@ async def test_desktop_wake_path_b_blocked_when_corrupt(sandbox, monkeypatch):
     monkeypatch.setattr(_reg, "_pipeline", _FakePipeline())
 
     from admin.routers.chat import desktop_wake
-    result = await desktop_wake({})
+    result = await desktop_wake({}, x_presence_session=issue(monkeypatch).session_id)
 
     assert result["source"] in ("dream_guard_blocked", "dream_guard_error")
     assert result["reply"] is None

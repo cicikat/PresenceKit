@@ -1,23 +1,23 @@
 {
   "matrix_version": "1",
   "fixture_version": "v1",
-  "captured_at": "2026-11-22",
-  "compatibility_window": "contract verified for the three exact merged SHAs below; other combinations and physical-device delivery remain not_verified",
+  "captured_at": "2026-11-25",
+  "compatibility_window": "T4 contract-only evidence for the three exact SHAs below; later commits and other combinations are not_verified. Desktop UI acceptance is partial; mobile device acceptance is NOT RUN; independent review and overall merge acceptance remain not_verified.",
   "classification": "compatible",
   "repositories": {
     "backend": {
       "repository": "cicikat/PresenceKit",
-      "sha": "0e09704a80a37187fe417936efbd78a093b177ce",
+      "sha": "fcd53df8ad40b2581cc78ef2b911ee637a9f5544",
       "runner": "ubuntu-latest"
     },
     "desktop": {
       "repository": "cicikat/PresenceKit-desktop",
-      "sha": "af6c4d9368ff61aca09988440a2ee89247a7b275",
+      "sha": "c497124a8876204ba1c08d2d53af137084e61ff1",
       "runner": "ubuntu-latest"
     },
     "mobile": {
       "repository": "cicikat/PresenceKit-mobile",
-      "sha": "abb8d504bee304957d865cc6de2c2cecb9c67715",
+      "sha": "706fe530ce7e6bfd31624e82a663c32435aeda6d",
       "runner": "ubuntu-latest"
     }
   },
@@ -40,14 +40,14 @@
   ],
   "evidence": {
     "requested_shas": {
-      "backend": "0e09704a80a37187fe417936efbd78a093b177ce",
-      "desktop": "af6c4d9368ff61aca09988440a2ee89247a7b275",
-      "mobile": "abb8d504bee304957d865cc6de2c2cecb9c67715"
+      "backend": "fcd53df8ad40b2581cc78ef2b911ee637a9f5544",
+      "desktop": "c497124a8876204ba1c08d2d53af137084e61ff1",
+      "mobile": "706fe530ce7e6bfd31624e82a663c32435aeda6d"
     },
     "shas": {
-      "backend": "0e09704a80a37187fe417936efbd78a093b177ce",
-      "desktop": "af6c4d9368ff61aca09988440a2ee89247a7b275",
-      "mobile": "abb8d504bee304957d865cc6de2c2cecb9c67715"
+      "backend": "fcd53df8ad40b2581cc78ef2b911ee637a9f5544",
+      "desktop": "c497124a8876204ba1c08d2d53af137084e61ff1",
+      "mobile": "706fe530ce7e6bfd31624e82a663c32435aeda6d"
     },
     "results": {
       "backend": "success",
@@ -55,7 +55,13 @@
       "mobile": "success"
     },
     "recorded_results": "compatible",
-    "run_url": "https://github.com/cicikat/PresenceKit/actions/runs/44975034833",
-    "artifact_id": "14735291905"
+    "run_url": "https://github.com/cicikat/PresenceKit/actions/runs/45631771422",
+    "artifact_id": "15030722235"
+  },
+  "acceptance": {
+    "overall": "not_verified",
+    "desktop_ui": "partial",
+    "mobile_device": "NOT RUN",
+    "independent_review": "pending"
   }
 }

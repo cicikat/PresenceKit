@@ -4,7 +4,6 @@
 
 POST /chat — 接收消息，走完整 Pipeline，返回回复 + 好感度
 """
-from admin.character_dependencies import require_character_reader
 
 import asyncio
 import hashlib
@@ -52,20 +51,14 @@ async def frontend_chat(body: dict, auth=Depends(require_scopes("chat"))):
 
 
 
-def _artifact_record_or_404(artifact_id: str):
+def _artifact_record_or_404(artifact_id: str, grant):
     from core.tools.chat_artifacts import (
         ArtifactError,
         get_artifact_record,
-        resolve_artifact_scope,
     )
 
-    scope = resolve_artifact_scope(artifact_id)
-    if scope is None:
-        raise HTTPException(status_code=404, detail="产物不存在")
     try:
-        record = get_artifact_record(
-            scope["id"], uid=scope["uid"], char_id=scope["char_id"]
-        )
+        record = get_artifact_record(artifact_id, uid=grant.owner_id, char_id=grant.char_id)
     except ArtifactError:
         raise HTTPException(status_code=404, detail="产物不存在") from None
     if record is None:
@@ -105,9 +98,7 @@ async def download_chat_media(
     from core.chat_media import ChatMediaError, resolve_chat_media
 
     grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
-    uid, char_id = (
-        (grant.owner_id, grant.char_id) if grant is not None else session_requests.owner_media_scope()
-    )
+    uid, char_id = grant.owner_id, grant.char_id
     try:
         record = resolve_chat_media(sha256, uid=uid, char_id=char_id)
     except ChatMediaError as exc:
@@ -123,10 +114,11 @@ async def download_chat_media(
 
 
 @router.get("/chat/artifacts/{artifact_id}", summary="下载聊天产物文件")
-async def download_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("chat"))):
+async def download_chat_artifact(artifact_id: str, x_presence_session: str | None = Header(None, alias="X-Presence-Session"), _auth=Depends(require_scopes("chat"))):
     from core.tools.chat_artifacts import artifact_file_path
 
-    record = _artifact_record_or_404(artifact_id)
+    grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    record = _artifact_record_or_404(artifact_id, grant)
     path = artifact_file_path(record)
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="产物文件已不存在")
@@ -141,7 +133,7 @@ async def download_chat_artifact(artifact_id: str, _auth=Depends(require_scopes(
 
 
 @router.get("/chat/artifacts/{artifact_id}/preview", summary="只读预览聊天产物")
-async def preview_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("chat"))):
+async def preview_chat_artifact(artifact_id: str, x_presence_session: str | None = Header(None, alias="X-Presence-Session"), _auth=Depends(require_scopes("chat"))):
     from html import escape
     from pathlib import Path as _Path
 
@@ -152,7 +144,8 @@ async def preview_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("
         read_artifact_text,
     )
 
-    record = _artifact_record_or_404(artifact_id)
+    grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    record = _artifact_record_or_404(artifact_id, grant)
     filename = str(record.get("filename") or "")
     ext = _Path(filename).suffix.lower()
     if record.get("kind") == "image":
@@ -194,7 +187,7 @@ async def preview_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("
 _DESKTOP_REQUEST_RE = re.compile(r"dc-([0-9]{13})-[0-9a-f]{32}")
 
 
-def _desktop_request_key(request_id: str, owner_id: str, *, admitting: bool = False) -> str:
+def _desktop_request_key(request_id: str, owner_id: str, char_id: str, *, admitting: bool = False) -> str:
     from core.owner_turn_receipts import DESKTOP_ADMISSION_SECONDS, DESKTOP_FUTURE_SKEW_SECONDS
 
     match = _DESKTOP_REQUEST_RE.fullmatch(request_id)
@@ -203,7 +196,7 @@ def _desktop_request_key(request_id: str, owner_id: str, *, admitting: bool = Fa
     age = time.time() - int(match[1]) / 1000
     if admitting and not -DESKTOP_FUTURE_SKEW_SECONDS <= age <= DESKTOP_ADMISSION_SECONDS:
         raise HTTPException(409, "desktop_request_id_outside_window")
-    owner_hash = hashlib.sha256(owner_id.encode()).hexdigest()
+    owner_hash = hashlib.sha256((owner_id + "\0" + char_id + "\0reality").encode()).hexdigest()
     return f"~desktop:{owner_hash}:{request_id}"
 
 
@@ -216,14 +209,20 @@ def _check_desktop_chat_preflight(owner_id: str, request_id: str) -> None:
         raise
 
 
-async def _execute_desktop_request(request_id, *, auth, owner_id, payload, execute):
+async def _execute_desktop_request(request_id, *, auth, grant, payload, execute):
     from core.owner_turn_service import execute_receipted_turn
     from core.session_scope import request_digest
 
+    async def execute_in_scope():
+        result = await execute()
+        if result.get("char_id", grant.char_id) != grant.char_id:
+            raise HTTPException(503, "execution_outcome_unknown")
+        return {**result, "char_id": grant.char_id, "domain": grant.domain}
+
     status, reply = await execute_receipted_turn(
-        caller_label=auth.label, client_turn_id=_desktop_request_key(request_id, owner_id, admitting=True),
-        request_digest=request_digest(payload), execute=execute,
-        preflight=lambda: _check_desktop_chat_preflight(owner_id, request_id),
+        caller_label=auth.label, client_turn_id=_desktop_request_key(request_id, grant.owner_id, grant.char_id, admitting=True),
+        request_digest=request_digest(payload), execute=execute_in_scope,
+        preflight=lambda: _check_desktop_chat_preflight(grant.owner_id, request_id),
     )
     if status in {"completed", "completed_replay"}:
         if tool_protocol_offset(reply.get("reply") or "") is not None:
@@ -234,12 +233,12 @@ async def _execute_desktop_request(request_id, *, auth, owner_id, payload, execu
 
 
 @router.get("/desktop/chat/requests/{request_id}", summary="查询本客户端聊天请求结果")
-async def desktop_chat_request(request_id: str, response: Response, _auth=Depends(require_scopes("chat"))):
+async def desktop_chat_request(request_id: str, response: Response, x_presence_session: str | None = Header(None, alias="X-Presence-Session"), _auth=Depends(require_scopes("chat"))):
     from core.llm_failover import UpstreamQuotaExhausted
     from core.owner_turn_service import project_receipted_reply, read_owner_turn_receipt
 
-    owner_id, _ = session_requests.owner_media_scope()
-    key = _desktop_request_key(request_id, owner_id)
+    grant = session_requests.session_grant(x_presence_session, _auth.label)
+    key = _desktop_request_key(request_id, grant.owner_id, grant.char_id)
     row = await read_owner_turn_receipt(_auth.label, key)
     response.headers["Cache-Control"] = "no-store"
     # Absence does not prove non-execution: the POST could still arrive, or the
@@ -258,7 +257,7 @@ async def desktop_chat_request(request_id: str, response: Response, _auth=Depend
 
 
 @router.post("/desktop/chat", summary="桌宠对话（Bearer 鉴权）")
-@voice_context("desktop")
+@voice_context("desktop", scope_resolver=session_requests.voice_scope)
 async def desktop_chat(
     body: dict,
     x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
@@ -275,10 +274,10 @@ async def desktop_chat(
     reply_to = body.get("reply_to")
     grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     rid = desktop_request_id if isinstance(desktop_request_id, str) else ""
-    if rid and (grant is not None or "request_id" in body):
+    if rid and "request_id" in body:
         raise HTTPException(422, "conflicting_chat_request_identity")
-    if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
-        raise HTTPException(status_code=422, detail="session_scope_required")
+    if any(key in body for key in ("char_id", "session_id")):
+        raise HTTPException(422, "invalid_session_request")
 
     from core.config_loader import get_config as _cfg
     _uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
@@ -289,7 +288,7 @@ async def desktop_chat(
     if video_observation_id is not None and (not isinstance(video_observation_id, str) or len(video_observation_id) > 128):
         raise HTTPException(status_code=422, detail="invalid_video_observation_id")
 
-    from core.owner_turn_service import legacy_desktop_context, run_legacy_owner_turn
+    from core.owner_turn_service import legacy_desktop_context
     from core.audio_perception import current_voice_extras
     voice_extras = current_voice_extras()  # A3：有语音回执时打 input_modality / asr_low_confidence
     context = legacy_desktop_context(getattr(_auth, "label", "legacy-admin"))
@@ -298,7 +297,7 @@ async def desktop_chat(
             full_message = message
             if video_observation_id:
                 from core.video_call import consume
-                char_id = grant.char_id if grant else session_requests.owner_media_scope()[1]
+                char_id = grant.char_id
                 consumed = consume(
                     video_observation_id, uid=_uid, char_id=char_id,
                     token_label=getattr(_auth, "label", "legacy-admin"),
@@ -306,25 +305,18 @@ async def desktop_chat(
                 if consumed:
                     from core.video_call import observation_prefix
                     full_message = observation_prefix(*consumed) + "\n" + message
-            if grant is None:
-                return await run_legacy_owner_turn(
-                    full_message, context, reply_to=reply_to,
-                    trusted_user_text=message, audit_extras=voice_extras,
-                    request_id=rid,
-                executor=owner_chat_service.run_owner_chat_turn,
-                )
             return await owner_chat_service.run_owner_chat_turn(
                 full_message, context.provenance_channel, reply_to=reply_to,
                 trusted_user_text=message, audit_extras=voice_extras,
-                frozen_scope=grant.memory_scope, request_id=str(body.get("request_id") or ""),
+                frozen_scope=grant.memory_scope, request_id=rid or str(body.get("request_id") or ""),
             )
 
         if rid:
             result = await _execute_desktop_request(
-                rid, auth=_auth, owner_id=_uid, execute=_execute,
+                rid, auth=_auth, grant=grant, execute=_execute,
                 payload={"kind": "desktop_chat", "body": body},
             )
-        elif grant is not None:
+        else:
             result = await session_requests.run_session_request(
                 grant=grant,
                 request_id=body.get("request_id"),
@@ -332,8 +324,6 @@ async def desktop_chat(
                          "video_observation_id": video_observation_id},
                 executor=_execute,
             )
-        else:
-            result = await _execute()
     except Exception as exc:
         from core.llm_failover import UpstreamQuotaExhausted
         from core.llm_client import UpstreamResponseFormatError
@@ -385,24 +375,20 @@ async def upload_ingest(
     _auth=Depends(require_scopes("chat")),
     desktop_request_id: str | None = Header(None, alias="X-Presence-Chat-Request"),
 
-    *, read_character=Depends(require_character_reader),
 ):
     """
     multipart 上传 + 可选用户附言 + channel 标记。
     """
     grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
-    if request_id and grant is None:
-        raise HTTPException(status_code=422, detail="session_scope_required")
 
     upload_files = [file] if file else (files or [])
     if not upload_files:
         raise HTTPException(status_code=422, detail="文件不能为空")
     rid = desktop_request_id if isinstance(desktop_request_id, str) else ""
     if not rid:
-        return await _ingest_chat_upload(upload_files, message, channel, grant, request_id, read_character=read_character)
-    if channel != "desktop" or grant is not None or request_id:
+        return await _ingest_chat_upload(upload_files, message, channel, grant, request_id)
+    if channel != "desktop" or request_id:
         raise HTTPException(422, "conflicting_chat_request_identity")
-    owner_id, _ = session_requests.owner_media_scope()
     if len(upload_files) > 10:
         raise HTTPException(413, "too_many_chat_attachments")
     # The detached turn owns its snapshot; FastAPI may close request-scoped
@@ -425,15 +411,13 @@ async def upload_ingest(
         snapshots.append(UploadFile(io.BytesIO(data), filename=upload.filename))
         descriptors.append({"filename": upload.filename, "sha256": hashlib.sha256(data).hexdigest()})
     return await _execute_desktop_request(
-        rid, auth=_auth, owner_id=owner_id,
+        rid, auth=_auth, grant=grant,
         payload={"kind": "desktop_upload", "message": message, "files": descriptors},
-        execute=lambda: _ingest_chat_upload(snapshots, message, channel, None, rid, read_character=read_character),
+        execute=lambda: _ingest_chat_upload(snapshots, message, channel, grant, rid, receipted=True),
     )
 
 
-async def _ingest_chat_upload(upload_files, message, channel, grant, request_id,
-    *, read_character,
-):
+async def _ingest_chat_upload(upload_files, message, channel, grant, request_id, *, receipted=False):
     from core import media_processor
     from core.config_loader import get_config as _cfg
 
@@ -441,10 +425,10 @@ async def _ingest_chat_upload(upload_files, message, channel, grant, request_id,
         async def _execute():
             return await owner_chat_service.run_owner_chat_turn(
                 text, channel, trusted_user_text=trusted, media_refs=refs,
-                frozen_scope=grant.memory_scope if grant is not None else None,
+                frozen_scope=grant.memory_scope,
                 request_id=request_id,
             )
-        if grant is None:
+        if receipted:
             return await _execute()
         return await session_requests.run_session_request(
             grant=grant, request_id=request_id,
@@ -483,11 +467,8 @@ async def _ingest_chat_upload(upload_files, message, channel, grant, request_id,
         if len(data) > 5 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="文件超过 5MB 上限")
 
-        owner_uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
-        from core.data_paths import DEFAULT_CHAR_ID
-        active_char = grant.char_id if grant is not None else (
-            getattr(read_character(), "active_character_id", None) or DEFAULT_CHAR_ID
-        )
+        owner_uid = grant.owner_id
+        active_char = grant.char_id
         try:
             result = await media_processor.ingest_file_bytes(data, fname, uid=owner_uid, char_id=active_char)
         except media_processor.MediaIngestError as e:
@@ -536,11 +517,8 @@ async def _ingest_chat_upload(upload_files, message, channel, grant, request_id,
             }
             for data, filename in items
         ]
-        owner_uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
-        from core.data_paths import DEFAULT_CHAR_ID
-        active_char = grant.char_id if grant is not None else (
-            getattr(read_character(), "active_character_id", None) or DEFAULT_CHAR_ID
-        )
+        owner_uid = grant.owner_id
+        active_char = grant.char_id
         try:
             descriptions = await media_processor.ingest_image_bytes(items, uid=owner_uid, char_id=active_char)
         except media_processor.MediaIngestError as e:
@@ -589,12 +567,11 @@ async def desktop_wake(
                    由 scheduler tick 下的 autonomy runner 决定静默、工具或发言。
     """
     from core.config_loader import get_config as _cfg
-    uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
-
     body = body if isinstance(body, dict) else {}
     grant = session_requests.session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
-    if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
-        raise HTTPException(status_code=422, detail="session_scope_required")
+    if any(key in body for key in ("char_id", "session_id")):
+        raise HTTPException(422, "invalid_session_request")
+    uid = grant.owner_id
     request_id = str(body.get("request_id") or "")
     raw_last_seen = body.get("last_seen")
     last_seen: float | None = None
@@ -611,18 +588,7 @@ async def desktop_wake(
             from core.memory.locks import uid_lock as _uid_lock
             from core.wake_delivery_ledger import load_delivered, mark_delivered
             from channels import desktop_ws as _dws_pa
-            # Resolve active character to scope history read correctly.
-            # If active_prompt_assets.json is absent or empty, let exception propagate
-            # so Path A is skipped and Path B signal admission takes over.
-            if grant is not None:
-                _active_cid = grant.char_id
-            else:
-                import json as _json_wake
-                from core.sandbox import get_paths as _gp_wake
-                _apa = _json_wake.loads(_gp_wake().active_prompt_assets().read_text(encoding="utf-8"))
-                _active_cid = (_apa.get("active_character") or "").strip()
-                if not _active_cid:
-                    raise ValueError("active_character missing in active_prompt_assets.json")
+            _active_cid = grant.char_id
             async with _uid_lock(uid):
                 delivered = load_delivered(uid)
                 history = _load_st(uid, char_id=_active_cid)
@@ -685,7 +651,7 @@ async def desktop_wake(
             # payload={} — do NOT include last_seen or any per-request dynamic field;
             # wake identity is fully encoded by source+uid+char+channel+kind+bucket.
             payload={},
-            char_id=grant.char_id if grant is not None else None,
+            char_id=grant.char_id,
         )
         _pe_result = await _rpe(_pe)
         _audit_perceive_result(_pe, _pe_result)

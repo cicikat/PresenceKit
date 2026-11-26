@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.fixtures.session_grants import issue
 import asyncio
 import hashlib
 import json
@@ -130,7 +131,7 @@ async def test_desktop_wake_path_b_only_queues_signal(sandbox, monkeypatch):
 
     from admin.routers.chat import desktop_wake
 
-    result = await desktop_wake({})
+    result = await desktop_wake({}, x_presence_session=issue(monkeypatch, owner="owner", char="char-a").session_id)
 
     assert result["reply"] is None
     assert result["source"] == "queued_autonomy_signal"
@@ -172,8 +173,8 @@ async def test_desktop_wake_dedup_ignores_last_seen_and_audits_both_results(
 
     from admin.routers.chat import desktop_wake
 
-    first = await desktop_wake({"last_seen": time.time() - 600})
-    second = await desktop_wake({"last_seen": time.time() - 5})
+    first = await desktop_wake({"last_seen": time.time() - 600}, x_presence_session=issue(monkeypatch, owner="owner", char="char-a").session_id)
+    second = await desktop_wake({"last_seen": time.time() - 5}, x_presence_session=issue(monkeypatch, owner="owner", char="char-a").session_id)
 
     assert first["source"] == "queued_autonomy_signal"
     assert second == {"reply": None, "source": "duplicate_wake"}
@@ -205,7 +206,7 @@ async def test_desktop_wake_autonomy_disabled_leaves_no_replayable_signal(
 
     from admin.routers.chat import desktop_wake
 
-    result = await desktop_wake({})
+    result = await desktop_wake({}, x_presence_session=issue(monkeypatch, owner="owner", char="char-a").session_id)
 
     assert result == {"reply": None, "source": "autonomy_disabled"}
     state = store.load("owner", "char-a")

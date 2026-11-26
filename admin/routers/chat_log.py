@@ -28,40 +28,6 @@ logger = logging.getLogger(__name__)
 _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
-def _owner_qq() -> str:
-    return str(get_config().get("scheduler", {}).get("owner_id", "")).strip()
-
-
-def _resolve_char_id(char_id: str | None) -> str:
-    """Resolve and validate a char_id for chat-log operations.
-
-    If char_id is None, reads active_character from active_prompt_assets.json.
-    Raises HTTP 503 if active_character is missing or unreadable.
-    Raises HTTP 422 if the resolved or supplied char_id is not a known character.
-    Never falls back to a hardcoded character.
-    """
-    from core.asset_registry import get_registry
-
-    if char_id is None:
-        try:
-            data = _json.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
-            char_id = (data.get("active_character") or "").strip()
-        except Exception as e:
-            raise HTTPException(status_code=503, detail=f"读取 active_prompt_assets.json 失败: {e}")
-        if not char_id:
-            raise HTTPException(
-                status_code=503,
-                detail="active_prompt_assets.json 中 active_character 为空，请先设置活跃角色",
-            )
-
-    try:
-        get_registry().resolve(char_id, "character")
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    return char_id
-
-
 def _parse_day(text: str) -> list[dict]:
     """
     把单日 MD 文本解析成 entry 列表。
@@ -190,20 +156,18 @@ async def list_dates(
     x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
     auth=Depends(require_scopes("memory.read")),
 ):
-    if x_presence_session:
-        from admin.session_requests import session_grant
-        grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
-        if char_id is not None and char_id != grant.char_id:
-            raise HTTPException(status_code=403, detail="character_not_authorized")
-        char_id = grant.char_id
-    resolved = _resolve_char_id(char_id)
+    from admin.session_requests import session_grant
+    grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+    if char_id is not None and char_id != grant.char_id:
+        raise HTTPException(status_code=403, detail="character_not_authorized")
+    resolved = grant.char_id
     from core.memory import event_log as _event_log
 
-    dates = list(_event_log.list_days(_owner_qq(), char_id=resolved))
+    dates = list(_event_log.list_days(grant.owner_id, char_id=resolved))
     from core.memory.action_trace import recent
     from datetime import datetime
     dates.extend(datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d')
-                 for row in recent(_owner_qq(), resolved, max_items=30, window_hours=24 * 36500)
+                 for row in recent(grant.owner_id, resolved, max_items=30, window_hours=24 * 36500)
                  if isinstance(row.get('display_activity'), dict))
     dates = sorted(set(dates), reverse=True)
     return {"dates": dates, "count": len(dates)}
@@ -221,14 +185,12 @@ async def calendar_stats(
 ):
     """自然日数据；周从周一开始。显式起止日期最多 366 天，含首尾。"""
     from core.conversation_stats import query
-    if x_presence_session:
-        from admin.session_requests import session_grant
-        grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
-        if char_id is not None and char_id != grant.char_id:
-            raise HTTPException(status_code=403, detail="character_not_authorized")
-        char_id = grant.char_id
-    resolved = _resolve_char_id(char_id)
-    owner = _owner_qq()
+    from admin.session_requests import session_grant
+    grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+    if char_id is not None and char_id != grant.char_id:
+        raise HTTPException(status_code=403, detail="character_not_authorized")
+    resolved = grant.char_id
+    owner = grant.owner_id
     if not owner:
         raise HTTPException(503, "owner_id not configured")
     # Unscoped legacy directories cannot prove which character owns a turn.
@@ -301,16 +263,14 @@ async def get_day(
 ):
     if not _DATE_RE.match(date):
         raise HTTPException(status_code=422, detail="date format must be YYYY-MM-DD")
-    if x_presence_session:
-        from admin.session_requests import session_grant
-        grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
-        if char_id is not None and char_id != grant.char_id:
-            raise HTTPException(status_code=403, detail="character_not_authorized")
-        char_id = grant.char_id
-    resolved = _resolve_char_id(char_id)
+    from admin.session_requests import session_grant
+    grant = session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+    if char_id is not None and char_id != grant.char_id:
+        raise HTTPException(status_code=403, detail="character_not_authorized")
+    resolved = grant.char_id
     from core.memory import event_log as _event_log
 
-    owner = _owner_qq()
+    owner = grant.owner_id
     new_dir = _event_log._event_log_read_dir(owner, char_id=resolved)
     old_dir = _event_log._legacy_read_dir_if_eligible(owner, resolved)
     text = _event_log._read_day_union(new_dir, old_dir, date)
@@ -322,7 +282,7 @@ async def get_day(
     # Older action echoes remain narration; no inferred success or chain IDs.
     from core.memory.action_trace import recent
     from datetime import datetime
-    activities = [row['display_activity'] for row in recent(_owner_qq(), resolved, max_items=30, window_hours=24 * 36500)
+    activities = [row['display_activity'] for row in recent(grant.owner_id, resolved, max_items=30, window_hours=24 * 36500)
                   if isinstance(row.get('display_activity'), dict)
                   and datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d') == date]
     activity_ids = {item['event_id'] for item in activities}
@@ -334,9 +294,9 @@ async def get_day(
     # Display-only projection from the canonical ledger; never replace memory text.
     # Missing/older ledgers retain the legacy plain-text history.
     from core.memory.event_query import get_event, EventQueryError
-    scope = MemoryScope.reality_scope(_owner_qq(), resolved)
+    scope = MemoryScope.reality_scope(grant.owner_id, resolved)
     from core.session_scope import completed_requests_for_turns
-    requests = completed_requests_for_turns(owner_id=_owner_qq(), char_id=resolved)
+    requests = completed_requests_for_turns(owner_id=grant.owner_id, char_id=resolved)
     for activity in activities:
         if activity.get('turn_id') and activity.get('request_id'):
             requests[activity['turn_id']] = activity['request_id']
@@ -413,7 +373,7 @@ async def get_day(
         from core.tools.chat_artifacts import artifacts_for_turns
         linked = artifacts_for_turns(
             [e["turn_id"] for e in entries if e.get("turn_id")],
-            uid=_owner_qq(), char_id=resolved,
+            uid=grant.owner_id, char_id=resolved,
         )
         for entry in entries:
             if entry.get("turn_id") in linked:
