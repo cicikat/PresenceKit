@@ -1,0 +1,30 @@
+# DIARY-01 / T4 后续收口与验收
+
+日期：2026-11-26；承接用户提供的 2026-11-25 后续工单。
+
+用户最新指令覆盖旧合并门禁：先合并已有三仓 PR；今后默认提交包含 push 和合并，
+测试、设备和审查状态仍须如实报告。合并不授权生产部署或正式发布。
+独立审查由用户协调 ChatGPT，本轮不代签审查结果。
+
+- [x] 手机 #21、桌面 #14、后端 #38 已依次合并并核对 main。
+- [x] 三仓 AGENTS.md 和后端 testing-and-merge.md 已同步默认准则并合并。
+- [x] 确认 DIARY-01、11 项旧 Session 测试迁移和手机结构修补已存在，不重做。
+- [x] 日记真实 lease 占用与排他写入失败/恢复用例，53 passed；生成/存储实现未改，见 diary-01-delivery。
+- [x] 隔离 HTTP 复现 B 持 A 媒体 SHA 错误获得 200；修补 inbox 授权与生成图引用的调用者身份，103 项相关回归通过，见 t4-media-scope-followup。
+- [x] 修正 T3.1 / T3 历史报告和迁移总清单，保留 T3.2 五项未完成；见 t4-02-final-acceptance。
+- [x] 补齐桌面角色 B、思考、媒体、产物预览/下载及网络恢复的真实窗口/HTTP 证据；completed receipt 跨角色人工攻击未单独执行，不能写全项 PASS。
+- [ ] 手机真机验收：开工 ADB 设备列表为空，当前 NOT RUN，已请求连接。
+- [x] 固定本轮三仓 main 重新跑合同，run 45747493358 success，机器 requested/actual SHA 一致；源码、CI、UI、真机和未完成项分列。
+- [x] 同步三仓集成文档、固定 SHA matrix 与逐项交付报告；desktop #16、mobile #23 已合并，backend 随本报告提交交付。
+
+不施工 T3.2、T5–T9、HINT；不重复拆分已经合并的历史提交，不改生产配置或数据。
+
+## 开工已合并的功能基线
+
+| 仓库 | 原 PR | 合并 SHA |
+|---|---|---|
+| backend | #38 | `7409e3d6b0575ce07f523ee831602a66e7b87c5f` |
+| desktop | #14 | `c598e5ac8b0a8ec5a814148b631315d6c5aff5f3` |
+| mobile | #21 | `3a5d88d0528b308889790cdd3844db6d2a9a1a9b` |
+
+上述是合并事实，不是设备 verified 声明；后续指令文档提交的精确 SHA 另列最终 matrix。

@@ -3,9 +3,11 @@
 本地后端相关聊天、回执、上传、wake、媒体、产物、历史、思考与转写入口要求
 `X-Presence-Session`；不再允许缺失 Header 时使用 active character。
 桌面共享请求层及 Rust 桥已接入；手机移除 Session 失效后的自动重绑重发，转写携带 grant。
-旧版无 Session 客户端不能与本检查点后端组合使用；代码已推送、未部署。
+旧版无 Session 客户端不能与本检查点后端组合使用；三仓原 PR 已合并、未部署。
 精确 SHA 合同及三端 CI 已通过；matrix 的 overall 仍为 not_verified，设备/独立审查门禁未关闭。
-桌面普通聊天、附件、重开历史与重启拒绝已有 UI 证据；思考/产物及角色 B 隔离、手机真机仍 open。
+2026-11-26 补齐桌面思考、产物预览/下载、B 切换及同 grant HTTP 拒绝、重启/重开与断网不重发。
+后端 #41 修补了全局 inbox 媒体与生成图工具引用的跨角色读取，相关回归通过。
+open：手机真机十项仍 NOT RUN，独立审查未记录；见 [T4-02](refactors/t4-02-final-acceptance.md)。
 下文旧 Session 兼容说明记录切断前状态，
 详见 [T4 施工记录](refactors/migration-cutover-t4.md)。
 

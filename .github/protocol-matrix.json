@@ -1,23 +1,23 @@
 {
   "matrix_version": "1",
   "fixture_version": "v1",
-  "captured_at": "2026-11-25",
-  "compatibility_window": "T4 contract-only evidence for the three exact SHAs below; later commits and other combinations are not_verified. Desktop UI acceptance is partial; mobile device acceptance is NOT RUN; independent review and overall merge acceptance remain not_verified.",
+  "captured_at": "2026-11-26",
+  "compatibility_window": "Exact main snapshots dispatched on 2026-11-26 after the media ownership fix and consumer documentation merges. Later evidence-only commits do not inherit exact-SHA results. All original T4 PRs are merged under the user instruction; overall acceptance remains not_verified because physical mobile acceptance and independent review are incomplete.",
   "classification": "compatible",
   "repositories": {
     "backend": {
       "repository": "cicikat/PresenceKit",
-      "sha": "fcd53df8ad40b2581cc78ef2b911ee637a9f5544",
+      "sha": "bcc7da2a96af426f86f34f2060b764e4e5795331",
       "runner": "ubuntu-latest"
     },
     "desktop": {
       "repository": "cicikat/PresenceKit-desktop",
-      "sha": "c497124a8876204ba1c08d2d53af137084e61ff1",
+      "sha": "895f3e2081ade604a3770ed08da0f44dd2a40850",
       "runner": "ubuntu-latest"
     },
     "mobile": {
       "repository": "cicikat/PresenceKit-mobile",
-      "sha": "706fe530ce7e6bfd31624e82a663c32435aeda6d",
+      "sha": "6439fcea5ea3b964b6e8c4a8674ba30c89ffd2f3",
       "runner": "ubuntu-latest"
     }
   },
@@ -40,14 +40,14 @@
   ],
   "evidence": {
     "requested_shas": {
-      "backend": "fcd53df8ad40b2581cc78ef2b911ee637a9f5544",
-      "desktop": "c497124a8876204ba1c08d2d53af137084e61ff1",
-      "mobile": "706fe530ce7e6bfd31624e82a663c32435aeda6d"
+      "backend": "bcc7da2a96af426f86f34f2060b764e4e5795331",
+      "desktop": "895f3e2081ade604a3770ed08da0f44dd2a40850",
+      "mobile": "6439fcea5ea3b964b6e8c4a8674ba30c89ffd2f3"
     },
     "shas": {
-      "backend": "fcd53df8ad40b2581cc78ef2b911ee637a9f5544",
-      "desktop": "c497124a8876204ba1c08d2d53af137084e61ff1",
-      "mobile": "706fe530ce7e6bfd31624e82a663c32435aeda6d"
+      "backend": "bcc7da2a96af426f86f34f2060b764e4e5795331",
+      "desktop": "895f3e2081ade604a3770ed08da0f44dd2a40850",
+      "mobile": "6439fcea5ea3b964b6e8c4a8674ba30c89ffd2f3"
     },
     "results": {
       "backend": "success",
@@ -55,13 +55,160 @@
       "mobile": "success"
     },
     "recorded_results": "compatible",
-    "run_url": "https://github.com/cicikat/PresenceKit/actions/runs/45631771422",
-    "artifact_id": "15030722235"
+    "run_url": "https://github.com/cicikat/PresenceKit/actions/runs/45747493358"
   },
   "acceptance": {
     "overall": "not_verified",
-    "desktop_ui": "partial",
-    "mobile_device": "NOT RUN",
-    "independent_review": "pending"
-  }
+    "desktop_ui": "partial: reasoning, artifact preview/download, role switch, scoped HTTP denials, restart/reopen and no automatic chat replay observed; completed-receipt cross-role manual attack not separately run",
+    "mobile_device": "NOT RUN: adb devices empty; all ten physical lifecycle items pending",
+    "independent_review": "not recorded; user coordinates reviewer",
+    "report": "docs/refactors/t4-02-final-acceptance.md",
+    "merged": true,
+    "deployed": false
+  },
+  "original_pr_heads": {
+    "backend": {
+      "pr": 38,
+      "sha": "a4360b97397647c8143754cb5af89baa817e54db"
+    },
+    "desktop": {
+      "pr": 14,
+      "sha": "c497124a8876204ba1c08d2d53af137084e61ff1"
+    },
+    "mobile": {
+      "pr": 21,
+      "sha": "706fe530ce7e6bfd31624e82a663c32435aeda6d"
+    }
+  },
+  "followup_pr_heads": {
+    "backend_media": {
+      "pr": 41,
+      "sha": "0748d7b9ce09159e393e0656a18ff17621a874f5"
+    },
+    "desktop_docs": {
+      "pr": 16,
+      "sha": "8982a02db169f3cc366100cc36136b94835a5aef"
+    },
+    "mobile_docs": {
+      "pr": 23,
+      "sha": "a22fb0f4c3de98287d7e1cc6c8927b4bbbf47355"
+    }
+  },
+  "ci_snapshots": {
+    "backend": {
+      "sha": "bcc7da2a96af426f86f34f2060b764e4e5795331",
+      "url": "https://github.com/cicikat/PresenceKit/actions/runs/45746570095",
+      "result": "success: Python 3.10/3.12 full, architecture, browser"
+    },
+    "desktop": {
+      "sha": "895f3e2081ade604a3770ed08da0f44dd2a40850",
+      "url": "https://github.com/cicikat/PresenceKit-desktop/actions/runs/45747427964",
+      "result": "success: frontend, Windows/macOS Rust"
+    },
+    "mobile": {
+      "sha": "6439fcea5ea3b964b6e8c4a8674ba30c89ffd2f3",
+      "url": "https://github.com/cicikat/PresenceKit-mobile/actions/runs/45747410308",
+      "result": "success: Flutter, analyze and finance-native"
+    }
+  },
+  "contract_coverage": [
+    {
+      "contract": "discover/create/hold/invalidate; no refresh or destroy API",
+      "owners": [
+        "backend session_scope",
+        "desktop RealitySessions",
+        "mobile DeviceController"
+      ],
+      "tests": [
+        "tests/test_session_scope.py",
+        "tests/test_session_scope_cutover.py",
+        "desktop src/shared/api/sessionScope.test.ts",
+        "mobile session tests"
+      ],
+      "evidence": "contract suites plus desktop stale grant/reopen; physical mobile NOT RUN"
+    },
+    {
+      "contract": "X-Presence-Session, owner_id, char_id, domain and errors",
+      "owners": [
+        "backend admission",
+        "desktop Rust/shared transport",
+        "mobile BackendClient"
+      ],
+      "tests": [
+        "tests/test_session_scope_cutover.py",
+        "protocol fixtures in all three suites"
+      ],
+      "evidence": "A and B desktop grants, HTTP audit and current fixed-SHA contract"
+    },
+    {
+      "contract": "request_id, stream msg_id and persisted turn_id",
+      "owners": [
+        "backend owner_turn/turn_sink",
+        "desktop receipts",
+        "mobile outbox/inbox"
+      ],
+      "tests": [
+        "tests/test_dedupe_key_stability.py",
+        "tests/test_mobile_realtime.py",
+        "desktop chatReceiptPolling",
+        "mobile chat recovery/protocol"
+      ],
+      "evidence": "automated suites; desktop no POST replay during recovery"
+    },
+    {
+      "contract": "media, attachments, artifacts preview/download",
+      "owners": [
+        "backend scoped upload/ledger/artifact",
+        "desktop IPC",
+        "mobile BackendClient"
+      ],
+      "tests": [
+        "tests/test_chat_media.py",
+        "tests/test_chat_artifacts.py",
+        "tests/test_image_gen_reference.py",
+        "tests/test_session_scope_cutover.py"
+      ],
+      "evidence": "103 related tests; desktop preview/download and B denied reads; physical mobile NOT RUN"
+    },
+    {
+      "contract": "history and reasoning",
+      "owners": [
+        "backend chat_log/reasoning",
+        "desktop history/reasoning UI",
+        "mobile history"
+      ],
+      "tests": [
+        "tests/test_reasoning_turn.py",
+        "tests/test_event_log_known_violations_fixed.py"
+      ],
+      "evidence": "real desktop A rendering, B empty UI and HTTP empty/denied results"
+    },
+    {
+      "contract": "transcription, voice receipts, stale role responses and lifecycle",
+      "owners": [
+        "backend scoped voice/session",
+        "desktop recording transport",
+        "mobile controllers"
+      ],
+      "tests": [
+        "tests/test_session_scope_cutover.py",
+        "desktop authGate/sessionScope",
+        "mobile session/chat recovery tests"
+      ],
+      "evidence": "automated coverage; desktop restart/reopen observed; physical mobile ten items NOT RUN"
+    },
+    {
+      "contract": "owner-shared poll/ACK cursor",
+      "owners": [
+        "backend mobile queue",
+        "mobile durable inbox"
+      ],
+      "tests": [
+        "tests/test_mobile_realtime.py",
+        "protocol mobile_queue fixtures",
+        "mobile protocol/ACK tests"
+      ],
+      "evidence": "fixed-SHA contract success; physical mobile NOT RUN"
+    }
+  ]
 }

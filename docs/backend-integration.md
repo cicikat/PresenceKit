@@ -9,7 +9,8 @@
 [session-scope-contract.md](session-scope-contract.md)。客户端先从 `/auth/whoami` 发现能力，
 再 `POST /v1/sessions`，后续以 `X-Presence-Session` 传不透明句柄；不要把 `char_id` 当请求权威。
 T4 要求 Session Header，缺失返回 `422 session_scope_required`；不再使用 live active。
-代码已在后端 PR #38、桌面 PR #14 及手机配套提交推送；当前为 partial、未部署，
+后端 PR #38、桌面 PR #14、手机 PR #21 已合并；媒体读取补丁随后端 #41 合并。
+当前验收为 partial、未部署；合并不代表设备验收通过。
 完整设备验收与精确 SHA 组合证据见 [T4 施工记录](refactors/migration-cutover-t4.md)。
 grant 为 24 小时进程内授权；过期/后端重启返回 `404 session_not_found`，不同 token
 返回 `403 character_not_authorized`。没有 refresh/destroy API；客户端不能自动创建新

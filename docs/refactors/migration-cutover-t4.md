@@ -1,8 +1,11 @@
 # T4 Session Scope：最终验收进行中
 
-更新：2026-11-25；状态：partial。原施工代码已推送后端 PR #38、桌面 PR #14、手机 PR #21；
+更新：2026-11-26；状态：partial。后端 PR #38、桌面 PR #14、手机 PR #21 已按用户指令合并；
 本记录不代表 T4 全部验收通过，也不授权生产部署。下面的 2026-11-24 数字是历史检查点，
 本轮证据单列，不能用旧 matrix 或旧 head CI 替代。
+
+当前合并、媒体修补、桌面窗口和固定 SHA 证据见 [T4-02 后续验收](t4-02-final-acceptance.md)。
+用户默认提交合并规则已覆盖下文旧的 Draft/等待验收合并要求；没有授权生产部署或正式发布。
 
 ## T4-01 本轮基线与结果
 
@@ -26,7 +29,7 @@ backend `fcd53df8ad40b2581cc78ef2b911ee637a9f5544`、desktop
 及 [Offline](https://github.com/cicikat/PresenceKit/actions/runs/45631732563) 全部通过。
 [手机 Flutter/native CI](https://github.com/cicikat/PresenceKit-mobile/actions/runs/45630398563)
 全部通过；桌面 PR #14 当前指定 head 的 frontend、Windows/macOS Rust CI 均通过。
-matrix 的 compatible 只指精确组合合同；overall 仍为 not_verified，不能据此合并。
+matrix 的 compatible 只指精确组合合同；overall 仍为 not_verified。历史门禁不再阻止合并，验收缺口仍保留。
 后续文档/矩阵记录提交不自动继承代码组合的精确 SHA 合同结论。
 
 | 本轮验证 | 结果与限度 |
@@ -62,13 +65,13 @@ matrix 的 compatible 只指精确组合合同；overall 仍为 not_verified，�
   “暂时无法连接当前角色。请重新打开聊天窗口后再试。”；没有自动 create 或重放。
   随后关闭并重新打开真实窗口，审计新增一次 create 201、带 Session 的历史 dates/day 200，
   原对话和回复恢复；没有自动重发此前拒绝的请求。
-- 思考、产物预览/下载与角色 B 隔离：尚未完成完整 UI 证据，保持 open。
-  系统原生角色下拉菜单的点击被 Computer Use 目标窗口检查拒绝，未绕过该限制。
+- 上述为 2026-11-25 检查点。2026-11-26 已补齐思考、产物预览/下载、角色 B 切换与同 grant
+  HTTP 拒绝、重启/重开和断网不重发证据，详见 T4-02。原生下拉改用正常键盘选择，未绕过目标检查。
 - 手机首次 ADB 可见真实设备，但安装 dev 包前连接消失，安装命令未执行成功。
   等待用户恢复连接；普通聊天、录音/转写/语音回执、角色切换、前后台、过期、
   重启、断网恢复与不重放均为 **NOT RUN**，不能用 Flutter 测试替代。
 - 两端 PR 的 reviews 在本轮检查时均为空；独立审查门禁未满足。
-- 上述未完成门禁满足前不合并相关 PR，不执行生产部署。T3.2 五项保持独立未完成。
+- 三仓已合并；未完成项仍不计为 PASS，不执行生产部署。T3.2 五项保持独立未完成。
 
 ## 实际修改与依赖
 
@@ -114,6 +117,7 @@ Windows；后端 Python 3.12.13。全部使用公共测试资产与隔离可写�
 - [ ] 最终版本桌面窗口重开后的历史恢复、服务端重启后失效反馈，以及完整附件/产物 UI 联验。用户按 Escape 停止 Computer Use，未继续操作；原桌面连接配置已逐字节恢复。
 - [ ] 手机真机对话、录音与生命周期联合验收；当前为 Flutter 合同和回归证据。
 - [ ] 三仓最终协议 fixture/matrix、文档历史兼容段落清理和完整消费者审计；旧 matrix 不代表本次组合已验收。
-- [ ] 最终候选提交远端 CI 与独立审查；原检查点已推送 PR，尚未合并或部署。
+- [x] 三仓原 PR 已合并；精确代码组合 CI 与合同见当前 T4-02 记录。
+- [ ] 独立审查及手机真机完整验收；未部署。
 
 没有修改 Admin 静态资源、增加运营开关或持久台账；沿用 `/observability/session-scope`，无需新增管理面设置。
