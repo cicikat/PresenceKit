@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.data_paths import safe_user_id
+from core.memory.path_resolver import resolve_path
+from core.memory.scope import MemoryScope
 from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
@@ -180,6 +182,15 @@ def resolve_chat_media(sha256: str, *, uid: str, char_id: str) -> ChatMediaRecor
             char_id=char_id,
         )
 
+    # Inbox bytes/cache are installation-wide storage, never an authorization
+    # index. Only this grant's retained Reality evidence may authorize them.
+    from core.character_document_library import search
+    scope = MemoryScope.reality_scope(uid, char_id)
+    # Ingest records the scoped upload index before tools/the assistant turn
+    # run. This is valid ownership even when retaining raw blobs is disabled.
+    scoped_upload = bool(search(uid, char_id, sha256=digest))
+    if not scoped_upload and digest not in _scan_ledger_digests(resolve_path(scope, "event_store"), scope=scope):
+        raise ChatMediaError("gone", 410, IRRECOVERABLE_DETAIL)
     path = _inbox_from_cache(digest) or _inbox_file_for(digest)
     if path is None:
         raise ChatMediaError("gone", 410, IRRECOVERABLE_DETAIL)
@@ -197,7 +208,7 @@ def resolve_chat_media(sha256: str, *, uid: str, char_id: str) -> ChatMediaRecor
     )
 
 
-def _scan_ledger_digests(path: Path) -> set[str]:
+def _scan_ledger_digests(path: Path, *, scope: MemoryScope | None = None) -> set[str]:
     digests: set[str] = set()
     try:
         connection = sqlite3.connect(
@@ -208,9 +219,12 @@ def _scan_ledger_digests(path: Path) -> set[str]:
         )
         connection.execute("PRAGMA query_only=ON")
         try:
-            rows = connection.execute(
-                "SELECT media_refs_json FROM events WHERE redaction_state != 'tombstoned'"
-            ).fetchall()
+            query = "SELECT media_refs_json FROM events WHERE redaction_state != 'tombstoned'"
+            parameters = ()
+            if scope is not None:
+                query += " AND uid = ? AND char_id = ? AND realm = ?"
+                parameters = (scope.uid, scope.character_id, scope.domain)
+            rows = connection.execute(query, parameters).fetchall()
         finally:
             connection.close()
     except sqlite3.Error:

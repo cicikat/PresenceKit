@@ -33,6 +33,11 @@ stream msg_id 关联临时气泡，persisted turn_id 关联历史与思考，两
 query char_id 必须与 grant 一致（否则 403），持有 artifact/media/turn ID 不授予跨角色读取权。
 mobile poll/ACK 仍是 owner 共享游标，不能按当前角色过滤后推进 ACK。
 
+2026-11-26 媒体归属修补：全局 inbox/cache 中存在字节不代表当前 grant 有权读取，
+还须同 owner/角色的未墓碑 Reality 媒体引用或正式上传资料索引；没有授权证据与字节
+不存在同为 410。生成图作为工具参考也按调用者 owner/角色读取产物，不以全局 ID lookup
+结果替换调用者身份。隔离回归见 [媒体作用域修补](refactors/t4-media-scope-followup.md)。
+
 ## 安全失败重试（2026-10-08，271）
 
 mobile/desktop chat 在工具执行与 turn sink 前失败时标记 retryable_failed，同 request_id/payload 可以重跑；已开始工具/回合写入、未知入口和 upload 保留 execution_outcome_unknown。context/probe 并发失败会取消并等待另一任务，避免重试与残留工具交错。completed/in_flight/409、token+owner+char+domain 隔离和 30 分钟进程内保留不变；旧 failed 无阶段证据不重跑。既有 /observability/session-scope 可见 request_failed 原因 retryable_failed/failed 及 request_retry，无新持久状态或开关。chat-log plain/display 均取 ledger visible_text；记忆存储与原文不改。真机/真实模型观察仍 open。
