@@ -64,7 +64,7 @@
     "independent_review": "not recorded; user coordinates reviewer",
     "report": "docs/refactors/t4-02-final-acceptance.md",
     "merged": true,
-    "deployed": false
+    "deployed": true
   },
   "original_pr_heads": {
     "backend": {
@@ -210,5 +210,15 @@
       ],
       "evidence": "fixed-SHA contract success; physical mobile NOT RUN"
     }
-  ]
+  ],
+  "deployment": {
+    "date": "2026-11-26",
+    "backend_source_sha": "3aefc4031c9f2027d740a6c3431b98e79df96de6",
+    "server_overlays": "preserved; historical query wiring ported to RealityContextReader",
+    "program_files": 113,
+    "health": 200,
+    "session_create": 201,
+    "state_migration": false,
+    "client_release": false
+  }
 }

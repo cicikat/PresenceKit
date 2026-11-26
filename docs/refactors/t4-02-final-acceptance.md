@@ -1,6 +1,8 @@
 # DIARY-01 / T4 后续收口与最终验收记录
 
 日期：2026-11-26。状态：代码已合并，整体验收 **partial / not_verified**。
+同日后续授权：用户要求部署到 VPS，已完成后端程序切换，详情见文末部署记录。
+下文“没有部署”描述本报告原交付检查点，不能据此判断后续 VPS 状态。
 用户最新指令覆盖原工单的 Draft、测试绿灯、设备及独立审查合并门禁；不覆盖如实记录证据的要求。
 本轮没有生产部署、生产数据测试、APK 或桌面正式发布。T3.2、T5–T9、HINT 未施工。
 
@@ -102,3 +104,26 @@ desktop `npm test -- --run tests/protocol-fixtures.test.ts`；mobile `flutter te
 - **桌面细分人工场景**：A 已完成回执的 B 攻击、真实模型生成大图和大附件完整观感未在本轮重做；
   已有隔离测试不替代这些人工证据。整体 matrix 必须保留 not_verified。
 - 无生产部署或正式发布授权；旧无 Session 客户端不能直接搭配强制 Session 后端。
+
+## 同日后续：用户授权 VPS 部署
+
+用户在原报告交付后明确要求先部署 VPS，以恢复前端使用。已部署后端 main
+`3aefc4031c9f2027d740a6c3431b98e79df96de6` 的 113 个变化程序文件。
+基于实际线上文件哈希和上次 P2 清单比对，保留历史记忆、模型和管理面既有定制；
+历史记忆查询接线迁到 `RealityContextReader`，没有恢复已删除的 Pipeline 门面。
+来源 SHA 与服务器 overlay 差异分别记录在部署 manifest，不能把定制安装声称为未经修改的 Git tree。
+
+候选使用公共资产和隔离数据验证：Session/日记/媒体/图像参考/思考 189 passed，
+上下文与思考 47 passed，历史查询的 frozen scope、seed/none/群聊闸门及 prompt 接线 3 passed。
+未执行生产聊天、模型故障注入或私有记忆检索测试；没有配置或数据迁移。
+按工作入口规则没有默认创建新数据备份，仅保存本次覆盖程序文件和校验清单用于回滚。
+
+停止服务到健康恢复 8.16 秒；独立复核：服务 active/running、NRestarts=0，健康 200，
+无凭据健康 401，能力发现 session_scope=v1，Session create 201 且角色匹配；
+无 Session 的聊天和历史入口均 422 session_scope_required，未执行测试消息。
+所有部署程序哈希、私有配置及历史模块保护哈希匹配；Traceback/ImportError/
+ModuleNotFoundError/SyntaxError/startup failed 五类启动错误计数均为 0。
+
+部署与独立验证记录保存在本机服务运维目录；服务器 stage 保留程序回滚副本，
+失败恢复不会自动回滚用户数据。本次只部署后端，没有发布 APK、桌面安装包或 GitHub Release。
+前端应重新打开聊天窗口以签发新 Session。手机真机、独立审查及原人工缺口仍未关闭。
