@@ -33,6 +33,19 @@ Windows，Python 3.12.13；全部测试使用公共资产和隔离目录。实�
 不把私有部署身份写入版本库。未改写配置，未运行生产数据测试或部署。
 T4 与 T3.2 不属于本提交。
 
+## 2026-11-26 后续工单核验
+
+原修复已经随 PR #38 合并，本轮不重写生成器或存储器。补齐两项独立故障证据：
+真实 Task Manager 已持有 lease 时，维护入口不生成、不落盘、不设置完成冷却，
+Work Session 仍为未启动的 created；对目标日记的排他 os.open 注入写入故障时，
+Task 保持 queued、Work Session failed，恢复存储并经过原 300 秒任务退避后成功落盘。
+故障测试只替换目标文件的系统 I/O 边界，不影响 Task/Session 自身的持久化。
+
+命令：`python -m pytest tests/test_inner_diary_write.py tests/test_diary_backfill.py -q --tb=short`。
+Windows / Python 3.12.13：53 passed（33.78s）。首次新增用例把 Work Session 初态误写为
+queued，按正式状态机修正为 created；没有放宽“不生成、不写入、不标完成”的断言。
+本提交仅补日记回归与证据；没有 T4 或其他架构运行时代码修改。
+
 验证：`python -m pytest tests/test_inner_diary_write.py tests/test_diary_backfill.py
 tests/test_ar02_dependency_directions.py tests/test_no_hardcoded_character.py
 tests/test_line_endings.py -q`：256 passed（122.72s）。`git diff --check` 通过；
