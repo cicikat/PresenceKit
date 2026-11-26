@@ -564,10 +564,10 @@ def prompt_hint():
 
 def _scope(channel, scope=None):
     if scope is not None:
-        return (scope.uid, scope.character_id, channel)
+        return (scope.uid, scope.character_id, scope.domain, scope.world_id, channel)
     from core.character_context import selected_character_id_or_none
     uid = str((get_config().get("scheduler") or {}).get("owner_id") or "")
-    return (uid, selected_character_id_or_none(), channel)
+    return (uid, selected_character_id_or_none(), "reality", None, channel)
 
 
 def _receipt_payload(result):
@@ -618,8 +618,19 @@ def issue_receipt(result, channel, *, scope=None):
 def consume_receipt(key, text, channel, *, scope=None):
     if not isinstance(key, str) or len(key) > 128:
         return None
+    row = _receipts.get(key)
+    if not row:
+        return None
+    if row[0] <= time.monotonic():
+        _receipts.pop(key, None)
+        return None
+    if row[1] != _scope(channel, scope):
+        return None
+    # Scope checks never destroy somebody else's live receipt. The atomic pop
+    # still gives exactly one consumer ownership, with no await/network in
+    # this synchronous section. Existing text/config rejection burns that use.
     row = _receipts.pop(key, None)
-    if not row or row[0] <= time.monotonic() or row[1] != _scope(channel, scope):
+    if row is None:
         return None
     payload = row[3]
     # 仅标记语音来源的回执（本地 STT、未开声学分析）不依赖 stt_presets / 声学开关。

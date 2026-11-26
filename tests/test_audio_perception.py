@@ -68,6 +68,50 @@ async def test_failure_and_timeout_fail_open(configured, monkeypatch):
     assert await audio.ingest_audio_bytes(b"x", "x.wav") is None
 
 
+@pytest.mark.parametrize("other", ["owner", "character", "domain", "channel"])
+def test_wrong_scope_cannot_destroy_live_voice_receipt(configured, other):
+    """An unauthorized read must leave the one-shot receipt for its owner."""
+    from core.memory.scope import MemoryScope
+    original = MemoryScope.reality_scope("fixture_owner", "fixture_character")
+    wrong = {
+        "owner": MemoryScope.reality_scope("other_owner", "fixture_character"),
+        "character": MemoryScope.reality_scope("fixture_owner", "other_character"),
+        "domain": MemoryScope.dream_scope("fixture_owner", "fixture_character", "fixture_world"),
+        "channel": original,
+    }[other]
+    key = audio.issue_receipt({"text": "hello", "tone": "calm"}, "mobile", scope=original)
+    assert audio.consume_receipt(key, "hello", "desktop" if other == "channel" else "mobile", scope=wrong) is None
+    assert audio.consume_receipt(key, "hello", "mobile", scope=original) == {"tone": "calm"}
+    assert audio.consume_receipt(key, "hello", "mobile", scope=original) is None
+
+
+def test_authorized_rejection_still_spends_receipt(configured):
+    """Keep existing one-shot semantics for edited text and revoked analysis."""
+    key = audio.issue_receipt({"text": "hello", "tone": "calm"}, "desktop")
+    assert audio.consume_receipt(key, "edited", "desktop") is None
+    assert audio.consume_receipt(key, "hello", "desktop") is None
+    key = audio.issue_receipt({"text": "hello", "tone": "calm"}, "desktop")
+    configured["stt_presets"]["enabled"] = False
+    assert audio.consume_receipt(key, "hello", "desktop") is None
+    configured["stt_presets"]["enabled"] = True
+    assert audio.consume_receipt(key, "hello", "desktop") is None
+
+
+def test_receipt_has_only_one_winning_consumer(configured):
+    """Concurrent valid requests cannot both receive one auditory payload."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    key = audio.issue_receipt({"text": "hello", "tone": "calm"}, "desktop")
+    ready = Barrier(2)
+    def consume(_):
+        ready.wait(timeout=5)
+        return audio.consume_receipt(key, "hello", "desktop")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        values = list(pool.map(consume, range(2)))
+    assert values.count({"tone": "calm"}) == 1
+    assert values.count(None) == 1
+
+
 def test_receipt_scope_text_ttl_and_single_use(configured, monkeypatch):
     result = {"text": "hello", "tone": "calm"}
     key = audio.issue_receipt(result, "desktop")
