@@ -209,6 +209,65 @@ async def test_failed_worker_does_not_block_peer(diary_run, monkeypatch, sandbox
     assert marks == []
 
 
+@pytest.mark.asyncio
+async def test_owned_lease_defers_without_generation_or_success(diary_run, sandbox, caplog):
+    """A genuinely claimed task cannot be claimed twice or marked as a written diary."""
+    import logging
+    from core.agent_runtime import TaskPrincipal
+    from core.agent_runtime.task_manager import claim_next, list_tasks
+    from core.agent_runtime.work_sessions import list_work_sessions
+    time_based, marks, calls = diary_run
+    principal = TaskPrincipal.reality("u1", TEST_CHAR_ID)
+    task, _ = time_based._open_authored_diary_task(principal, TEST_CHAR_ID, "2026-05-25")
+    lease = claim_next(principal, task_id=task["task_id"], capabilities={"authored_diary"})
+    assert lease is not None
+    with caplog.at_level(logging.INFO):
+        await time_based._check_inner_diary_write()
+    assert any(getattr(row, "diary_status", None) == "lease_unavailable" for row in caplog.records)
+    assert calls == []
+    assert marks == []
+    assert not (sandbox.character_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md").exists()
+    assert list_tasks(principal)[0]["status"] == "running"
+    assert list_work_sessions(principal)[0]["status"] == "created"
+
+
+@pytest.mark.asyncio
+async def test_exclusive_write_failure_retries_real_task(diary_run, monkeypatch, sandbox):
+    """A failed exclusive file create stays retryable; the next admitted attempt writes once."""
+    import os
+    import time
+    from core.agent_runtime import TaskPrincipal
+    from core.agent_runtime.task_manager import list_tasks
+    from core.agent_runtime.work_sessions import list_work_sessions
+    time_based, marks, calls = diary_run
+    principal = TaskPrincipal.reality("u1", TEST_CHAR_ID)
+    path = sandbox.character_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
+    clock = [time.time()]
+    monkeypatch.setattr("core.agent_runtime.task_manager._now", lambda value=None: clock[0] if value is None else float(value))
+    original_open = os.open
+    def fail_diary_open(filename, flags, *args, **kwargs):
+        if os.fspath(filename) == os.fspath(path):
+            assert flags & os.O_EXCL
+            raise OSError("synthetic diary storage unavailable")
+        return original_open(filename, flags, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "open", fail_diary_open)
+        await time_based._check_inner_diary_write()
+    assert calls and len(calls) == 2
+    assert marks == []
+    assert not path.exists()
+    assert list_tasks(principal)[0]["status"] == "queued"
+    assert list_work_sessions(principal)[0]["status"] == "failed"
+    clock[0] += 301
+    await time_based._check_inner_diary_write()
+    assert path.is_file()
+    assert "## 今日感受" in path.read_text(encoding="utf-8")
+    assert marks == ["inner_diary_write"]
+    assert len(calls) == 4
+    assert list_tasks(principal)[0]["status"] == "succeeded"
+    assert list_work_sessions(principal)[0]["status"] == "succeeded"
+
+
 def _fake_datetime(*ymdhms):
     class FakeDatetime(datetime):
         @classmethod
