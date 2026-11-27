@@ -1,7 +1,7 @@
 # 迁移遗留切断：T0 事实清单与执行报告
 
 日期：2026-11-22（T0 原始快照）；2026-11-26 校准：T1、T2/T2.1、T3.1/T3.1.1 已合并；
-T3.2 C1/C2 已修补，C3–C5 未完成。T4 三仓 PR 已合并，最终设备验收 partial；T5–T9 与 HINT 未开始。
+T3.2 C1/C2/C4 已修补，C3/C5 未完成。T4 三仓 PR 已合并，最终设备验收 partial；T5–T9 与 HINT 未开始。
 后续状态：用户已允许 T1 施工；T1 将旧入口与调用者迁走后联删 45 条债务，T2 将剩余 26 条活动时钟、角色/owner/配置读取债务全部联删，机器清单已清零，见 [T2 报告](migration-cutover-t2.md)。
 下文保留 T0 原始事实快照；实际 T1 所有者、删除项与验证见 [T1 报告](migration-cutover-t1.md)。
 门禁的单向收敛与动态访问加固见 [T0.1 报告](migration-cutover-gate-hardening.md)。
@@ -15,7 +15,7 @@ T3.2 C1/C2 已修补，C3–C5 未完成。T4 三仓 PR 已合并，最终设备
 |---|---|---|
 | T0/T0.1、T1、T2/T2.1 | 门禁及调用者迁移已合并 | 不重做；相关守门仍须通过 |
 | T3.1/T3.1.1 | PR #37 已合并 | 不等于 T3 全部完成 |
-| T3.2 | C1 TurnSink 身份、C2 LoreEngine 生命周期已修补 | C3 Schema 间接 Registry、C4 TypeError 兼容、C5 Pipeline 属性代理 |
+| T3.2 | C1 TurnSink 身份、C2 Lore 生命周期、C4 TypeError 降级已修补 | C3 Schema 间接 Registry、C5 Pipeline 属性代理 |
 | T4 | 后端 #38、桌面 #14、手机 #21 均已合并；后端 #41 媒体修补已合并 | 验收 partial：手机真机十项 NOT RUN，独立审查未记录；桌面细分人工缺口见 T4-02 |
 | T5/T6/T7/T8/T9、HINT | 未开始 | 保留原依赖、数据迁移和独立授权条件 |
 

@@ -10,7 +10,7 @@ async def test_unexposed_keyword_candidate_does_not_attest_user_intent(monkeypat
     from core import tool_dispatcher
     from core.pretool_router import route_pretool
 
-    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: [])
+    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: [])
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY, "weather", {
         "keywords": ["天气"], "category": "info", "parameters": {"required": []},

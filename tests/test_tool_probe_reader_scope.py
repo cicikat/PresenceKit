@@ -75,7 +75,7 @@ def _patch_env(monkeypatch):
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
     patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc, **kwargs: "")
-    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [
+    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: [
         {"type": "function", "function": {"name": "weather", "description": "", "parameters": {}}},
     ])
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)

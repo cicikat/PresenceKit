@@ -323,7 +323,7 @@ class TestRunAgenticLoopToolCategories:
 
         seen_categories = []
 
-        def _fake_schema(categories=None):
+        def _fake_schema(categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False):
             seen_categories.append(categories)
             return []
         monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", _fake_schema)
@@ -359,7 +359,7 @@ class TestRunAgenticLoopToolCategories:
 
         seen_categories = []
 
-        def _fake_schema(categories=None):
+        def _fake_schema(categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False):
             seen_categories.append(categories)
             return []
         monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", _fake_schema)
@@ -390,7 +390,7 @@ class TestRunAgenticLoopToolCategories:
         cfg = {"tool_loop": {"max_steps": 5, "total_timeout_s": 90,
                               "categories": ["info"], "exclude_tools": [], "nudge_hint": True}}
         monkeypatch.setattr("core.config_loader.get_config", lambda: cfg)
-        monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None: [])
+        monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: [])
 
         seen_messages = []
 
@@ -422,7 +422,7 @@ class TestRunAgenticLoopToolCategories:
         cfg = {"tool_loop": {"max_steps": 5, "total_timeout_s": 90,
                               "categories": ["info"], "exclude_tools": [], "nudge_hint": False}}
         monkeypatch.setattr("core.config_loader.get_config", lambda: cfg)
-        monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None: [])
+        monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: [])
 
         seen_messages = []
 

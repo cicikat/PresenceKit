@@ -103,7 +103,7 @@ def _patch_tool_dispatcher(monkeypatch):
     import core.tool_dispatcher as _td
     patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
-    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
+    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: [])
 
 
 def _patch_llm_client(monkeypatch):
