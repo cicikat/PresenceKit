@@ -1501,3 +1501,13 @@ open：A 尚未将现有生成接入控制库，停止/删除/恢复写接口、
 ### 聊天控制 B：后端停止（2026-11-27）
 
 current：session_request 与桌面持久 receipt 的实际 executor 已接入；新增 `POST /conversation/requests/{request_id}/stop`（本 credential，先到 stop 可阻止迟到 POST）及 `POST /conversation/executions/{execution_id}/stop`（同 owner/char 跨端）。committing/completed 不取消，stop_requested 不是 stopped；停止展示记录经日期 history 恢复且不入记忆。详见 [实施记录 B](conversation-control-delivery.md)。open：双端按钮/实时控制通知、删除/恢复仍待后续子单。observe：真实 provider/设备/UI 未验收。
+
+
+### 2026-11-27 Conversation control：current / observe
+
+- current：三个客户端入口合同以 Session grant 冻结 owner/character/reality；`GET /conversation/state` 返回独立 revision、active executions、最近 stopped/interrupted 元信息与 visibility 全快照，不含正文。`GET /conversation/mutations` 支持按独立 cursor 顺序补拉，绝不能复用 mobile seq/ACK 或 history_index。
+- current：双端 `POST /conversation/executions/{execution_id}/stop`；原请求未准入时可用本 credential 的 `POST /conversation/requests/{request_id}/stop` 保存停止意图。committing/completed 不回退。手机仍是 final-only WS，并未改成 token streaming。
+- current：双端精确 `POST /conversation/turns/{turn_id}/delete`，body `{operation_id,expected_revision?}`；desktop-only `GET /conversation/deletions`（before/limit）、detail、`POST .../restore`（operation_id + expected_revision）、`POST .../repair`。403 不是网络故障，禁止提权/换 scope 重试。
+- current：WS `conversation_changed` 仅含 revision + char_id/domain；mobile 另带原 generation/client_type。收到只提示重读 state，不作为正文、final 或 ACK；溢出与断线按原通道恢复。前台每 2s 状态补校准、focus/reconnect 补读，删除栅栏过滤所有迟到历史/WS/HTTP；可见旧日页在变更后重读，恢复不依赖新通知序号。
+- current：desktop allowlisted Tauri `conversation_request(action,identifier,body)` 使用原 no-proxy HTTP/session/connection gate；mobile BackendClient 仅暴露 state/stop/delete，无恢复 API/UI。电脑 profile 新增 `chat.recovery`，手机 profile 不含；自定义显式 scopes 的凭据需由管理员单独授权，不自动提权。
+- observe：自动化的 scoped API、真实取消/stream.close、独立进程栅栏、恢复冲突、Flutter 长按菜单与 desktop 隔离组件浏览器验收已覆盖各自边界；真实模型/双实体设备/后台杀进程与新包验收不等于通过。未部署、未发布。

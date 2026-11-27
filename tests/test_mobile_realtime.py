@@ -304,3 +304,19 @@ async def test_day_history_retains_display_and_request_after_receipts_expire(mon
     entries = (await chat_log.get_day(dates[0], x_presence_session=grant.session_id))["entries"]
     assert entries[0]["assistant_display_text"] == message["display_text"]
     assert entries[0]["request_id"] == "req-one"
+
+
+def test_control_hint_is_body_free_and_does_not_become_a_final(monkeypatch,mobile_connection):
+    """Control events share scope/auth/overflow rules, never ACK final bodies."""
+    client,grant,valid=ws_client(monkeypatch)
+    with mobile_connection(client,grant) as ws:
+        ready=ws.receive_json()
+        subscription=next(iter(realtime._CONNECTIONS.values()))
+        # Publish on the server loop, like conversation completion does.
+        async def send_hint():
+            realtime.publish({'user_id':grant.owner_id,'char_id':grant.char_id,'domain':'reality','_conversation_control':True,'revision':9})
+        ws.portal.call(send_hint)
+        frame=ws.receive_json()
+        assert frame['type']=='conversation_changed' and frame['revision']==9
+        assert 'message' not in frame
+        assert frame['generation']==ready['generation']

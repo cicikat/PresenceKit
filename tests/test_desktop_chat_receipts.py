@@ -74,7 +74,15 @@ async def test_disconnect_recovery_and_duplicate_post_keep_one_effect(app, monke
         finally:
             release.set()
         await asyncio.wait_for(finished.wait(), 2)
-        receipt = (await client.get(path, headers=headers(rid))).json()
+        # Generation completion precedes shielded durable receipt settlement.
+        # Wait on the observable receipt, not a scheduling-order assumption.
+        async def completed_receipt():
+            while True:
+                receipt = (await client.get(path, headers=headers(rid))).json()
+                if receipt["status"] != "running":
+                    return receipt
+                await asyncio.sleep(0)
+        receipt = await asyncio.wait_for(completed_receipt(), 2)
         assert receipt["status"] == "completed"
         assert receipt["result"]["msg_id"] == "wire-1"
         assert receipt["result"]["reply"] == "Fixture canonical reply."

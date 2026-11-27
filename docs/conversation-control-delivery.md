@@ -59,3 +59,18 @@ B 的远端检查抓到三个本单问题：Python 3.10 没有 Task.cancelling�
 - 精确关联的 mid_term、episodic、storyline 结论会失效；混合来源结论整体退出召回，其他证据保留。旧 identity/facts/情绪等没有可靠来源链的数据列入人工复核，不做文字匹配删除。Dossier 删除按现有 evidence invalidation 合同；恢复只还原源证据，不复用旧结论，标记 `recompute_required`。向量恢复标记 `index_pending`，由既有重建机制重算，不调用模型伪造旧向量。
 - 默认不物理清除 archive；恢复记录本身也保留审计。不授权生产迁移、部署或全库清理。
 - 定向验证：Python 3.12，控制/恢复、事件账本与查询、向量、失效链、日记、中期、storyline、scope、short_term 共 166 passed（补充重启用例另记）。新增权限/失败保护均由挂载路由或真实持久化入口观察；不使用生产数据。
+
+
+## D：双端交互与实时校准
+
+- desktop：消息气泡右键删除整轮，确认后请求；停止按钮控制后端真实 executor；已删除对话列表/详情/恢复/修复仅此端提供。shared/api → allowlisted Tauri IPC → no-proxy/session_request，无 fetch 旁路。
+- mobile：canonical turn 长按菜单提供删除确认，旧的无身份气泡不猜测删除；聊天输入上方停止按钮可控制同角色其他设备的活动回复。恢复数据通过 state/history 自动出现，不给手机提供恢复入口。
+- 控制 WS 是无正文 revision 提示；state 全快照 + 2s 前台兜底补校准，独立于原 mobile final cursor/ACK。所有迟到写入和已加载页都走持久隐藏规则；恢复重读可见旧日页，保留滚动上下文。
+- 取消与 HTTP waiter、provider stream 资源所有权分开；点击 stop 后仍可能在上游计费/缓冲中产生少量 token，不宣称撤回既成工具动作。
+- 当前相关后端定向回归 58 passed；desktop 全部 Vitest 121 files / 662 tests passed、build passed（仅已有 chunk size 提醒）、cargo check passed；mobile 定向 88 passed（control HTTP、recovery upload、outbox deadline、interaction、realtime）。后续改动还需复核。
+- 浏览器隔离合成数据页已实点 stop → 右键/确认 → 删除列表/详情 → restore → 原气泡恢复；不使用真实凭据或模型。仅说明真实组件的可见交互，不冒充完整 native Tauri/实体手机/生产端到端验收。
+- C 远端 CI：offline-evals success，full pytest 16 failed / 9014 passed（3.12）。本单两项是新接口未声明客户端 UI 白名单、原 receipt 测试把模型 finished 当持久回执 finished：本阶段补消费者说明，并按真实可观测回执做有界等待，最终断言不减弱。其余角色资产 fixture/character 依赖失败属于并行架构收口，未混入本单修复。
+- 删除 brief 候选：待新旧请求回执收口验收后，移除双套 executor receipt 适配与旧无 turn_id 文本去重；本次不删除、不扩展重构。
+
+
+D 最终后端复核：control/recovery/desktop receipts/mobile realtime/Admin 消费者清单/session cutover/scopes/data registry/Responses 协议，502 passed（Python 3.12）。补充独立解释器栅栏与权限验证 76 passed。桌面最终全套和手机旧日恢复回归以各自交付文档/SHA 为准，不把本地脏工作区全量当干净 CI。

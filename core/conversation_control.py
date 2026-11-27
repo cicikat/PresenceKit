@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+import asyncio
 import hashlib
 import json
 import sqlite3
@@ -53,6 +54,7 @@ def connection(scope: MemoryScope):
             mutation_id TEXT NOT NULL UNIQUE, kind TEXT NOT NULL,
             payload TEXT NOT NULL, created_at REAL NOT NULL)''')
         db.execute('PRAGMA user_version=1')
+        initial_revision=db.execute('SELECT COALESCE(MAX(revision),0) FROM mutations').fetchone()[0]
         # A runtime owns one private-state directory. Foreign boots are never
         # resumed or re-executed from retained metadata.
         orphaned = db.execute("SELECT execution_id FROM executions WHERE boot!=? AND state IN ('queued','running','stop_requested','committing')", (_BOOT,)).fetchall()
@@ -62,6 +64,13 @@ def connection(scope: MemoryScope):
         db.commit()
         yield db
         db.commit()
+        revision=db.execute('SELECT COALESCE(MAX(revision),0) FROM mutations').fetchone()[0]
+        if revision>initial_revision:
+            try:
+                asyncio.get_running_loop().create_task(_notify(scope,revision))
+            except RuntimeError:
+                pass  # Sync readers recover through the durable state snapshot.
+
     except sqlite3.Error as exc:
         db.rollback()
         raise ControlError('conversation_store_unavailable', 503) from exc
@@ -144,3 +153,27 @@ def mutations(scope: MemoryScope, *, after: int = 0, limit: int = 100) -> dict:
         return {'mutations': [{'revision': row['revision'], 'mutation_id': row['mutation_id'], 'kind': row['kind'], **json.loads(row['payload'])} for row in rows],
                 'cursor': rows[-1]['revision'] if rows else after,
                 'has_more': bool(rows and db.execute('SELECT 1 FROM mutations WHERE revision>? LIMIT 1', (rows[-1]['revision'],)).fetchone())}
+
+
+async def _notify(scope,revision):
+    """Body-free hint only; clients always re-read authoritative scoped state."""
+    try:
+        from core.mobile_realtime import publish
+        from channels.desktop_ws import _send_json
+        publish({'user_id':scope.uid,'char_id':scope.character_id,'domain':'reality',
+                 '_conversation_control':True,'revision':revision})
+        await _send_json({'type':'conversation_changed','char_id':scope.character_id,
+                          'domain':'reality','revision':revision})
+    except Exception:
+        pass  # The independent durable cursor and state recover dropped hints.
+
+
+def snapshot(scope):
+    with connection(scope) as db:
+        db.execute('BEGIN')
+        revision=db.execute('SELECT COALESCE(MAX(revision),0) FROM mutations').fetchone()[0]
+        active_rows=db.execute("SELECT * FROM executions WHERE state IN ('queued','running','stop_requested','committing') ORDER BY created_at LIMIT 128").fetchall()
+        tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        visibility=[dict(row) for row in db.execute('SELECT turn_id,hidden,revision FROM visibility')] if 'visibility' in tables else []
+        terminal=db.execute("SELECT * FROM executions WHERE state IN ('stopped','interrupted') ORDER BY updated_at DESC LIMIT 128").fetchall()
+        return {'revision':revision,'executions':[projection(row) for row in active_rows],'visibility':visibility,'recent_terminal':[projection(row) for row in terminal]}

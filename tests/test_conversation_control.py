@@ -241,3 +241,24 @@ async def test_real_owner_pipeline_stops_at_model_and_releases_gate(scope, monke
     assert short_term.load(scope.uid,char_id=scope.character_id)==[]
     if channel=='desktop':
         assert result['reply']=='safe prefix'
+
+
+@pytest.mark.asyncio
+async def test_scoped_state_snapshot_tracks_withdrawal_and_restore(scope):
+    """A reconnect uses authoritative visibility, independent from ACK cursors."""
+    from core import conversation_recovery as recovery
+    from core.memory import short_term
+    from core.safe_write import safe_write_json
+    safe_write_json(short_term._history_write_path(scope.uid,char_id=scope.character_id),[{'role':'user','content':'fixture','_turn_id':'turn_fixture'}])
+    row=control.admit(scope,label='mobile_fixture',request_id='fixture',digest='digest')
+    before=control.snapshot(scope)
+    assert before['executions'][0]['execution_id']==row['execution_id']
+    assert before['visibility']==[]
+    control.transition(scope,row['execution_id'],'stopped')
+    deleted=await recovery.delete(scope,turn_id='turn_fixture',operation_id='delete_fixture',label='mobile_fixture')
+    hidden=control.snapshot(scope)
+    assert hidden['executions']==[] and hidden['visibility'][0]['hidden']==1
+    assert hidden['revision']>before['revision']
+    await recovery.restore(scope,deletion_id=deleted['deletion_id'],operation_id='restore_fixture',expected_revision=deleted['revision'])
+    restored=control.snapshot(scope)
+    assert restored['visibility'][0]['hidden']==0 and restored['revision']>hidden['revision']

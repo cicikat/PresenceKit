@@ -234,6 +234,9 @@ async def serve(websocket) -> None:
             if item is None:
                 raise ConnectionError("mobile subscriber overflow")
             envelope, queued_at = item
+            if envelope.get('_conversation_control'):
+                await send({'type':'conversation_changed','revision':envelope['revision']})
+                continue
             await send({"type": "final", "message": envelope})
             _COUNTS["sent_final"] += 1
             _COUNTS["enqueue_to_send_ms_total"] += round((time.monotonic() - queued_at) * 1000)

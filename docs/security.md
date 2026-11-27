@@ -36,7 +36,7 @@ Scope 以 `admin/scopes.py` 为准。通常 `admin` 蕴含全部；携带 `devel
 
 | profile | scopes | 发给谁 |
 |---|---|---|
-| `desktop` | chat, state.read, memory.read, activity, persona, hardware, sensor.write, ws.desktop | 桌面 Tauri 客户端 |
+| `desktop` | chat, chat.recovery, state.read, memory.read, activity, persona, hardware, sensor.write, ws.desktop | 桌面 Tauri 客户端 |
 | `mobile` | chat, state.read, memory.read, activity, persona, sensor.write | 手机 Flutter 端（同为 owner 客户端；不含 hardware/admin，不授予硬件控制与 settings 写权） |
 | `sensor` | sensor.write | 独立 sensor writer（按需手工签发；桌面内嵌 sensor 不使用） |
 | `watch` | sensor.write | Watch |
@@ -268,3 +268,8 @@ is checked again before derived revisions commit.
 current: /life-records capabilities/sync/list/detail/observability are implemented with dedicated life_records scope (mobile profile), transactional images/jobs/receipts, revisions/tombstones, bounded snapshot pagination, asynchronous OCR/vision, correction locks and owner-only read_life_records tool. Admin Service Configuration owns switches, effective recognition, task/device/audit observation and failed-task retry. See backend docs/life-records.md and brief 245. No changes to chat/poll/ack, notifications or payment.
 
 observe: physical phone/network/Doze and live image-model end-to-end validation remain open. Backend tests include atomic retry, edits versus recognition, deletion, scopes, decimals, snapshot pagination and worker recovery; 72 initial scope/store tests and 39 focused/mobile regressions passed. Android LifeRecords/security/credential targeted task succeeded (cached unit-test output). Admin browser hard refresh used real isolated API. Desktop native record UI and original-image refetch remain roadmap.
+
+
+### Conversation recovery capability（2026-11-27）
+
+`chat.recovery` 只授予 desktop profile 的删除档案读取/恢复/修复面；普通 chat scope 可停止/删除当前 grant 范围的对话，但不能读取档案或恢复。profile:* 记录加载时展开新 scope；显式 scopes 不自动升级。归档含敏感历史正文，Cache-Control: no-store，不通过模型/普通消息/WS 广播。不能把设备 UA/客户端参数当鉴权边界；admin 凭据仍有全部权限。审计只记操作号、轮次和状态，原正文只在受保护的独立恢复库。

@@ -108,3 +108,9 @@ async def restore_turn(deletion_id: str,body: RestoreTurn,session=Depends(grant)
 async def repair_deletion(deletion_id: str,session=Depends(grant)):
     from core.conversation_recovery import repair
     return await _async_call(repair,session.memory_scope,deletion_id)
+
+
+@router.get('/state')
+def state(response: Response,session=Depends(grant)):
+    response.headers['Cache-Control']='no-store'
+    return _call(control.snapshot,session.memory_scope)

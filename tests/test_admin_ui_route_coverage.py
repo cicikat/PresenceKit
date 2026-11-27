@@ -26,6 +26,12 @@ ROOT = Path(__file__).resolve().parent.parent
 # (METHOD, 完整路径) -> 白名单理由（一行，说明为什么管理面板不需要接这个接口）。
 # 新增写接口默认要求要么出现在 index.html 里，要么显式加进这里。
 NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
+    ("POST", "/conversation/requests/{request_id}/stop"): "Desktop/mobile chat stop; scoped conversation UI, not Admin simulation",
+    ("POST", "/conversation/executions/{execution_id}/stop"): "Desktop/mobile stop for an existing execution; scoped conversation UI",
+    ("POST", "/conversation/turns/{turn_id}/delete"): "Desktop context menu/mobile long press; exact conversation ownership",
+    ("POST", "/conversation/deletions/{deletion_id}/restore"): "Desktop-only recovery UI with chat.recovery capability; no Admin conversation mutation",
+    ("POST", "/conversation/deletions/{deletion_id}/repair"): "Desktop recovery UI retries archived deletion; dedicated scoped operator surface",
+
     ("POST", "/v1/development/turns"): "Isolated development runner API; admin must not simulate production owner conversation",
     ("POST", "/v1/ime/drafts"): "Desktop IME draft ingestion; admin observes drafts without simulating typing",
     ("POST", "/life-records/sync"): "Mobile life-record synchronization; admin manages policy and retry only",
