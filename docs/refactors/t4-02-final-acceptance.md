@@ -142,3 +142,30 @@ tests/test_session_scope_cutover.py tests/test_mobile_chat_channel.py tests/test
 -q --tb=short`：Windows / Python 3.12.13，335 passed（48.32s）。
 没有新增 API、配置、持久数据、facade、兼容 fallback 或第二份所有者；手机修补单独交付。
 本项尚未生产部署，不把此前 VPS 部署证据转记为本补丁已上线。
+
+## T4.1 A 三仓修补交付（2026-11-27）
+
+后端 [#44](https://github.com/cicikat/PresenceKit/pull/44) 合并
+`a4157b8269aea0b1413c1c64ff6e4ecd25a5600b`；Tests 45761179894、Offline 45761179897 success。
+手机 [#24](https://github.com/cicikat/PresenceKit-mobile/pull/24) 合并
+`7930d159ce9691fb4b5f4c0e6b86f9541d917429`；Flutter 45762627232、Android instrumented 45762627227 success。
+桌面 [#17](https://github.com/cicikat/PresenceKit-desktop/pull/17) 合并
+`f4e89e43675d3089a6825cb44863927855a4d49f`。
+
+手机通过既有 ProfileAppearanceController grant/generation 捕获 VoiceInputScope，录音、转写提交、
+缓存、取回执和 outbox 使用冻结身份；删除 sendChat 隐式取缓存和仅 token/文本匹配的路径。
+桌面同样实际存在迟到缓存和 ABA 问题，已由 RealitySessions 冻结 grant/revision，
+单次及连续录音携带同一归属；原生配置变更通知使跨窗口连接失效可见，不传递凭据。
+两端乱序响应不能覆盖新缓存，失效工作不自动重绑或重放。没有新增 Session 所有者、API、
+持久格式、facade 或降级分支；回执由既有 outbox/发送入口单次取出。
+
+手机旧实现复现同 token/文本跨角色和迟到 A 结果被 B 使用；修复后定向 136 passed，
+完整 Flutter 495 passed，analyze 无问题，补充正式 profile ABA/结构回归 28 passed。
+桌面旧实现三项失败；修复后 120 文件 659 passed，TypeScript/Vite build 通过，
+Rust 配置写入 11 passed。客户端源码与命令明细见各仓现有 integration 记录。
+
+物理设备现已连接。隔离包 `com.presencekit.mobile.dev.t41` 使用上述手机源码，
+仅改测试包后缀及加入 integration_test，未覆盖正式或既有 dev 包。
+后端为上述冻结源码的独立公共 fixture；模型和 STT 为合成 HTTP 边界。
+首轮 B-01 等待 UI 回复超时，未观察到聊天 POST，正在排查测试入口；B 项尚不记 PASS。
+这不等于原生录音、真实模型、真实 STT 或全部设备验收通过，亦未部署生产。
