@@ -127,6 +127,7 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
             "location": "杭州",
             "categories": ["info", "desktop", "self", "schedule", "life", "qzone"],
             "allowed_tool_names": {"p0_tool"},
+            "char_id": "frozen_char",
         }
         for call in probe_prompt_calls
     )

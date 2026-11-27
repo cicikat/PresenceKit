@@ -449,6 +449,7 @@ async def route_pretool(
         location,
         categories=effective_categories,
         allowed_tool_names=available_set,
+        char_id=char_id,
     )
     if result.probe_context:
         result.probe_system += (

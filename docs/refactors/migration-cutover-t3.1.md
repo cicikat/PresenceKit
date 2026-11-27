@@ -223,3 +223,34 @@ Windows / Python 3.12.13：tool_loop、external_tool_contract_p0、presence_ext�
 QQ guard/reply、Reality scrub、scope freeze、grounding/probe reader、portable schema 和 AR02
 首轮 452 passed、2 个旧 fixture 签名失败；补迁移后 presence_ext/pretool_router 39 passed。
 后续 CI 使用本提交，不拿该首轮两项失败写成全绿。C3/C5 尚未关闭。
+
+## T3.2 C3：生成与 schema 的间接活跃身份读取（2026-11-27）
+
+实际 before 链：ReplyGeneration.run_llm / 无 user_id 的 run_llm_stream 把 None 交给
+llm_client → model_registry._active_char_model_routing → pipeline_registry；另一路
+get_tools_schema / probe / relay → get_active_char_name → get_char_name(None) → registry。
+三项旧实现业务失败已复现：两种生成请求的 char_id 为 None，显式 A schema 使用另一角色名。
+
+after：生成请求在第一个模型 await 前通过已注入的 CharacterSession.current_character_id
+捕获角色，显式角色不重新解析；主请求、重试、治理和 stream fallback 传同一个 id。
+空身份在模型前明确拒绝。schema / probe / relay 通过显式 char_id 查对应角色资产，
+不借当前运行实例替换调用者身份。无 scope 的纯 schema 检视使用中性称呼，不取活跃角色名。
+pretool_router 和 ToolTurnRunner relay 已迁移；无 user_id 时仍不写反坍缩用户信号。
+
+正式工具注册所有者仍为 tool_runtime.state 的唯一 _TOOL_REGISTRY，registry.py 只组合注册，
+暴露过滤、动态 image preset enum、owner/角色权限、MCP domain selector 均复用原实现。
+ToolTurnRunner 在模型调用前取得一次 schema/允许名称，本轮发现与执行只用该集合；
+执行前依然检查当前正式授权，撤销可拒绝执行而不会把新启用工具加入旧集合。
+
+必要保留的间接查找：Computer Use/设备文件工具的 principal_allowed → owner_scope →
+computer_use.principal → registry 是桌面设备的实时 owner/活动角色授权检查。
+其比较对象是已显式传入的 uid/char_id，并不推导或替换本轮身份；切换后旧角色设备应失效，
+因此不能为了 registry 数量改成永远信任旧快照。相关 owner/group/proactive/other-role/Dream/
+disabled 及角色撤销设备回归保留。model_registry 的无 scope 外部调用及控制面 tool_loop
+effective state 也保留已审查的组合/观测入口。未增加 registry 清单、阈值或白名单。
+
+没有新增 facade、schema 缓存所有者、fallback 或权限过滤副本；纯参数传递，协议和配置不变。
+Windows / Python 3.12.13：首轮主组 344 passed、1 个旧无用户路由期望失败；
+补迁移后含角色路由、ACT2、Computer Use、probe/HTTP 合同组 91 passed。
+补充 schema 描述静态守门；最终上述主组加 schema 描述、Computer Use、HTTP 合同，
+`pytest -n 4 ... -q --tb=short` 420 passed（74.98s）。远端 CI 随本项交付继续核对。C5 尚未关闭。

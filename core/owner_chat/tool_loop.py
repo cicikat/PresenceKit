@@ -490,6 +490,7 @@ class ToolTurnRunner:
             relay_system = get_tool_loop_relay_prompt(
                 categories,
                 allowed_tool_names=exposed_tool_names,
+                char_id=char_id,
             )
             relay_system += _pt('\n未加载的分类只能调用当前提供的 load_tools_ 入口（参数为 {}），不能直接选择具体工具。')
             try:
