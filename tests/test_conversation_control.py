@@ -200,6 +200,7 @@ async def test_real_owner_pipeline_stops_at_model_and_releases_gate(scope, monke
     grant = issue(monkeypatch, owner=scope.uid, char=scope.character_id, label=channel+'_fixture')
     entered, closed = asyncio.Event(), asyncio.Event()
     class Pipeline:
+        character = SimpleNamespace(name='Fixture')
         context = property(lambda self:self)
         generation = property(lambda self:self)
         async def fetch(self,*args,**kwargs):

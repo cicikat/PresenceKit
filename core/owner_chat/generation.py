@@ -115,6 +115,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
         protocol_filter = ToolProtocolStreamFilter()
         _t_stream_launch = time.monotonic()
         _t_first_delta_ts = None
+        _stream_source = None
         try:
             if _loop_active:
                 _stream_source = await pipeline.tools.run(
@@ -187,8 +188,7 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
                     await _ui_push.push_stream_delta(_stream_msg_id, visible)
             raise
         finally:
-            source = locals().get("_stream_source")
-            close = getattr(source, "aclose", None)
+            close = getattr(_stream_source, "aclose", None)
             if close is not None:
                 await close()
             await _ui_push.push_stream_end(_stream_msg_id)

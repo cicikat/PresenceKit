@@ -13,6 +13,7 @@ from core import conversation_control as control
 from core.session_scope import request_digest, validate_request_id
 
 _TASKS: dict[tuple[str, str], asyncio.Task] = {}
+_CANCEL_SENT: set[tuple[str, str]] = set()
 _PREFIX: dict[tuple[str, str], str] = {}
 _INPUT: dict[tuple[str, str], tuple[str, list]] = {}
 
@@ -151,6 +152,7 @@ async def execute(*, grant, request_id, payload, executor, allow_retry=False):
         raise
     finally:
         _TASKS.pop(key, None)
+        _CANCEL_SENT.discard(key)
         _PREFIX.pop(key, None)
         _INPUT.pop(key, None)
 
@@ -164,7 +166,9 @@ def stop_execution(scope, execution_id):
     task = _TASKS.get(_key(scope, execution_id))
     if task and not task.done():
         # Cancel only once: repeated stop must not interrupt finally/close.
-        if not task.cancelling():
+        key = _key(scope, execution_id)
+        if key not in _CANCEL_SENT:
+            _CANCEL_SENT.add(key)
             task.cancel()
     return row
 

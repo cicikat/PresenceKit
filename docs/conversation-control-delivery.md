@@ -42,3 +42,9 @@ owner-chat 在取得对话锁时转 running，在唯一 turn_sink 提交前转 c
 验证：Python 3.12.13，`pytest tests/test_conversation_control.py tests/test_session_scope.py tests/test_session_scope_cutover.py tests/test_llm_protocol_responses.py tests/test_llm_force_stream.py tests/test_final_p1_blockers.py::TestFullRouteAuthInventory -q`：200 passed。另含 anti-collapse 组共 147 passed。新增真实 owner pipeline 的 desktop/mobile 两分支取消、shield 后断线仍可停止、先 stop 后 POST、跨端执行 ID 授权及 SDK close 回归。无真实 provider、设备或 UI 实测。
 
 A 提交 CI：offline-evals 通过；Tests 失败。其中新 Router 的鉴权 inventory 因只在子依赖声明 scope 被静态门禁报错，本单在 Router 直接声明 chat 并定向验证通过；其余多项为已有角色 fixture/生成能力测试前置条件，未夹带修复。B 的 CI 待当前提交检查，不用本地结果冒充 CI。
+
+### B CI 修正
+
+B 的远端检查抓到三个本单问题：Python 3.10 没有 Task.cancelling；generation 的 locals() 清理写法触发架构守卫；新 Pipeline 测试替身缺少已提交版本仍会读取的 character 能力，本地并行重构掩盖了该缺项。修正为执行 ID 级取消发送集合、显式初始化 stream source、给替身建立完整前置条件。未改/提交其他任务的 prepare 重构；不将受脏工作区影响的结果冒充干净提交 CI 结果。
+
+定向复核：control + architecture 共 207 passed、1 failed；唯一失败为并行未提交的 coplay_watch 行号变动导致 retained-registry 清单不一致，未改该文件或批准清单。真正的 dependency direction/namespace 检查与新增控制回归通过。
