@@ -185,3 +185,27 @@ tests/test_session_scope_cutover.py tests/test_ar02_dependency_directions.py -q 
 298 passed；`tests/test_event_context_propagation.py tests/test_event_context_identity_boundaries.py
 tests/test_event_context_contract.py` 同参数 10 passed。远端 CI 以本项 PR 当前 head 为准。
 C2–C5 未完成，T3.2 不标 complete；无客户端协议或配置影响，未部署生产。
+
+## T3.2 C2：Lore 生命周期（2026-11-27）
+
+旧链：CharacterSession snapshot 持有同一个 LoreEngine → fetch 在 embedding await →
+reload 对该引擎 load/append；旧 turn 随后 match 到新内容。A→B 和同角色 reload 两项
+在真实 RealityContextReader 入口均复现 old lore 变 new lore；嵌入条目异常还会提前发布
+新角色。第四个负例证明文件 parse error 被吞后发布空引擎。
+
+新链：既有 CharacterSession 在私有加载阶段创建新 LoreEngine，加载角色独立资产及
+内嵌条目，全部成功后无 await 替换角色/引擎/id；失败保持整份旧状态及 author note。
+每轮仍只捕获一次既有 CharacterContextSnapshot，持有旧引擎至完成；运行时不再对已发布
+引擎执行 load。没有全局 snapshot registry、逐 caller deep-copy 或新 facade。
+keywords 在归一化时复制，避免输入列表随后改变已装载条目。
+
+Admin lorebook 编辑和 prompt asset 选择原本经只读 snapshot 直接 engine.load；现在使用
+main 已绑定的 require_character_reloader → CharacterSession.reload_character，保留内嵌世界书。
+文件解析/读取及条目结构错误现在显式抛出，阻止不完整发布；原缺失可选书警告、regex
+容错、命中去重、排序和预算算法未改。启动坏文件也会明确报错，不静默加载半份资料。
+独立 Admin 无运行会话仍只保存资产。无协议、配置字段、客户端或持久布局变化。
+
+Windows / Python 3.12.13：pipeline_read_scope / pipeline_memory_scope_integration /
+lore_engine_cold_start / character_prompt_assets / settings_prompt_assets /
+ar02_dependency_directions 定向 236 passed；追加真实 HTTP lorebook 编辑测试所在文件
+4 passed，验证旧 snapshot 不变、新引擎包含编辑与角色卡条目。C3–C5 仍未关闭。
