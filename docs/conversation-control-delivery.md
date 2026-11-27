@@ -101,7 +101,8 @@ D 最终后端复核：control/recovery/desktop receipts/mobile realtime/Admin �
 - Mobile：`flutter analyze --no-pub` **No issues found**；`flutter test --no-pub test/conversation_control_test.dart test/chat_recovery_upload_test.dart test/mobile_outbox_deadline_test.dart test/chat_interaction_regression_test.dart test/mobile_realtime_test.dart` **92 passed**；`flutter build apk --debug --flavor dev --no-pub` passed，未安装、未签发正式包。
 - 故障注入：移除 delete 成功后的操作号释放，真实 loopback HTTP 的“恢复后第二次删除”会因旧幂等结果而失败；恢复修复后同一请求/可见状态回归通过。其他 admission/旧日恢复负向证据见 D。
 - 干净远端 Backend 功能 SHA `6f5c0eca239f171ed29cf334864a53cb4f4dc139`：offline-evals **success**；Python 3.10/3.12 均 **9019 passed / 14 failed / 71 skipped / 13 subtests passed**。14 个失败仍为 autonomy intentions、hardware/imagegen/self tools、run_llm_retry 的角色资产/loaded character/name 前置条件；未混入本次修复，完整 CI 仍红，不能以 503 定向通过代替。
-- Desktop 前序 SHA `df28376a70e53346da500a6ef591c9d99ee46fe1` 与 Mobile 前序 SHA `08104877085a2d125ebe1a7fa0a54b5c7f349b01` 普通 CI 已 success；最新补丁 CI 另行核对，不把前序绿灯移作当前证据。
+- 最新 Desktop `9569de6535c5bd98d438afc6195f4144af92ef58` CI **success**（run 45981950657，frontend + Windows/macOS Rust）；最新 Mobile `0585b768fc1fa3d983f63e5e16856a72c804d4fd` 普通 CI **success**（run 45982004861，flutter + finance-native）。Android emulator instrumentation run 45982004702 在本次记录时仍 in_progress，不能计为通过，亦不等于实体手机聊天验收。
+- Backend 文档交付 `a2827300fb91089c9d7bd40884356b3e52028661` 已包含上述功能；当前远端 offline-evals、architecture、browser 通过，full pytest 仍为相同的 14 failed / 9019 passed / 71 skipped / 13 subtests passed（run 45982408376，Python 3.10/3.12），不是未跟进的旧 SHA 结果。
 
 ### 保留边界与 open
 
