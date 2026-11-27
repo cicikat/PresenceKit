@@ -474,6 +474,56 @@ async def test_sink_forwards_frozen_scope_pending_files_and_target_to_effect_own
     assert short_term.load(frozen.uid, char_id=TEST_CHAR_ID) == []
 
 
+@pytest.mark.parametrize("conflict", ["character", "owner", "domain", "event_owner", "event_character"])
+async def test_sink_rejects_conflicting_identity_before_any_effect(sandbox, monkeypatch, conflict):
+    """A rejected turn must preserve pending artifacts and never write or deliver."""
+    from unittest.mock import AsyncMock, Mock
+    from core.memory.scope import MemoryScope
+    from core.event_context import EventContext
+    from core.tools import chat_artifacts
+    from core.turn_sink import record_assistant_turn
+    from channels import registry
+    from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
+
+    scope = MemoryScope.reality_scope("sink-owner", TEST_CHAR_ID)
+    uid, char_id = scope.uid, scope.character_id
+    if conflict == "character":
+        char_id = TEST_PEER_CHAR_ID
+    elif conflict == "owner":
+        uid = "other-owner"
+    elif conflict == "domain":
+        scope = MemoryScope.dream_scope(uid, char_id, "fixture-world")
+    context = EventContext.from_ingress(
+        uid="other-owner" if conflict == "event_owner" else uid,
+        char_id=TEST_PEER_CHAR_ID if conflict == "event_character" else char_id,
+        ingress_event_id="fixture-ingress", dedupe_key="fixture-dedupe",
+        source="user_chat", channel="mobile", kind="user_message",
+    )
+    effects = _FakePipeline()
+    effects.capture_critical = AsyncMock(wraps=effects.capture_critical)
+    effects.run_deferred_effects = AsyncMock(wraps=effects.run_deferred_effects)
+    started = Mock()
+    monkeypatch.setattr("core.session_scope.mark_request_side_effects_started", started)
+    channel = _Channel("mobile")
+    monkeypatch.setattr(registry, "_channels", {"mobile": channel})
+    artifact = {"id": "fixture-pending-artifact"}
+    token = chat_artifacts._turn_artifacts.set([artifact])
+    try:
+        with pytest.raises(ValueError, match="scope"):
+            await record_assistant_turn(
+                uid=uid, char_id=char_id, frozen_scope=scope, event_context=context,
+                assistant_text="reply", user_text="hello", source="user_chat",
+                effects=effects, schedule_slow=False,
+            )
+        started.assert_not_called()
+        assert chat_artifacts.peek_turn_artifacts() == [artifact]
+        effects.capture_critical.assert_not_called()
+        effects.run_deferred_effects.assert_not_called()
+        assert channel.sent == []
+    finally:
+        chat_artifacts._turn_artifacts.reset(token)
+
+
 async def test_conversation_gate_serializes_concurrent_turns():
     from core.turn_sink import TurnSource, record_assistant_turn
 

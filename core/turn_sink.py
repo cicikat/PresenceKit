@@ -286,6 +286,17 @@ async def record_assistant_turn(
     """
     from time import time_ns
     turn_ready_ms = time_ns() // 1_000_000
+    if frozen_scope is not None:
+        if frozen_scope.domain != "reality" or frozen_scope.uid != uid:
+            raise ValueError("TurnSink frozen scope must match the Reality owner")
+        if char_id is not None and char_id != frozen_scope.character_id:
+            raise ValueError("TurnSink character conflicts with frozen scope")
+        char_id = frozen_scope.character_id
+    if event_context is not None:
+        scope = event_context.scope
+        if (scope.domain != "reality" or scope.uid != uid
+                or (char_id is not None and scope.character_id != char_id)):
+            raise ValueError("TurnSink event scope conflicts with turn identity")
     from core.session_scope import mark_request_side_effects_started
     mark_request_side_effects_started()
     from core.write_envelope import WriteEnvelope
@@ -302,8 +313,6 @@ async def record_assistant_turn(
     behavior = payload.get("behavior") if payload else None
     from core.tools.chat_artifacts import drain_turn_artifacts
     artifacts = drain_turn_artifacts()
-    if char_id is None and frozen_scope is not None:
-        char_id = getattr(frozen_scope, "character_id", None)
 
     # Reality inlet pre-scrub (defense-in-depth): strip render markup then
     # action/narration content before passing to post_process.  This covers all
