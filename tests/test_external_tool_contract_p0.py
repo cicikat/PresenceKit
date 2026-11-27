@@ -106,7 +106,7 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
 
     monkeypatch.setattr(user_profile, "load", _profile_load)
     monkeypatch.setattr(short_term, "load", _history_load)
-    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: [
+    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: [
         {"type": "function", "function": {"name": "p0_tool", "description": "", "parameters": {}}},
     ])
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)

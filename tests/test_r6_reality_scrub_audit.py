@@ -93,7 +93,7 @@ def _patch_probe(monkeypatch):
     import core.tool_dispatcher as _td
     patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
-    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
+    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: [])
     import core.llm_client as _llm
     monkeypatch.setattr(_llm, "chat", AsyncMock(return_value=""))
     monkeypatch.setattr(_llm, "parse_tool_call_response", lambda r: [])

@@ -209,3 +209,17 @@ Windows / Python 3.12.13：pipeline_read_scope / pipeline_memory_scope_integrati
 lore_engine_cold_start / character_prompt_assets / settings_prompt_assets /
 ar02_dependency_directions 定向 236 passed；追加真实 HTTP lorebook 编辑测试所在文件
 4 passed，验证旧 snapshot 不变、新引擎包含编辑与角色卡条目。C3–C5 仍未关闭。
+
+## T3.2 C4：删除 schema TypeError 降级（2026-11-27）
+
+ToolTurnRunner → get_tools_schema(categories, char_id, uid) 现在只有一次正式调用。
+删除宽泛 except TypeError 及 categories-only 重试；schema 实现内部 TypeError 原样沿错误路径传播。
+负例在旧实现观察到第二次 `(None, None)` 身份调用；修复后只调用一次，owner/角色完整。
+全仓 categories-only schema lambda 和三个旧 schema 函数替身均迁移正式参数，原业务断言保留。
+未发现需要旧签名的生产插件 caller；正式 registry/dispatcher schema 入口原本已接收身份。
+没有 inspect.signature、kwargs 探测、兼容 fallback、新 facade 或协议变更。
+
+Windows / Python 3.12.13：tool_loop、external_tool_contract_p0、presence_ext、pretool_router、
+QQ guard/reply、Reality scrub、scope freeze、grounding/probe reader、portable schema 和 AR02
+首轮 452 passed、2 个旧 fixture 签名失败；补迁移后 presence_ext/pretool_router 39 passed。
+后续 CI 使用本提交，不拿该首轮两项失败写成全绿。C3/C5 尚未关闭。

@@ -31,7 +31,7 @@
 - [x] C1 TurnSink 入口身份一致性；五项旧代码失败复现，298 项相关与 10 项 EventContext 回归通过，独立提交交付。
 - [x] C2 LoreEngine 快照与生命周期；四项旧缺陷复现，236 项相关和 4 项 HTTP/角色资产测试通过，独立提交交付。
 - [ ] C3 schema 间接 Registry 调用迁移；独立提交。
-- [ ] C4 删除 TypeError 签名兼容；独立提交。
+- [x] C4 删除 TypeError 签名兼容；旧实现双调用负例已复现，旧替身迁移到带身份的正式签名，独立提交交付。
 - [ ] C5 删除 CharacterSession 旧属性代理及 caller；独立提交。
 - [ ] 综合 CI、固定 SHA 证据与现有迁移清单同步；未验收项保留原状态。
 

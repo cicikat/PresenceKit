@@ -64,6 +64,22 @@ def _patch_tools_schema(monkeypatch, names):
     monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None, **kwargs: schema)
 
 
+async def test_schema_internal_typeerror_is_not_retried_without_identity(sandbox, monkeypatch):
+    """A provider bug must not trigger a second, identity-free schema request."""
+    _patch_tool_loop_config(monkeypatch)
+    calls = []
+    def broken_schema(categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False):
+        calls.append((uid, char_id))
+        raise TypeError("fixture schema implementation failed")
+    monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", broken_schema)
+    with pytest.raises(TypeError, match="fixture schema implementation failed"):
+        await _make_pipeline().tools.run(
+            [{"role": "user", "content": "Read the fixture."}],
+            uid="fixture-owner", char_id=TEST_CHAR_ID, session_state=object(),
+        )
+    assert calls == [("fixture-owner", TEST_CHAR_ID)]
+
+
 def _script_chat_turn(monkeypatch, turns: list[ChatTurn]):
     calls: list[dict] = []
     it = iter(turns)

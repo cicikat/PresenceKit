@@ -52,7 +52,7 @@ def _schema(name: str, *, required: list[str] | None = None) -> dict:
 def _patch_exposure(monkeypatch, schemas: list[dict]) -> None:
     from core import tool_dispatcher
 
-    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: schemas)
+    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False: schemas)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
 
 
@@ -101,7 +101,7 @@ async def test_default_path_a_exposure_filters_schemas_without_channel_branching
 
     seen_categories = []
 
-    def _schemas(categories=None):
+    def _schemas(categories=None, *, char_id=None, uid=None, only_names=None, autonomy=False):
         seen_categories.append(categories)
         return [_schema("fs_list"), _schema("get_time")]
 

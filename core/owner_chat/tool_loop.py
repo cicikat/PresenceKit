@@ -149,15 +149,7 @@ class ToolTurnRunner:
         if not _drinking_invited:
             excluded_tool_names.add("drink_with_user")
 
-        # Keep the registry helper's long-standing call shape for test/plugin
-        # compatibility; the existing exposure filters are applied here.
-        try:
-            _raw_tools = get_tools_schema(categories=categories, char_id=char_id, uid=uid)
-        except TypeError:
-            # Older local extensions/tests still expose the categories-only
-            # helper.  The character and uid gates remain enforced by the
-            # filters below when the richer signature is available.
-            _raw_tools = get_tools_schema(categories=categories)
+        _raw_tools = get_tools_schema(categories=categories, char_id=char_id, uid=uid)
         tools = [
             t for t in _filter_exposure(_raw_tools, _exposure)
             if (t.get("function") or t).get("name") not in excluded_tool_names
