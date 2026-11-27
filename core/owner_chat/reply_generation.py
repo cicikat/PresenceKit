@@ -259,14 +259,16 @@ class ReplyGeneration:
         marker_filter = ControlMarkerStreamFilter()
         try:
             stream_options = {"require_complete": True} if require_complete else {}
-            async for piece in llm_client.chat_stream(
+            from contextlib import aclosing
+            async with aclosing(llm_client.chat_stream(
                 messages, char_id=char_id, is_proactive=is_proactive, **stream_options,
-            ):
-                got_any = True
-                visible = marker_filter.feed(piece)
-                if visible:
-                    pieces.append(visible)
-                    yield visible
+            )) as source:
+                async for piece in source:
+                    got_any = True
+                    visible = marker_filter.feed(piece)
+                    if visible:
+                        pieces.append(visible)
+                        yield visible
             tail = marker_filter.finish()
             if tail:
                 pieces.append(tail)

@@ -214,7 +214,8 @@ async def _execute_desktop_request(request_id, *, auth, grant, payload, execute)
     from core.session_scope import request_digest
 
     async def execute_in_scope():
-        result = await execute()
+        from core.conversation_execution import execute as controlled_execute
+        result = await controlled_execute(grant=grant, request_id=request_id, payload=payload, executor=execute)
         if result.get("char_id", grant.char_id) != grant.char_id:
             raise HTTPException(503, "execution_outcome_unknown")
         return {**result, "char_id": grant.char_id, "domain": grant.domain}
@@ -244,6 +245,10 @@ async def desktop_chat_request(request_id: str, response: Response, x_presence_s
     # Absence does not prove non-execution: the POST could still arrive, or the
     # receipt could have expired. It never authorizes a replacement request.
     result = {"request_id": request_id, "status": row["status"] if row else "unknown"}
+    from core.conversation_control import lookup
+    controlled = lookup(grant.memory_scope, label=_auth.label, request_id=request_id)
+    if controlled['state'] in {'stopped', 'stop_requested', 'interrupted'}:
+        return {**controlled, "status": controlled['state']}
     if row and row.get("error_code") == "not_executed":
         result["status"] = "not_executed"
     if row and row["status"] == "failed" and row.get("error_code") == UpstreamQuotaExhausted.__name__:

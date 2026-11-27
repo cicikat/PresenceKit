@@ -30,3 +30,15 @@ mutation revision 独立于手机 ACK/队列 seq/history_index；按 scope 升�
 - 故障注入：临时允许 stop_requested → committing，关键用例按预期在 DID NOT RAISE 业务断言失败，恢复 guard 后通过。
 - 首次误加当前环境没有的 `--no-cov`，pytest 参数拒绝；去掉后执行上述验证，不算测试失败或 PASS。
 - 桌面调查 SHA：139d0bceff94b322f2f193ab79f38c14494d5453；手机：6aedfe834ed3853d53901bf48ddcf14b93d6c112。A 尚无客户端改动，不构成三仓联调通过；端到端、浏览器、设备、真实 provider 均未验收。
+
+## B：真正停止执行
+
+current：手机与兼容桌面 session_request、桌面持久 receipt executor 均接入控制层，不更改断线不取消的 shield 语义。新增 `POST /conversation/requests/{request_id}/stop`（本 credential，支持先到取消意图）和 `POST /conversation/executions/{execution_id}/stop`（同 owner/character 跨端精确取消）。queued/running 可停，committing/completed 不改终态，重复 stop 不打断 finally 清理。
+
+owner-chat 在取得对话锁时转 running，在唯一 turn_sink 提交前转 committing。停止取消真正 executor 并等待子任务退出；prepare 原有 sibling 清理保留，流式 generator、Chat Completions/Responses SDK stream 显式 close/aclose。CancelledError 不走普通异常重试/fallback。工具实际副作用不会被停止撤销，上游是否立即停算/计费不作承诺。现有 tool loop 总预算/步数、provider category timeout/max_tokens 仍有效，未新增运营开关。
+
+停止记录独立存于控制库 stopped_turns，保留用户可见输入、已过滤且二次清洗的可见前缀、媒体引用和 canonical stopped ID；不调用 turn_sink、不写 short_term/向量/长期记忆。日期历史与日期发现支持该记录，响应含 state=stopped/incomplete；前端标签和双端控制帧仍待 D。手机 final-only 通道不新增 token，收到停止状态后由日期历史补展示。
+
+验证：Python 3.12.13，`pytest tests/test_conversation_control.py tests/test_session_scope.py tests/test_session_scope_cutover.py tests/test_llm_protocol_responses.py tests/test_llm_force_stream.py tests/test_final_p1_blockers.py::TestFullRouteAuthInventory -q`：200 passed。另含 anti-collapse 组共 147 passed。新增真实 owner pipeline 的 desktop/mobile 两分支取消、shield 后断线仍可停止、先 stop 后 POST、跨端执行 ID 授权及 SDK close 回归。无真实 provider、设备或 UI 实测。
+
+A 提交 CI：offline-evals 通过；Tests 失败。其中新 Router 的鉴权 inventory 因只在子依赖声明 scope 被静态门禁报错，本单在 Router 直接声明 chat 并定向验证通过；其余多项为已有角色 fixture/生成能力测试前置条件，未夹带修复。B 的 CI 待当前提交检查，不用本地结果冒充 CI。

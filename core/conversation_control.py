@@ -92,6 +92,8 @@ def admit(scope: MemoryScope, *, label: str, request_id: str, digest: str) -> di
         if row:
             if row['digest'] and row['digest'] != digest:
                 raise ControlError('request_payload_conflict')
+            if not row['digest']:
+                db.execute('UPDATE executions SET digest=? WHERE execution_id=?', (digest, row['execution_id']))
             return projection(row)
         count = db.execute("SELECT COUNT(*) FROM executions WHERE state IN ('queued','running','stop_requested','committing')").fetchone()[0]
         if count >= 128:

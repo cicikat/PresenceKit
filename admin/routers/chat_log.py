@@ -169,6 +169,9 @@ async def list_dates(
     dates.extend(datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d')
                  for row in recent(grant.owner_id, resolved, max_items=30, window_hours=24 * 36500)
                  if isinstance(row.get('display_activity'), dict))
+    from core.conversation_execution import stopped_turns
+    dates.extend(datetime.fromtimestamp(row['created_at']).strftime('%Y-%m-%d')
+                 for row in stopped_turns(grant.memory_scope))
     dates = sorted(set(dates), reverse=True)
     return {"dates": dates, "count": len(dates)}
 
@@ -286,7 +289,10 @@ async def get_day(
                   if isinstance(row.get('display_activity'), dict)
                   and datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d') == date]
     activity_ids = {item['event_id'] for item in activities}
-    if not day_found and not activities:
+    from core.conversation_execution import stopped_turns
+    stopped_for_day = [row for row in stopped_turns(grant.memory_scope)
+                       if datetime.fromtimestamp(row['created_at']).strftime('%Y-%m-%d') == date]
+    if not day_found and not activities and not stopped_for_day:
         raise HTTPException(status_code=404, detail="log not found")
     entries = [entry for entry in entries if not (entry.get('entry_kind') == 'narration' and entry.get('turn_id') in activity_ids)]
     entries.extend({'time': datetime.fromtimestamp(item['ts']).strftime('%H:%M'), 'ts': item['ts'],
@@ -367,6 +373,16 @@ async def get_day(
         minute = entry['time'][:5]
         return (minute, 0 if isinstance(ts, (int, float)) and ts > 0 else 1,
                 ts if isinstance(ts, (int, float)) and ts > 0 else 0)
+    from core.conversation_execution import stopped_turns
+    from datetime import datetime
+    for stopped in stopped_turns(grant.memory_scope):
+        at = datetime.fromtimestamp(stopped['created_at'])
+        if at.strftime('%Y-%m-%d') == date:
+            entries.append({'time': at.strftime('%H:%M'), 'ts': stopped['created_at'],
+                            'turn_id': stopped['turn_id'], 'request_id': stopped['request_id'],
+                            'user': stopped['user_text'], 'assistant': stopped['assistant_text'],
+                            'state': 'stopped', 'incomplete': True,
+                            'media_refs': __import__('json').loads(stopped['media_refs'])})
     entries.sort(key=order)
     raw_fallback = len(entries) == 0 and bool(text.strip())
     try:

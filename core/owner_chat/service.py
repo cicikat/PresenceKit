@@ -85,6 +85,8 @@ async def run_owner_chat_turn(
         logger.exception("[owner_chat] trigger state notify_owner_turn 失败")
 
     _probe_text = trusted_user_text if trusted_user_text is not None else message
+    from core.conversation_execution import input_message
+    input_message(_probe_text, media_refs)
 
     from core.reply_context import apply_reply_prefix
 
@@ -136,6 +138,8 @@ async def run_owner_chat_turn(
 
     _t_start = time.monotonic()
     async with conversation_lock(user_id):
+        from core.conversation_execution import started
+        started()
         from core.tools.chat_artifacts import begin_turn_collection, drain_turn_artifacts
         begin_turn_collection()
         try:

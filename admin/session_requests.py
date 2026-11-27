@@ -17,14 +17,20 @@ def session_grant(session_id: str | None, token_label: str):
 async def run_session_request(*, grant, request_id, payload, executor):
     from core.session_scope import SessionScopeError, execute_request
 
+    from core import conversation_control, conversation_execution
+    from core.session_scope import validate_request_id
+    async def controlled():
+        return await conversation_execution.execute(grant=grant, request_id=rid, payload=payload, executor=executor, allow_retry=True)
     try:
+        rid = validate_request_id(request_id)
         _rid, result = await execute_request(
-            grant=grant, request_id=request_id, payload=payload, executor=executor,
+            grant=grant, request_id=rid, payload=payload, executor=controlled,
         )
         return result
     except SessionScopeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.code) from None
-
+    except conversation_control.ControlError as exc:
+        raise HTTPException(exc.status, exc.code) from None
 
 
 def owner_media_scope() -> tuple[str, str]:

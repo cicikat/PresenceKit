@@ -683,3 +683,28 @@ def test_invalid_tool_history_fails_closed_without_payload_in_error(target, corr
     with pytest.raises(ValueError) as caught:
         target(history)
     assert "private-fixture-content" not in str(caught.value)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', ['responses', 'chat_completions'])
+async def test_closing_text_stream_closes_provider_before_return(protocol):
+    """Stop must await provider close, not leave an SDK connection consuming tokens."""
+    import asyncio
+    closed = asyncio.Event()
+    async def provider():
+        try:
+            if protocol == 'responses':
+                yield SimpleNamespace(type='response.output_text.delta', delta='prefix')
+            else:
+                yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='prefix'))])
+            await asyncio.Event().wait()
+        finally:
+            closed.set()
+    async def create_stream(**kwargs):
+        return provider()
+    client = SimpleNamespace(responses=SimpleNamespace(create=create_stream),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create_stream)))
+    mc = _responses_mc(client) if protocol=='responses' else _chat_mc(client)
+    source = stream_text(mc,[{'role':'user','content':'fixture'}],gen_kwargs={})
+    assert await anext(source)=='prefix'
+    await source.aclose()
+    assert closed.is_set()

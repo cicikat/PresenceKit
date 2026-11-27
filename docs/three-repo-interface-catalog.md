@@ -1497,3 +1497,7 @@ current：手机同步跳过本机暂停的自动账目，手动账目独立可�
 current：新增 session-scoped `GET /conversation/executions`、`GET /conversation/requests/{request_id}`、`GET /conversation/mutations?after=&limit=`。均要求 chat Bearer + Reality session，返回 no-store；request 查询限本 credential，活动执行和 metadata-only mutations 按 owner/character 隔离，revision 独立于 mobile ACK/seq/history_index。持久状态与重启 interrupted、stop/commit 仲裁见 [实施记录](conversation-control-delivery.md)。
 
 open：A 尚未将现有生成接入控制库，停止/删除/恢复写接口、实时控制帧及双端按钮后续分单施工，当前无可用产品入口。observe：三仓联调/设备/真实模型未验收。
+
+### 聊天控制 B：后端停止（2026-11-27）
+
+current：session_request 与桌面持久 receipt 的实际 executor 已接入；新增 `POST /conversation/requests/{request_id}/stop`（本 credential，先到 stop 可阻止迟到 POST）及 `POST /conversation/executions/{execution_id}/stop`（同 owner/char 跨端）。committing/completed 不取消，stop_requested 不是 stopped；停止展示记录经日期 history 恢复且不入记忆。详见 [实施记录 B](conversation-control-delivery.md)。open：双端按钮/实时控制通知、删除/恢复仍待后续子单。observe：真实 provider/设备/UI 未验收。

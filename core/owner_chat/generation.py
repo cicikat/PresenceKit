@@ -148,6 +148,8 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
                     else piece
                 )
                 if visible_piece:
+                    from core.conversation_execution import prefix
+                    prefix(visible_piece)
                     await _ui_push.push_stream_delta(
                         _stream_msg_id,
                         visible_piece,
@@ -185,6 +187,10 @@ async def generate_turn(turn: OwnerChatTurn, prepared: PreparedTurn) -> Generate
                     await _ui_push.push_stream_delta(_stream_msg_id, visible)
             raise
         finally:
+            source = locals().get("_stream_source")
+            close = getattr(source, "aclose", None)
+            if close is not None:
+                await close()
             await _ui_push.push_stream_end(_stream_msg_id)
         if _t_first_delta_ts is not None:
             _t_stream = time.monotonic() - _t_first_delta_ts

@@ -75,6 +75,8 @@ async def commit_and_deliver(turn: OwnerChatTurn, prepared: PreparedTurn,
     reply = strip_control_markers(reply)
     _t0 = time.monotonic()
     logger.debug("[owner_chat] stage=commit request_id=%s", request_id)
+    from core.conversation_execution import begin_commit
+    begin_commit()
     turn_result = await record_assistant_turn(
         assistant_text=reply,
         uid=user_id,

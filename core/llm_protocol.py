@@ -1284,6 +1284,16 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
         await stream.close()
 
 
+async def _close_text_stream(stream):
+    """SDK streams expose close(); async-generator boundaries expose aclose()."""
+    import inspect
+    close = getattr(stream, "close", None) or getattr(stream, "aclose", None)
+    if close is not None:
+        result = close()
+        if inspect.isawaitable(result):
+            await result
+
+
 async def _stream_text(
     mc: Any,
     messages: list[dict[str, Any]],
@@ -1306,18 +1316,21 @@ async def _stream_text(
             model=mc.model, messages=wire_messages, stream=True, **{**gen_kwargs,
                 "stream_options": {**(gen_kwargs.get("stream_options") or {}), "include_usage": True}},
         )
-        async for chunk in stream:
-            if getattr(chunk, "usage", None) is not None:
-                capture.usage = _usage(chunk.usage)
-            choices = getattr(chunk, "choices", None)
-            if not isinstance(choices, list) or not choices:
-                continue
-            delta = getattr(choices[0], "delta", None)
-            for key in ("reasoning_content", "reasoning"):
-                capture.add(key, getattr(delta, key, None))
-            text = getattr(delta, "content", None)
-            if text:
-                yield text
+        try:
+            async for chunk in stream:
+                if getattr(chunk, "usage", None) is not None:
+                    capture.usage = _usage(chunk.usage)
+                choices = getattr(chunk, "choices", None)
+                if not isinstance(choices, list) or not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                for key in ("reasoning_content", "reasoning"):
+                    capture.add(key, getattr(delta, key, None))
+                text = getattr(delta, "content", None)
+                if text:
+                    yield text
+        finally:
+            await _close_text_stream(stream)
         return
     if _protocol(mc) == "anthropic_messages":
         url, headers, payload, timeout = _anthropic_messages_request(
@@ -1386,50 +1399,54 @@ async def _stream_text(
     completed = False
     emitted = ""
     function_argument_deltas: dict[str, str] = {}
-    async for event in stream:
-        event_type = getattr(event, "type", None)
-        if event_type in {"response.reasoning_summary_text.delta", "response.reasoning_text.delta"}:
-            source = "reasoning_summary" if "summary" in event_type else "reasoning_content"
-            capture.add(source, getattr(event, "delta", None))
-        if event_type == "response.output_text.delta":
-            delta = getattr(event, "delta", None)
-            if not isinstance(delta, str):
-                raise _format_error(mc, "Responses text delta is not text", event)
-            emitted += delta
-            yield delta
-        elif event_type == "response.function_call_arguments.delta":
-            item_id = str(getattr(event, "item_id", ""))
-            delta = getattr(event, "delta", None)
-            if not isinstance(delta, str):
-                raise _format_error(mc, "Responses function argument delta is not text", event)
-            function_argument_deltas[item_id] = function_argument_deltas.get(item_id, "") + delta
-        elif event_type in {"response.function_call_arguments.done", "response.output_item.done"}:
-            # These events establish tool/item completion. The final completed
-            # response below remains the authoritative normalized result.
-            continue
-        elif event_type == "response.completed":
-            # The completed response is authoritative; avoid storing both its
-            # reasoning and the same streamed deltas.
-            from core.llm_reasoning_store import Capture
-            final_capture = Capture(mc)
-            final_capture.purpose = capture.purpose
-            final_capture.response(getattr(event, "response", None))
-            if final_capture.parts:
-                capture.parts = final_capture.parts
-            normalized = _normalize_responses(mc, getattr(event, "response", None))
-            capture.usage = normalized.usage
-            if normalized.tool_calls:
-                raise _format_error(mc, "Responses text stream unexpectedly returned function calls", event)
-            if normalized.assistant_text and not emitted:
-                emitted = normalized.assistant_text
-                yield normalized.assistant_text
-            completed = True
-        elif event_type in {"response.failed", "response.incomplete", "error"}:
-            raise _format_error(mc, f"Responses stream terminated with {event_type}", event)
-        # Other lifecycle events (created, queued, in_progress, content part) do
-        # not carry user-visible text and are intentionally ignored.
-    if not completed:
-        raise _format_error(mc, "Responses stream ended before response.completed")
+    try:
+        async for event in stream:
+            event_type = getattr(event, "type", None)
+            if event_type in {"response.reasoning_summary_text.delta", "response.reasoning_text.delta"}:
+                source = "reasoning_summary" if "summary" in event_type else "reasoning_content"
+                capture.add(source, getattr(event, "delta", None))
+            if event_type == "response.output_text.delta":
+                delta = getattr(event, "delta", None)
+                if not isinstance(delta, str):
+                    raise _format_error(mc, "Responses text delta is not text", event)
+                emitted += delta
+                yield delta
+            elif event_type == "response.function_call_arguments.delta":
+                item_id = str(getattr(event, "item_id", ""))
+                delta = getattr(event, "delta", None)
+                if not isinstance(delta, str):
+                    raise _format_error(mc, "Responses function argument delta is not text", event)
+                function_argument_deltas[item_id] = function_argument_deltas.get(item_id, "") + delta
+            elif event_type in {"response.function_call_arguments.done", "response.output_item.done"}:
+                # These events establish tool/item completion. The final completed
+                # response below remains the authoritative normalized result.
+                continue
+            elif event_type == "response.completed":
+                # The completed response is authoritative; avoid storing both its
+                # reasoning and the same streamed deltas.
+                from core.llm_reasoning_store import Capture
+                final_capture = Capture(mc)
+                final_capture.purpose = capture.purpose
+                final_capture.response(getattr(event, "response", None))
+                if final_capture.parts:
+                    capture.parts = final_capture.parts
+                normalized = _normalize_responses(mc, getattr(event, "response", None))
+                capture.usage = normalized.usage
+                if normalized.tool_calls:
+                    raise _format_error(mc, "Responses text stream unexpectedly returned function calls", event)
+                if normalized.assistant_text and not emitted:
+                    emitted = normalized.assistant_text
+                    yield normalized.assistant_text
+                completed = True
+            elif event_type in {"response.failed", "response.incomplete", "error"}:
+                raise _format_error(mc, f"Responses stream terminated with {event_type}", event)
+            # Other lifecycle events (created, queued, in_progress, content part) do
+            # not carry user-visible text and are intentionally ignored.
+        if not completed:
+            raise _format_error(mc, "Responses stream ended before response.completed")
+
+    finally:
+        await _close_text_stream(stream)
 
 
 async def create(mc, messages, *, tools=None, tool_choice=None, gen_kwargs):
