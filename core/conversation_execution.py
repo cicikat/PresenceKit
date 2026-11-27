@@ -114,9 +114,14 @@ async def execute(*, grant, request_id, payload, executor, allow_retry=False):
             db.execute("UPDATE executions SET state='queued',boot=?,updated_at=? WHERE execution_id=? AND state='failed'", (control._BOOT, time.time(), row['execution_id']))
         existing = False
         row['state'] = 'queued'
+    # Admission is authoritative even if a stop arrived after the preliminary
+    # receipt lookup (e.g. another control worker). Never start a stopped task.
+    if row['state'] == 'stopped':
+        from core.conversation_recovery import hidden
+        if hidden(scope,row['turn_id']):
+            raise control.ControlError('turn_deleted',410)
+        return _stopped_result(scope, row, str((payload or {}).get('message') or ''))
     if existing:
-        if row['state'] == 'stopped':
-            return _stopped_result(scope, row, str((payload or {}).get('message') or ''))
         raise control.ControlError('execution_' + row['state'])
     key = _key(scope, row['execution_id'])
     async def run():

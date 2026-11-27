@@ -1500,12 +1500,12 @@ open：A 尚未将现有生成接入控制库，停止/删除/恢复写接口、
 
 ### 聊天控制 B：后端停止（2026-11-27）
 
-current：session_request 与桌面持久 receipt 的实际 executor 已接入；新增 `POST /conversation/requests/{request_id}/stop`（本 credential，先到 stop 可阻止迟到 POST）及 `POST /conversation/executions/{execution_id}/stop`（同 owner/char 跨端）。committing/completed 不取消，stop_requested 不是 stopped；停止展示记录经日期 history 恢复且不入记忆。详见 [实施记录 B](conversation-control-delivery.md)。open：双端按钮/实时控制通知、删除/恢复仍待后续子单。observe：真实 provider/设备/UI 未验收。
+current：session_request 与桌面持久 receipt 的实际 executor 已接入；新增 `POST /conversation/requests/{request_id}/stop`（本 credential，先到 stop 可阻止迟到 POST）及 `POST /conversation/executions/{execution_id}/stop`（同 owner/char 跨端）。committing/completed 不取消，stop_requested 不是 stopped；停止展示记录经日期 history 恢复且不入记忆。详见 [实施记录 B](conversation-control-delivery.md)。该阶段原 open 项已由下方 D 阶段完成代码接线；observe：真实 provider/实体设备完整链路仍未验收。
 
 
 ### 2026-11-27 Conversation control：current / observe
 
-- current：三个客户端入口合同以 Session grant 冻结 owner/character/reality；`GET /conversation/state` 返回独立 revision、active executions、最近 stopped/interrupted 元信息与 visibility 全快照，不含正文。`GET /conversation/mutations` 支持按独立 cursor 顺序补拉，绝不能复用 mobile seq/ACK 或 history_index。
+- current：三个客户端入口合同以 Session grant 冻结 owner/character/reality；`GET /conversation/state` 返回独立 revision、active executions、最近 stopped/interrupted 元信息与 visibility 全快照、`withdrawn_requests` 精确请求关联集合，不含正文。`GET /conversation/mutations` 支持按独立 cursor 顺序补拉，绝不能复用 mobile seq/ACK 或 history_index。
 - current：双端 `POST /conversation/executions/{execution_id}/stop`；原请求未准入时可用本 credential 的 `POST /conversation/requests/{request_id}/stop` 保存停止意图。committing/completed 不回退。手机仍是 final-only WS，并未改成 token streaming。
 - current：双端精确 `POST /conversation/turns/{turn_id}/delete`，body `{operation_id,expected_revision?}`；desktop-only `GET /conversation/deletions`（before/limit）、detail、`POST .../restore`（operation_id + expected_revision）、`POST .../repair`。403 不是网络故障，禁止提权/换 scope 重试。
 - current：WS `conversation_changed` 仅含 revision + char_id/domain；mobile 另带原 generation/client_type。收到只提示重读 state，不作为正文、final 或 ACK；溢出与断线按原通道恢复。前台每 2s 状态补校准、focus/reconnect 补读，删除栅栏过滤所有迟到历史/WS/HTTP；可见旧日页在变更后重读，恢复不依赖新通知序号。

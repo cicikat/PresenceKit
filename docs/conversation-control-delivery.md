@@ -74,3 +74,12 @@ B 的远端检查抓到三个本单问题：Python 3.10 没有 Task.cancelling�
 
 
 D 最终后端复核：control/recovery/desktop receipts/mobile realtime/Admin 消费者清单/session cutover/scopes/data registry/Responses 协议，502 passed（Python 3.12）。补充独立解释器栅栏与权限验证 76 passed。桌面最终全套和手机旧日恢复回归以各自交付文档/SHA 为准，不把本地脏工作区全量当干净 CI。
+
+
+### D 收尾：停止竞态、离线本地未确认副本
+
+新增 `withdrawn_requests` 元信息，按 execution canonical turn 与归档 final/stopped 的精确 request_id 关联，防止另一设备删除时，离线客户端仅有 request_id 的旧未知气泡在重开后残留；不是按文字推断。恢复后该集合随 visibility 消失。客户端同时结束已停止请求的本机等待/未完成凭据，不补发模型请求；迟到 stream-start 也不重新开气泡。
+
+停止意图恰在 preliminary lookup 与 admit 之间到达时，以 admit 返回的 stopped 状态为准，不创建 executor。已删除停止记录不允许通过原请求重放重建。撤销这条 admission 守卫后，新回归真实失败 `stopped admission executed provider`；还原后 1 passed。手机撤销旧日重读后，新用例在可见 restored answer 断言失败；还原后通过。最终后端相关组 503 passed。
+
+`e9267750862089f82e9776f21447161599880ba7` 干净远端 CI：offline-evals success；Python 3.10/3.12 full pytest 均 9018 passed、14 failed、71 skipped（另 13 subtests passed）。本单先前 route coverage 与 receipt 时序失败已消失；剩余失败为角色资产 fixture/loaded character/name 能力前置条件，未修改无关生产逻辑或降低断言。

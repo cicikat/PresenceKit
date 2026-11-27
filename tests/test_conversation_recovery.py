@@ -27,7 +27,7 @@ def seeded(sandbox):
                 actor=actor,kind='user_message' if actor=='user' else 'assistant_message',raw_text=content,visible_text=content,memory_text=content))
             assert result.ok
             entries.append({'role':actor,'content':content,'_turn_id':tid})
-        remember_final(uid=scope.uid,char_id=scope.character_id,turn_id=tid,content='same answer',display_text='same answer')
+        remember_final(uid=scope.uid,char_id=scope.character_id,turn_id=tid,request_id=tid+'_request',content='same answer',display_text='same answer')
     safe_write_json(short_term._history_write_path(scope.uid,char_id=scope.character_id),entries)
     root=event_log._event_log_read_dir(scope.uid,char_id=scope.character_id);root.mkdir(parents=True,exist_ok=True)
     day=datetime.fromtimestamp(now).strftime('%Y-%m-%d')
@@ -46,6 +46,7 @@ async def test_exact_delete_restore_keeps_other_identical_turn_and_new_memory(se
     scope,turn,other,day=seeded
     result=await recovery.delete(scope,turn_id=turn,operation_id='delete_fixture',label='mobile_fixture')
     assert result['state']=='completed'
+    assert control.snapshot(scope)['withdrawn_requests']==[turn+'_request']
     assert {item['_turn_id'] for item in short_term.load(scope.uid,char_id=scope.character_id)}=={other}
     assert 'turn_id:'+turn not in event_log.get_recent_days(scope.uid,days=1,char_id=scope.character_id)
     assert event_query.get_event(scope,turn+':assistant',include_isolated=True)['tombstoned']
@@ -181,6 +182,9 @@ async def test_stopped_display_round_can_be_deleted_and_restored_without_learnin
         pytest.fail('cancelled model must not execute')
     stopped=await execution.execute(grant=grant,request_id='req_fixture',payload={'message':'question'},executor=forbidden)
     result=await recovery.delete(scope,turn_id=stopped['turn_id'],operation_id='delete_fixture',label='mobile_fixture')
+    assert execution.stopped_turns(scope)==[]
+    with pytest.raises(control.ControlError,match='turn_deleted'):
+        await execution.execute(grant=grant,request_id='req_fixture',payload={'message':'question'},executor=forbidden)
     assert execution.stopped_turns(scope)==[]
     await recovery.restore(scope,deletion_id=result['deletion_id'],operation_id='restore_fixture',expected_revision=result['revision'])
     assert execution.stopped_turns(scope)[0]['user_text']=='question'

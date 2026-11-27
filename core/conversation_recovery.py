@@ -36,6 +36,7 @@ def _schema(db):
     db.execute('''CREATE TABLE IF NOT EXISTS visibility (
       turn_id TEXT PRIMARY KEY, deletion_id TEXT NOT NULL, hidden INTEGER NOT NULL,
       revision INTEGER NOT NULL)''')
+    db.execute('CREATE TABLE IF NOT EXISTS turn_request_links (turn_id TEXT NOT NULL,request_id TEXT NOT NULL,PRIMARY KEY(turn_id,request_id))')
     db.execute('''CREATE TABLE IF NOT EXISTS blocked_sources (
       source_id TEXT NOT NULL, deletion_id TEXT NOT NULL,
       PRIMARY KEY(source_id,deletion_id))''')
@@ -174,9 +175,12 @@ def _snapshot(scope, turn_id, deletion_id):
         raise control.ControlError('turn_not_found',404)
     if any(row['redaction_state']=='tombstoned' for row in events):
         raise control.ControlError('turn_already_withdrawn')
+    requests={str(json.loads(row['envelope']).get('request_id') or '') for row in finals}
+    requests.update(str(row.get('request_id') or '') for row in stopped)
+    requests.discard('')
     patches,vectors,unlinked=_derivatives(scope,turn_id,deletion_id)
     return {'version':1,'history':selected,'long_messages':long_messages,'logs':logs,'events':events,'finals':finals,
-            'stopped':stopped,'patches':patches,'vectors':vectors,'unlinked':unlinked,
+            'stopped':stopped,'request_ids':sorted(requests),'patches':patches,'vectors':vectors,'unlinked':unlinked,
             'before_turn':next((item.get('_turn_id') for item in reversed(history[:selected[0]['index']]) if item.get('_turn_id')),None) if selected else None,
             'after_turn':next((item.get('_turn_id') for item in history[selected[-1]['index']+1:] if item.get('_turn_id')),None) if selected else None}
 
@@ -299,6 +303,7 @@ async def delete(scope, *, turn_id, operation_id, label, expected_revision=None)
             rev=control._mutation(db,'turn_deleted',{'turn_id':turn_id,'deletion_id':deletion_id,'state':'applying'})
             db.execute('INSERT OR REPLACE INTO visibility VALUES(?,?,1,?)',(turn_id,deletion_id,rev))
             db.executemany('INSERT OR IGNORE INTO blocked_sources VALUES(?,?)',[(sid,deletion_id) for sid in snapshot['vectors']])
+            db.executemany('INSERT OR IGNORE INTO turn_request_links VALUES(?,?)',[(turn_id,rid) for rid in snapshot.get('request_ids',[])])
             db.execute("UPDATE deletions SET state='applying' WHERE deletion_id=?",(deletion_id,))
             db.commit()
             try:
@@ -479,6 +484,7 @@ async def repair(scope, deletion_id):
                 rev=control._mutation(db,'turn_deleted',{'turn_id':row['turn_id'],'deletion_id':deletion_id,'state':'applying'})
                 db.execute('INSERT OR REPLACE INTO visibility VALUES(?,?,1,?)',(row['turn_id'],deletion_id,rev))
             db.executemany('INSERT OR IGNORE INTO blocked_sources VALUES(?,?)',[(sid,deletion_id) for sid in snapshot['vectors']])
+            db.executemany('INSERT OR IGNORE INTO turn_request_links VALUES(?,?)',[(row['turn_id'],rid) for rid in snapshot.get('request_ids',[])])
             db.commit()
             try:
                 _apply(scope,row['turn_id'],snapshot)

@@ -254,11 +254,31 @@ async def test_scoped_state_snapshot_tracks_withdrawal_and_restore(scope):
     before=control.snapshot(scope)
     assert before['executions'][0]['execution_id']==row['execution_id']
     assert before['visibility']==[]
-    control.transition(scope,row['execution_id'],'stopped')
+    control.transition(scope,row['execution_id'],'stopped',turn_id='turn_fixture')
     deleted=await recovery.delete(scope,turn_id='turn_fixture',operation_id='delete_fixture',label='mobile_fixture')
     hidden=control.snapshot(scope)
+    assert hidden['withdrawn_requests']==['fixture']
     assert hidden['executions']==[] and hidden['visibility'][0]['hidden']==1
     assert hidden['revision']>before['revision']
     await recovery.restore(scope,deletion_id=deleted['deletion_id'],operation_id='restore_fixture',expected_revision=deleted['revision'])
     restored=control.snapshot(scope)
+    assert restored['withdrawn_requests']==[]
     assert restored['visibility'][0]['hidden']==0 and restored['revision']>hidden['revision']
+
+
+@pytest.mark.asyncio
+async def test_stop_racing_preliminary_lookup_never_starts_executor(scope,monkeypatch):
+    """Admission state, not an earlier existence check, arbitrates stop intent."""
+    from core import conversation_execution as execution
+    from tests.fixtures.session_grants import issue
+    grant=issue(monkeypatch,owner=scope.uid,char=scope.character_id,label='mobile_fixture')
+    admit=control.admit
+    def racing_admit(*args,**kwargs):
+        execution.stop_request(scope,label=grant.token_label,request_id='racing_fixture')
+        return admit(*args,**kwargs)
+    monkeypatch.setattr(control,'admit',racing_admit)
+    async def forbidden():
+        pytest.fail('stopped admission executed provider')
+    result=await execution.execute(grant=grant,request_id='racing_fixture',payload={'message':'question'},executor=forbidden)
+    assert result['state']=='stopped'
+    assert control.active(scope)==[]

@@ -175,5 +175,8 @@ def snapshot(scope):
         active_rows=db.execute("SELECT * FROM executions WHERE state IN ('queued','running','stop_requested','committing') ORDER BY created_at LIMIT 128").fetchall()
         tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         visibility=[dict(row) for row in db.execute('SELECT turn_id,hidden,revision FROM visibility')] if 'visibility' in tables else []
+        withdrawn=[row[0] for row in db.execute('SELECT e.request_id FROM executions e JOIN visibility v ON v.turn_id=e.turn_id WHERE v.hidden=1')] if 'visibility' in tables else []
+        if 'turn_request_links' in tables:
+            withdrawn=sorted(set(withdrawn)|{row[0] for row in db.execute('SELECT r.request_id FROM turn_request_links r JOIN visibility v ON v.turn_id=r.turn_id WHERE v.hidden=1')})
         terminal=db.execute("SELECT * FROM executions WHERE state IN ('stopped','interrupted') ORDER BY updated_at DESC LIMIT 128").fetchall()
-        return {'revision':revision,'executions':[projection(row) for row in active_rows],'visibility':visibility,'recent_terminal':[projection(row) for row in terminal]}
+        return {'revision':revision,'executions':[projection(row) for row in active_rows],'visibility':visibility,'recent_terminal':[projection(row) for row in terminal],'withdrawn_requests':withdrawn}
