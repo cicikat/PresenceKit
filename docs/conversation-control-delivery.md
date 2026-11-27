@@ -48,3 +48,14 @@ A 提交 CI：offline-evals 通过；Tests 失败。其中新 Router 的鉴权 i
 B 的远端检查抓到三个本单问题：Python 3.10 没有 Task.cancelling；generation 的 locals() 清理写法触发架构守卫；新 Pipeline 测试替身缺少已提交版本仍会读取的 character 能力，本地并行重构掩盖了该缺项。修正为执行 ID 级取消发送集合、显式初始化 stream source、给替身建立完整前置条件。未改/提交其他任务的 prepare 重构；不将受脏工作区影响的结果冒充干净提交 CI 结果。
 
 定向复核：control + architecture 共 207 passed、1 failed；唯一失败为并行未提交的 coplay_watch 行号变动导致 retained-registry 清单不一致，未改该文件或批准清单。真正的 dependency direction/namespace 检查与新增控制回归通过。
+
+
+## C：精确删除与独立恢复库（2026-11-27）
+
+- `conversation_control.sqlite3` 独立于事件库与向量库，归属已有受保护的 per-character/user memory 根。删除档案包含精确轮次快照、派生实体补丁和操作状态；不存入普通聊天上下文。
+- 删除先持久化档案，再持久化隐藏栅栏，再处理 history、长消息、日记块、事件正文、mobile finals、队列和向量。中途失败返回 `repair_pending`，读侧与迟到写入继续受栅栏保护；桌面恢复权限支持 repair 重试。
+- 恢复使用实体级 CAS 和相邻轮次锚点，保留后续无关写入；冲突返回 409。恢复中途失败仍隐藏，原操作号可重试。不会重放模型、工具、通知或改变 mobile ACK/seq。
+- `chat.recovery` 仅加入 desktop profile，mobile profile 只能删除；共享管理员凭据天然拥有管理权限，不能把客户端型号当安全边界。
+- 精确关联的 mid_term、episodic、storyline 结论会失效；混合来源结论整体退出召回，其他证据保留。旧 identity/facts/情绪等没有可靠来源链的数据列入人工复核，不做文字匹配删除。Dossier 删除按现有 evidence invalidation 合同；恢复只还原源证据，不复用旧结论，标记 `recompute_required`。向量恢复标记 `index_pending`，由既有重建机制重算，不调用模型伪造旧向量。
+- 默认不物理清除 archive；恢复记录本身也保留审计。不授权生产迁移、部署或全库清理。
+- 定向验证：Python 3.12，控制/恢复、事件账本与查询、向量、失效链、日记、中期、storyline、scope、short_term 共 166 passed（补充重启用例另记）。新增权限/失败保护均由挂载路由或真实持久化入口观察；不使用生产数据。

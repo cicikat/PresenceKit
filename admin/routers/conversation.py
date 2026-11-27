@@ -1,4 +1,6 @@
 """Session-scoped conversation control; no caller supplied owner/character."""
+import sqlite3
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 
 from admin.auth import require_scopes
@@ -50,3 +52,59 @@ async def stop_request(request_id: str, session=Depends(grant)):
 async def stop_execution(execution_id: str, session=Depends(grant)):
     from core.conversation_execution import stop_execution as stop
     return _call(stop, session.memory_scope, execution_id)
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class DeleteTurn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    operation_id: str = Field(min_length=1,max_length=128)
+    expected_revision: int | None = Field(default=None,ge=0)
+
+
+class RestoreTurn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    operation_id: str = Field(min_length=1,max_length=128)
+    expected_revision: int = Field(ge=0)
+
+
+async def _async_call(fn, *args, **kwargs):
+    try:
+        return await fn(*args, **kwargs)
+    except control.ControlError as exc:
+        raise HTTPException(exc.status,exc.code) from None
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503,'conversation_projection_unavailable') from None
+
+
+@router.post('/turns/{turn_id}/delete')
+async def delete_turn(turn_id: str, body: DeleteTurn, session=Depends(grant)):
+    from core.conversation_recovery import delete
+    return await _async_call(delete,session.memory_scope,turn_id=turn_id,label=session.token_label,
+                             operation_id=body.operation_id,expected_revision=body.expected_revision)
+
+
+@router.get('/deletions',dependencies=[Depends(require_scopes('chat.recovery'))])
+def deletion_list(response: Response, before: float | None=None, limit: int=Query(30,ge=1,le=100),session=Depends(grant)):
+    from core.conversation_recovery import list_deleted
+    response.headers['Cache-Control']='no-store'
+    return _call(list_deleted,session.memory_scope,before=before,limit=limit)
+
+
+@router.get('/deletions/{deletion_id}',dependencies=[Depends(require_scopes('chat.recovery'))])
+def deletion_detail(deletion_id: str,response: Response,session=Depends(grant)):
+    from core.conversation_recovery import detail
+    response.headers['Cache-Control']='no-store'
+    return _call(detail,session.memory_scope,deletion_id)
+
+
+@router.post('/deletions/{deletion_id}/restore',dependencies=[Depends(require_scopes('chat.recovery'))])
+async def restore_turn(deletion_id: str,body: RestoreTurn,session=Depends(grant)):
+    from core.conversation_recovery import restore
+    return await _async_call(restore,session.memory_scope,deletion_id=deletion_id,
+                             operation_id=body.operation_id,expected_revision=body.expected_revision)
+
+@router.post('/deletions/{deletion_id}/repair',dependencies=[Depends(require_scopes('chat.recovery'))])
+async def repair_deletion(deletion_id: str,session=Depends(grant)):
+    from core.conversation_recovery import repair
+    return await _async_call(repair,session.memory_scope,deletion_id)

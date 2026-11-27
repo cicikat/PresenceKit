@@ -43,7 +43,9 @@ def _stopped_schema(db):
 def stopped_turns(scope) -> list[dict]:
     with control.connection(scope) as db:
         _stopped_schema(db)
-        return [dict(row) for row in db.execute('SELECT * FROM stopped_turns ORDER BY created_at')]
+        from core.conversation_recovery import hidden_ids
+        hidden = hidden_ids(scope)
+        return [dict(row) for row in db.execute('SELECT * FROM stopped_turns ORDER BY created_at') if row['turn_id'] not in hidden]
 
 
 def _stopped_result(scope, row, message=''):

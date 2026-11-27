@@ -553,6 +553,18 @@ def initialize_existing_ledgers(*, max_ledgers: int = 1000) -> dict[str, Any]:
 
 
 def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> AppendResult:
+    from core.conversation_recovery import hidden, lock
+    if not isinstance(scope, MemoryScope) or scope.domain != "reality":
+        return _append_event_unfenced(scope, event)
+    turn_id = event.turn_id if isinstance(event, EventRecord) else str(event.get("turn_id", "")) if isinstance(event, Mapping) else ""
+    with lock(scope):
+        if hidden(scope, turn_id):
+            event_id = event.event_id if isinstance(event, EventRecord) else str(event.get("event_id", ""))
+            return _observe_append(AppendResult(False, False, event_id, "turn_deleted"), scope)
+        return _append_event_unfenced(scope, event)
+
+
+def _append_event_unfenced(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> AppendResult:
     """Append one immutable event, idempotently, with structured failure output."""
     if isinstance(event, EventRecord):
         event_id = event.event_id

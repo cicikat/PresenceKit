@@ -99,6 +99,10 @@ def _safe_media_refs(raw: object) -> list[dict[str, str]]:
 
 
 def _event_projection(row: sqlite3.Row) -> dict[str, Any]:
+    from core.conversation_recovery import hidden
+    if hidden(MemoryScope.reality_scope(str(row["uid"]), str(row["char_id"])), row["turn_id"]):
+        row = dict(row)
+        row.update(redaction_state="tombstoned",raw_payload_json="",raw_text="",visible_text="",memory_text="",media_refs_json="[]")
     try:
         input_meta = json.loads(row["raw_payload_json"] or "{}")
         if not isinstance(input_meta, dict): input_meta = {}

@@ -960,6 +960,10 @@ def capture_turn(
 
     ts = time.time() if occurred_at is None else occurred_at
     turn_id = turn_id or f"{uid}_{int(ts * 1000)}"
+    from core.conversation_recovery import hidden
+    from core.memory.scope import MemoryScope
+    if hidden(MemoryScope.reality_scope(str(uid), char_id), turn_id):
+        return turn_id
 
     if event_context is not None:
         expected_scope = MemoryScope.reality_scope(uid, char_id)
@@ -1159,6 +1163,10 @@ async def summarize_to_midterm(
     _ts_start = time.time()
 
     async with locks.uid_lock(uid):
+        from core.conversation_recovery import hidden
+        from core.memory.scope import MemoryScope
+        if hidden(MemoryScope.reality_scope(str(uid), char_id), turn_id):
+            return None
         existing = _mt.load(uid, char_id=char_id)
         if any(e.get("source_turn_id") == turn_id for e in existing):
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
@@ -1175,6 +1183,10 @@ async def summarize_to_midterm(
 
     mid_id = f"mt_{uid}_{int(time.time() * 1000)}"
     async with locks.uid_lock(uid):
+        from core.conversation_recovery import hidden
+        from core.memory.scope import MemoryScope
+        if hidden(MemoryScope.reality_scope(str(uid), char_id), turn_id):
+            return None
         existing = _mt.load(uid, char_id=char_id)
         if any(e.get("source_turn_id") == turn_id for e in existing):
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")

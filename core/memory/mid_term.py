@@ -47,7 +47,8 @@ def load(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
         data = json.loads(path.read_text(encoding="utf-8"))
         now = time.time()
         events = [e for e in data.get("events", []) if now - e.get("ts", 0) < EXPIRE_SECONDS]
-        return sorted(events, key=lambda e: e["ts"])
+        from core.conversation_recovery import mask_derivatives
+        return mask_derivatives(MemoryScope.reality_scope(str(uid), char_id), sorted(events, key=lambda e: e["ts"]), "mid_term")
     except Exception as e:
         log_error("mid_term.load", e)
         return []
@@ -75,6 +76,9 @@ def append(
     mid_id / source_turn_id 是固化 pipeline 的血缘字段，旧数据缺失按 None 处理。
     occurred_at: 事件真实发生时刻（turn 时刻）；None 时回退到记录时刻 now。
     """
+    from core.conversation_recovery import hidden
+    if source_turn_id and hidden(MemoryScope.reality_scope(str(uid), char_id), source_turn_id):
+        return
     summary = summary.strip()
     if not summary:
         return

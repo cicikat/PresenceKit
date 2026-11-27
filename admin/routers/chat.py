@@ -226,6 +226,9 @@ async def _execute_desktop_request(request_id, *, auth, grant, payload, execute)
         preflight=lambda: _check_desktop_chat_preflight(grant.owner_id, request_id),
     )
     if status in {"completed", "completed_replay"}:
+        from core.conversation_recovery import hidden
+        if hidden(grant.memory_scope, reply.get("turn_id")):
+            raise HTTPException(410, "turn_deleted")
         if tool_protocol_offset(reply.get("reply") or "") is not None:
             raise HTTPException(502, "invalid_assistant_tool_protocol")
         return {**reply, "request_id": request_id}
@@ -254,6 +257,9 @@ async def desktop_chat_request(request_id: str, response: Response, x_presence_s
     if row and row["status"] == "failed" and row.get("error_code") == UpstreamQuotaExhausted.__name__:
         result["error_code"] = UpstreamQuotaExhausted.code
     if row and row["status"] == "completed":
+        from core.conversation_recovery import hidden
+        if hidden(grant.memory_scope, row["canonical_turn_id"]):
+            return {"request_id": request_id, "status": "deleted", "turn_id": row["canonical_turn_id"]}
         reply = project_receipted_reply(row)
         result.update(turn_id=row["canonical_turn_id"], msg_id=row.get("transport_msg_id"))
         if reply and tool_protocol_offset(reply["reply"]) is None:

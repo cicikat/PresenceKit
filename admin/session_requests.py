@@ -26,6 +26,9 @@ async def run_session_request(*, grant, request_id, payload, executor):
         _rid, result = await execute_request(
             grant=grant, request_id=rid, payload=payload, executor=controlled,
         )
+        from core.conversation_recovery import hidden
+        if hidden(grant.memory_scope, result.get("turn_id")):
+            raise HTTPException(410, "turn_deleted")
         return result
     except SessionScopeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.code) from None

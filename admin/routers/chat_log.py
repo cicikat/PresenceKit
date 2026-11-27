@@ -277,6 +277,8 @@ async def get_day(
     new_dir = _event_log._event_log_read_dir(owner, char_id=resolved)
     old_dir = _event_log._legacy_read_dir_if_eligible(owner, resolved)
     text = _event_log._read_day_union(new_dir, old_dir, date)
+    from core.conversation_recovery import filter_log
+    text = filter_log(grant.memory_scope, text)
     entries = _parse_day(text)
     day_found = (new_dir / f"{date}.md").exists() or (
         old_dir is not None and (old_dir / f"{date}.md").exists()
@@ -382,7 +384,7 @@ async def get_day(
                             'turn_id': stopped['turn_id'], 'request_id': stopped['request_id'],
                             'user': stopped['user_text'], 'assistant': stopped['assistant_text'],
                             'state': 'stopped', 'incomplete': True,
-                            'media_refs': __import__('json').loads(stopped['media_refs'])})
+                            'media_refs': _json.loads(stopped['media_refs'])})
     entries.sort(key=order)
     raw_fallback = len(entries) == 0 and bool(text.strip())
     try:

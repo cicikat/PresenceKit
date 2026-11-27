@@ -93,6 +93,10 @@ async def upsert(
 ) -> None:
     """Embed text and store in the vector DB. Fail-open: log and return on any error."""
     from core.memory.embedding import embed, EmbeddingUnavailable
+    from core.conversation_recovery import blocked
+    from core.memory.scope import MemoryScope
+    if blocked(MemoryScope.reality_scope(str(uid), char_id), source_id):
+        return
 
     dim = _configured_dim()
     try:
@@ -121,6 +125,10 @@ async def upsert(
     )
 
 
+from core.conversation_recovery import vector_write_guard
+
+
+@vector_write_guard
 def _upsert_sync(
     uid: str, char_id: str, source: str, source_id: str, ts: float, text: str, vec: list[float]
 ) -> None:
@@ -217,6 +225,10 @@ def query(
 
         results: list[tuple[str, float, float]] = []
         for rowid, src, src_id, ts in meta_rows:
+            from core.conversation_recovery import blocked
+            from core.memory.scope import MemoryScope
+            if blocked(MemoryScope.reality_scope(str(uid), char_id), src_id):
+                continue
             if sources is not None and src not in sources:
                 continue
             if since_ts is not None and ts < since_ts:
@@ -329,6 +341,10 @@ def query_with_preview(
 
         results: list[tuple[str, str, float]] = []
         for rowid, src, src_id, preview in meta_rows:
+            from core.conversation_recovery import blocked
+            from core.memory.scope import MemoryScope
+            if blocked(MemoryScope.reality_scope(str(uid), char_id), src_id):
+                continue
             if sources is not None and src not in sources:
                 continue
             results.append((src_id, preview or "", dist_map[rowid]))

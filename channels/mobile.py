@@ -269,6 +269,10 @@ class MobileChannel(BaseChannel):
 
     def _read_from_queue(self, after: int | None, limit: int) -> list[dict]:
         queue = self._load_queue()
+        from core.conversation_recovery import hidden
+        from core.memory.scope import MemoryScope
+        queue = [item for item in queue if not (item.get("user_id") and item.get("char_id") and
+                 hidden(MemoryScope.reality_scope(str(item["user_id"]), str(item["char_id"])), item.get("turn_id") or item.get("id")))]
         if after is None:
             return queue[:limit]
         return [item for item in queue if int(item["seq"]) > after][:limit]

@@ -90,6 +90,9 @@ def load(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
     data["meta"].setdefault("consumed_material_ids", [])
     data["meta"].setdefault("aggregation", {"status": "idle", "last_failure_code": "", "last_batch_at": 0.0})
     data.setdefault("arcs", [])
+    from core.conversation_recovery import mask_derivatives
+    for arc in data['arcs']:
+        arc['nodes'] = mask_derivatives(MemoryScope.reality_scope(str(uid), char_id), arc.get('nodes', []), 'storyline')
     return data
 
 

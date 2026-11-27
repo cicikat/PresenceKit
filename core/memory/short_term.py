@@ -63,7 +63,14 @@ def _load_long_messages(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict
     path = _long_messages_path(user_id, char_id=char_id)
     try:
         data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        return data if isinstance(data, dict) else {}
+        if not isinstance(data, dict):
+            return {}
+        from core.conversation_recovery import hidden_ids
+        from core.memory.scope import MemoryScope
+        hidden = hidden_ids(MemoryScope.reality_scope(str(user_id), char_id))
+        if hidden:
+            data['messages'] = {seq:item for seq,item in data.get('messages', {}).items() if item.get('turn_id') not in hidden}
+        return data
     except (OSError, ValueError):
         logger.exception("[short_term] long user message archive unreadable")
         return {}
@@ -376,7 +383,10 @@ def load(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
                     msg["speaker_id"] = _default_speaker_id(role, char_id)
                 if msg.get("role") == "assistant":
                     msg["content"] = _sanitize_assistant_message(msg.get("content", ""), uid=user_id)
-            return data
+            from core.conversation_recovery import hidden_ids
+            from core.memory.scope import MemoryScope
+            hidden = hidden_ids(MemoryScope.reality_scope(str(user_id), char_id))
+            return [item for item in data if item.get("_turn_id") not in hidden]
     except Exception as e:
         log_error("short_term.load", e)
     return []
@@ -555,6 +565,10 @@ def append(
 def _save(user_id: str, history: list[dict], *, char_id: str = DEFAULT_CHAR_ID) -> bool:
     """把历史记录写回磁盘"""
     path = _history_write_path(user_id, char_id=char_id)
+    from core.conversation_recovery import hidden_ids
+    from core.memory.scope import MemoryScope
+    hidden = hidden_ids(MemoryScope.reality_scope(str(user_id), char_id))
+    history = [item for item in history if item.get("_turn_id") not in hidden]
     try:
         return safe_write_json(path, history)
     except Exception as e:

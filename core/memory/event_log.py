@@ -317,6 +317,9 @@ def append(
     char_name = _char_name()
     role_label = "用户" if role == "user" else char_name
 
+    from core.conversation_recovery import hidden
+    if turn_id and hidden(MemoryScope.reality_scope(str(user_id), char_id), turn_id):
+        return
     now = datetime.fromtimestamp(occurred_at) if occurred_at is not None else datetime.now()
     time_str = now.strftime("%H:%M")
 
@@ -430,6 +433,8 @@ def get_recent_days(
         date_str = target_day.strftime("%Y-%m-%d")
         try:
             text = _read_day_union(new_dir, old_dir, date_str)
+            from core.conversation_recovery import filter_log
+            text = filter_log(scope, text)
             if text:
                 parts.append(f"# {date_str}\n{text}")
         except Exception as e:

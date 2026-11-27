@@ -104,10 +104,12 @@ def history(scope: MemoryScope, *, before: int | None = None, limit: int = 50) -
             (scope.uid, scope.character_id, before, before, limit + 1),
         ).fetchall()
     more = len(rows) > limit
-    page = rows[:limit]
+    from core.conversation_recovery import hidden_ids
+    hidden = hidden_ids(scope)
+    page = [row for row in rows[:limit] if json.loads(row[1]).get('turn_id') not in hidden]
     _COUNTS["history_pages"] += 1
     return {"messages": [{**json.loads(row[1]), "history_index": row[0]} for row in page],
-            "next_before": page[-1][0] if more else None}
+            "next_before": rows[:limit][-1][0] if more else None}
 
 
 def finals_for_turns(scope: MemoryScope, turn_ids: list[str]) -> dict[str, dict]:

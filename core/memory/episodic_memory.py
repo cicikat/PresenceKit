@@ -66,7 +66,9 @@ def _load_memories(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list:
     require_character_id(char_id)  # guard before try — ValueError must not be swallowed
     p = _mem_read_file(user_id, char_id=char_id)
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        from core.conversation_recovery import mask_derivatives
+        from core.memory.scope import MemoryScope
+        return mask_derivatives(MemoryScope.reality_scope(str(user_id), char_id), json.loads(p.read_text(encoding="utf-8")), "episodic")
     except FileNotFoundError:
         return []
     except Exception as e:

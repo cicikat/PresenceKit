@@ -6,6 +6,7 @@ SEC-AUTH-2 scope model：scope 注册表与 profile 预置组合。
 SCOPES: frozenset[str] = frozenset({
     "admin",
     "chat",
+    "chat.recovery",
     "development.run",
     "state.read",
     "memory.read",
@@ -24,7 +25,7 @@ SCOPES: frozenset[str] = frozenset({
 
 PROFILES: dict[str, frozenset[str]] = {
     "desktop": frozenset({
-        "chat", "state.read", "memory.read", "activity", "persona",
+        "chat.recovery", "chat", "state.read", "memory.read", "activity", "persona",
         "hardware", "sensor.write", "ws.desktop", "diary.sync",
     }),
     "mobile": frozenset({
