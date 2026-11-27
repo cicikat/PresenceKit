@@ -25,7 +25,7 @@ def get_tools_schema(
     """返回已启用工具的 OpenAI function_calling 格式 schema。
     categories: 若提供，仅返回该分类内的工具；None 返回全部。
     """
-    char_name = character_name_provider.get_active_char_name()
+    char_name = character_name_provider.get_char_name(char_id) if char_id else "角色"
     from core.prompt_language import tool_description, tool_parameters
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
@@ -145,6 +145,7 @@ def _build_probe_prompt(
     location: str | None = None,
     relay: bool = False,
     allowed_tool_names: set[str] | frozenset[str] | None = None,
+    char_id: str | None = None,
 ) -> str:
     """探针类 prompt 的共享构建逻辑。
 
@@ -171,7 +172,7 @@ def _build_probe_prompt(
         "不要用工具结果替代陪伴回应；工具结果只能补充事实。"
         "\n可用工具："
     )
-    char_name = character_name_provider.get_active_char_name()
+    char_name = character_name_provider.get_char_name(char_id) if char_id else "角色"
     for name, spec in _TOOL_REGISTRY.items():
         if spec.get("probe") is False:
             continue
@@ -199,12 +200,14 @@ def get_probe_prompt(
     *,
     categories: tuple[str, ...] | list[str] = ("info", "desktop"),
     allowed_tool_names: set[str] | frozenset[str] | None = None,
+    char_id: str | None = None,
 ) -> str:
     """动态从注册表构建探针 prompt，默认保持 desktop 的 info/desktop 暴露面。"""
     return _build_probe_prompt(
         categories,
         location=location,
         allowed_tool_names=allowed_tool_names,
+        char_id=char_id,
     )
 
 
@@ -212,6 +215,7 @@ def get_tool_loop_relay_prompt(
     categories: list[str],
     *,
     allowed_tool_names: set[str] | frozenset[str] | None = None,
+    char_id: str | None = None,
 ) -> str:
     """Brief 120·工具循环二次调用兜底专用 prompt。
 
@@ -224,4 +228,5 @@ def get_tool_loop_relay_prompt(
         categories,
         relay=True,
         allowed_tool_names=allowed_tool_names,
+        char_id=char_id,
     )

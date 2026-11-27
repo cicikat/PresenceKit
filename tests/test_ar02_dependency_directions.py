@@ -17,6 +17,19 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_tool_schema_descriptions_do_not_resolve_active_runtime():
+    """Schema/probe descriptions may only resolve an explicitly supplied role."""
+    tree = ast.parse((ROOT / "core/tool_runtime/exposure.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        assert node.func.attr != "get_active_char_name"
+        if node.func.attr == "get_char_name":
+            assert node.args or any(keyword.arg == "char_id" for keyword in node.keywords)
+
+
 T31_COMPONENT_MODULES = {
     "core.memory.reality_context", "core.owner_chat.tool_loop",
     "core.post_process.turn_effects", "core.post_process.handlers",

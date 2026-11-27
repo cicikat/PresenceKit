@@ -6,9 +6,8 @@ Contract tests for the P0 char-name-source fix in core/tool_dispatcher.py.
 Rules verified:
 - No module-level _CHAR cache: _TOOL_REGISTRY descriptions contain "{char}" literal
   not a baked-in character name.
-- get_tools_schema() substitutes "{char}" with active card name at call time.
-- get_probe_prompt() substitutes "{char}" with active card name at call time.
-- After hot-swap, descriptions reflect the new character, not the old one.
+- get_tools_schema()/get_probe_prompt() substitute the explicitly supplied card.
+- Changing active runtime does not replace the scoped description owner.
 - _get_episodic_wrapper uses get_active_char_name(), not a cached value.
 """
 
@@ -60,39 +59,37 @@ class TestToolRegistryDescriptions:
 
     def test_get_tools_schema_substitutes_char_name(self):
         from core.tool_dispatcher import get_tools_schema
-        pl = _make_pipeline("红茶")
-        with patch("core.pipeline_registry.get", return_value=pl):
-            schemas = get_tools_schema()
+        from tests.fixtures.public_assets import TEST_CHAR_ID
+        with patch("core.character_loader.load", return_value=_make_pipeline("Fixture A").character):
+            schemas = get_tools_schema(char_id=TEST_CHAR_ID)
         for schema in schemas:
             desc = schema["function"]["description"]
             assert "{char}" not in desc, f"Unresolved {{char}} in schema for {schema['function']['name']!r}"
-            assert "红茶" in desc or "{char}" not in _get_raw_desc(schema["function"]["name"])
+            assert "Fixture A" in desc or "{char}" not in _get_raw_desc(schema["function"]["name"])
 
     def test_get_tools_schema_hotswap(self):
         from core.tool_dispatcher import get_tools_schema
-        pl_a = _make_pipeline("叶瑄")
-        pl_b = _make_pipeline("红茶")
-
-        with patch("core.pipeline_registry.get", return_value=pl_a):
-            schemas_a = {s["function"]["name"]: s["function"]["description"] for s in get_tools_schema()}
-        with patch("core.pipeline_registry.get", return_value=pl_b):
-            schemas_b = {s["function"]["name"]: s["function"]["description"] for s in get_tools_schema()}
+        from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
+        cards = {TEST_CHAR_ID: _make_pipeline("Fixture A").character, TEST_PEER_CHAR_ID: _make_pipeline("Fixture B").character}
+        with patch("core.character_loader.load", side_effect=cards.__getitem__):
+            schemas_a = {s["function"]["name"]: s["function"]["description"] for s in get_tools_schema(char_id=TEST_CHAR_ID)}
+            schemas_b = {s["function"]["name"]: s["function"]["description"] for s in get_tools_schema(char_id=TEST_PEER_CHAR_ID)}
 
         # A char-dependent tool must differ between characters
         for tool_name in ("read_watch", "get_profile"):
             if tool_name in schemas_a and tool_name in schemas_b:
-                assert "叶瑄" in schemas_a[tool_name]
-                assert "红茶" in schemas_b[tool_name]
-                assert "叶瑄" not in schemas_b[tool_name]
+                assert "Fixture A" in schemas_a[tool_name]
+                assert "Fixture B" in schemas_b[tool_name]
+                assert "Fixture A" not in schemas_b[tool_name]
 
     def test_get_probe_prompt_substitutes_char_name(self):
         from core.tool_dispatcher import get_probe_prompt
-        pl = _make_pipeline("红茶")
-        with patch("core.pipeline_registry.get", return_value=pl):
-            prompt = get_probe_prompt("杭州")
+        from tests.fixtures.public_assets import TEST_CHAR_ID
+        with patch("core.character_loader.load", return_value=_make_pipeline("Fixture A").character):
+            prompt = get_probe_prompt("Fixture location", char_id=TEST_CHAR_ID)
         assert "{char}" not in prompt
         # At least one tool description with {char} must have been resolved
-        assert "红茶" in prompt
+        assert "Fixture A" in prompt
 
 
 def _get_raw_desc(tool_name: str) -> str:

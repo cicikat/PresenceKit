@@ -232,21 +232,23 @@ async def test_stream_character_switch_keeps_starting_role_signal(monkeypatch, s
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("explicit", [True, False])
-async def test_stream_explicit_role_or_no_user_does_not_resolve(monkeypatch, sandbox, explicit):
-    """Explicit scopes bypass the provider; no-user streams keep None routing and no signal."""
+async def test_stream_explicit_role_bypasses_provider_and_no_user_keeps_no_signal(monkeypatch, sandbox, explicit):
+    """Explicit scopes bypass the provider; absent-user streams still freeze a role without a signal."""
     from core.character_session import CharacterSession
     from core.pipeline import Pipeline
     from core.memory.short_term import consume_stream_collapse_signal
     from tests.fixtures.public_assets import TEST_PEER_CHAR_ID
 
     def forbidden(session):
-        raise AssertionError("provider must not run for an explicit role or an absent user")
+        if explicit:
+            raise AssertionError("provider must not run for an explicit role")
+        return TEST_CHAR_ID
 
     monkeypatch.setattr(CharacterSession, "current_character_id", forbidden)
     pipeline = Pipeline(None, None, active_character_id=TEST_CHAR_ID)
     requests = []
     uid = _fresh_uid() if explicit else ""
-    expected_id = TEST_PEER_CHAR_ID if explicit else None
+    expected_id = TEST_PEER_CHAR_ID if explicit else TEST_CHAR_ID
 
     async def stream(messages, *, char_id, **kwargs):
         requests.append(char_id)
@@ -254,7 +256,7 @@ async def test_stream_explicit_role_or_no_user_does_not_resolve(monkeypatch, san
 
     monkeypatch.setattr("core.llm_client.chat_stream", stream)
     messages = _history_messages(["嗯。第一条", "嗯。第二条", "嗯。第三条"])
-    assert await _collect(pipeline.generation.run_llm_stream(messages, char_id=expected_id, user_id=uid)) == ["嗯。原样输出"]
+    assert await _collect(pipeline.generation.run_llm_stream(messages, char_id=TEST_PEER_CHAR_ID if explicit else None, user_id=uid)) == ["嗯。原样输出"]
     assert requests == [expected_id]
     assert consume_stream_collapse_signal(uid, char_id=TEST_PEER_CHAR_ID) == ("嗯。" if explicit else None)
     assert consume_stream_collapse_signal(uid, char_id=TEST_CHAR_ID) is None

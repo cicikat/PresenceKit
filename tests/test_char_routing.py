@@ -53,6 +53,50 @@ class _FakePipeline:
     character: object
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_generation_freezes_owner_role_before_model_boundary(monkeypatch, sandbox, stream):
+    """Even no-user generation freezes the supplied owner capability; no model-side active lookup."""
+    from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
+    active = [TEST_CHAR_ID]
+    seen = []
+    async def chat(messages, *, char_id, **kwargs):
+        seen.append(char_id)
+        active[0] = TEST_PEER_CHAR_ID
+        return "Fixture reply."
+    async def chat_stream(messages, *, char_id, **kwargs):
+        seen.append(char_id)
+        active[0] = TEST_PEER_CHAR_ID
+        yield "Fixture reply."
+    monkeypatch.setattr("core.llm_client.chat", chat)
+    monkeypatch.setattr("core.llm_client.chat_stream", chat_stream)
+    generation = ReplyGeneration(resolve_active_character_id=lambda: active[0])
+    messages = [{"role": "user", "content": "Fixture message."}]
+    if stream:
+        reply = "".join([part async for part in generation.run_llm_stream(messages)])
+    else:
+        reply = await generation.run_llm(messages)
+    assert reply == "Fixture reply."
+    assert seen == [TEST_CHAR_ID]
+
+
+def test_scoped_schema_uses_supplied_character_without_runtime_lookup(sandbox, monkeypatch):
+    """Schema substitution must use the explicit role even when another role is active."""
+    from tests.tool_registry import patch_registry
+    from core import tool_dispatcher
+    from tests.fixtures.public_assets import TEST_CHAR_ID
+    patch_registry(monkeypatch, {"fixture_tool": {
+        "description": "Read for {char}", "category": "info",
+        "parameters": {"type": "object", "properties": {}},
+    }})
+    monkeypatch.setattr("core.character_name_provider.get_char_name", lambda char_id=None: "Scoped fixture" if char_id == TEST_CHAR_ID else "Other fixture")
+    def forbidden():
+        raise AssertionError("schema must not resolve active runtime")
+    monkeypatch.setattr("core.pipeline_registry.get", forbidden)
+    schemas = tool_dispatcher.get_tools_schema(char_id=TEST_CHAR_ID, uid="fixture-owner")
+    assert schemas[0]["function"]["description"] == "Read for Scoped fixture"
+
+
 @pytest.fixture(autouse=True)
 def _clear_pipeline_registry():
     from core import pipeline_registry

@@ -17,11 +17,16 @@ class ReplyGeneration:
         """调用 LLM 生成回复，失败自动重试。
 
         char_id: 显式指定"替谁说话"时传（Brief 30，如 Stage 群聊非活跃角色）；
-          None（默认）按活跃角色解析，与现状一致。
+          None 时由已注入的 CharacterSession 能力在请求前冻结角色。
         is_proactive: 本次是否 scheduler 主动消息（Brief 32 · thinking.apply_to_proactive 用）。
         """
         from core import llm_client
         from core.error_handler import with_retry
+
+        if char_id is None:
+            char_id = self._resolve_active_character_id()
+        if not isinstance(char_id, str) or not char_id.strip():
+            raise ValueError("reply generation requires a loaded character ID")
 
         async def _call():
             return await llm_client.chat(messages, char_id=char_id, is_proactive=is_proactive)
@@ -238,17 +243,17 @@ class ReplyGeneration:
         - 0 token + 异常 → 非流式 run_llm 兜底（完整输出）。
         - 部分 token + 异常 → 中止，不追加非流式文本（避免重复拼接）。
 
-        char_id: 显式指定"替谁说话"时传（Brief 30）；None 且有 user_id 时，
-          请求前通过注入能力冻结已加载角色；无 user_id 时维持模型侧解析。
+        char_id: 显式指定"替谁说话"时传（Brief 30）；None 时，
+          请求前通过注入能力冻结已加载角色，不交给模型侧反查。
         is_proactive: 本次是否 scheduler 主动消息（Brief 32）。
         user_id: 反坍缩软降级信号（ACT-2）归属的用户；不传则跳过检测（无法定位下一轮读取位置）。
         """
         from core import llm_client
         from core.control_markers import ControlMarkerStreamFilter
-        if char_id is None and user_id:
+        if char_id is None:
             char_id = self._resolve_active_character_id()
-            if not isinstance(char_id, str) or not char_id.strip():
-                raise ValueError("stream collapse signal requires a loaded character ID")
+        if not isinstance(char_id, str) or not char_id.strip():
+            raise ValueError("reply generation requires a loaded character ID")
         got_any = False
         pieces: list[str] = []
         marker_filter = ControlMarkerStreamFilter()
