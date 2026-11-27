@@ -164,3 +164,24 @@ getattr 字面调用及可识别 importlib / __import__ / sys.modules 动态加�
 因此不扩展客户端施工或控制面字段文档。未做真实设备或新一轮付费模型验收，
 不以自动化测试代替这些验收。31 个暂存 registry 点及其退出条件是明确保留边界，
 不宣称已删除 registry。
+
+## T3.2 C1：TurnSink 冻结身份检查（2026-11-27）
+
+原入口先 mark_request_side_effects_started，再 drain artifacts；显式角色、owner、domain
+以及 EventContext 与 frozen_scope 冲突均可进入 capture。五种业务负例在旧实现全部失败。
+现在入口先核验 Reality owner/character，事件 scope 也必须一致，再开始原有
+critical → fanout → deferred 链路。没有从活跃角色、registry 或产物推导身份。
+
+真实 caller：owner_chat.delivery、scheduler.loop、admin.activity_dialogue、
+dream.reality_continuation 均已传当轮冻结 scope；后者是出梦后的 Reality 续接。
+autonomy.talk_gate 由其已冻结 uid/char 和正式 EventContext 授权，保留既有无 frozen_scope
+契约，事件身份仍受入口检查。本项无 caller 签名迁移、无新增 facade/fallback/配置或协议变化。
+
+`tests/test_turn_sink.py` 新负例断言无 side-effect 标记、pending artifacts 不被 drain、
+critical/deferred 不被调用且无 channel 发送；原正式 effects 集成断言继续验证角色切换后
+旧 turn 写冻结角色桶、另一角色桶为空及 pending 清理。没有放宽旧断言。
+Windows / Python 3.12.13：`python -m pytest -n 4 tests/test_turn_sink.py
+tests/test_session_scope_cutover.py tests/test_ar02_dependency_directions.py -q --tb=short`
+298 passed；`tests/test_event_context_propagation.py tests/test_event_context_identity_boundaries.py
+tests/test_event_context_contract.py` 同参数 10 passed。远端 CI 以本项 PR 当前 head 为准。
+C2–C5 未完成，T3.2 不标 complete；无客户端协议或配置影响，未部署生产。
