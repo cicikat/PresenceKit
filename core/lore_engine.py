@@ -50,7 +50,7 @@ def _normalize_entry(entry: dict) -> dict | None:
         return None
 
     result: dict = {
-        "keywords":        kws,
+        "keywords":        list(kws),
         "content":         content,
         "regex":           bool(entry.get("regex", False)),
         "insertion_order": int(entry.get("insertion_order", 100)),
@@ -112,7 +112,7 @@ class LoreEngine:
             assets = for_character(char_id)
         except Exception as e:
             log_error("lore_engine.load.assets", e)
-            return
+            raise
 
         enabled_lorebooks: list = assets.get("enabled_lorebooks", [])
         total_loaded = 0
@@ -125,6 +125,7 @@ class LoreEngine:
             self.load_entries(managed_entries)
         except Exception as exc:
             log_error("lore_engine.load.managed", exc)
+            raise
 
         for stem in enabled_lorebooks:
             from core.authored_asset_resolver import resolve_layered_file
@@ -141,12 +142,11 @@ class LoreEngine:
                     data = yaml.safe_load(f) or {}
             except Exception as e:
                 log_error(f"lore_engine.load.{stem}", e)
-                continue
+                raise
 
             raw_entries = data.get("entries", [])
             if not isinstance(raw_entries, list):
-                logger.warning(f"[lore_engine] {stem}.yaml entries 字段不是列表，跳过")
-                continue
+                raise ValueError("lorebook entries must be a list")
 
             if _ensure_lore_ids(raw_entries, file_path):
                 try:

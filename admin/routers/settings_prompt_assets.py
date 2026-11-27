@@ -97,12 +97,12 @@ def _load_world_cards() -> list[dict]:
 
 
 def _reload_lore_engine(
-    *, read_character,
+    *, read_character, reload_character,
 ):
     try:
         pipeline = read_character()
         if pipeline is not None and hasattr(pipeline, "lore_engine"):
-            pipeline.lore_engine.load()
+            reload_character(pipeline.active_character_id)
     except Exception:
         pass
 
@@ -305,7 +305,7 @@ async def patch_prompt_assets(body: PromptAssetsUpdate, auth=Depends(require_sco
 
 
     if body.enabled_lorebooks is not None:
-        _reload_lore_engine(read_character=read_character)
+        _reload_lore_engine(read_character=read_character, reload_character=reload_character)
     if body.active_character is not None:
         reload_registry()
         # Hot-swap character on the running pipeline

@@ -39,23 +39,26 @@ class CharacterSession:
         self.author_note_extra = issue
         return True
 
-    def _apply_character(self, character, char_id: str, *, clear_note: bool, scoped_lore: bool):
+    def _apply_character(self, character, char_id: str, *, clear_note: bool):
+        from core.lore_engine import LoreEngine
+        lore_engine = None
+        if self.lore_engine is not None:
+            lore_engine = LoreEngine()
+            lore_engine.load(char_id=char_id)
+            if character.world_book:
+                lore_engine.load_entries(character.world_book)
+        # No await between complete construction and publication. Existing turn
+        # snapshots retain their detached engine until the turn releases it.
         self.character = character
+        self.lore_engine = lore_engine
         self.active_character_id = char_id
         if clear_note:
             self.author_note_extra = ""
-        if self.lore_engine is not None:
-            if scoped_lore:
-                self.lore_engine.load(char_id=char_id)
-            else:
-                self.lore_engine.load()
-            if character.world_book:
-                self.lore_engine.load_entries(character.world_book)
 
     def reload_character(self, char_id: str, *, clear_note: bool = False):
         from core.character_loader import load
         character = load(char_id)
-        self._apply_character(character, char_id, clear_note=clear_note, scoped_lore=False)
+        self._apply_character(character, char_id, clear_note=clear_note)
         return character
 
     def refresh(self) -> None:
@@ -109,7 +112,7 @@ class CharacterSession:
                 f"[pipeline] active_character {new_id!r} 无法加载"
             ) from exc
 
-        self._apply_character(new_char, new_id, clear_note=True, scoped_lore=True)
+        self._apply_character(new_char, new_id, clear_note=True)
         logger.info(f"[pipeline] character hot-swapped to {new_id!r} ({new_char.name})")
 
     def reality_scope(self, user_id: str) -> MemoryScope:

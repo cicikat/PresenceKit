@@ -2,7 +2,7 @@
 世界书管理路由
 提供 lorebook.yaml 的增删改查接口（路径由 DataPaths.lorebook() 决定）
 """
-from admin.character_dependencies import require_character_reader
+from admin.character_dependencies import require_character_reader, require_character_reloader
 
 from typing import List, Optional
 import logging
@@ -72,13 +72,13 @@ def _write_lorebook(data: dict, char_id: str | None = None):
 
 
 def _reload_lore_engine(
-    *, read_character,
+    *, read_character, reload_character,
 ):
     """通过启动时注入的角色快照重载同一世界书引擎。"""
     try:
         pipeline = read_character()
         if pipeline is not None and hasattr(pipeline, "lore_engine"):
-            pipeline.lore_engine.load()
+            reload_character(pipeline.active_character_id)
     except Exception:
         pass  # admin 单独运行时 pipeline 可能未初始化，忽略
 
@@ -106,7 +106,7 @@ async def get_lorebook(char_id: str | None = None, auth=Depends(require_scopes("
 
 @router.post("/lorebook", summary="新增世界书条目")
 async def add_lore_entry(entry: LoreEntry, char_id: str | None = None, auth=Depends(require_scopes("persona")),
-    *, read_character=Depends(require_character_reader),
+    *, read_character=Depends(require_character_reader), reload_character=Depends(require_character_reloader),
 ):
     """在 lorebook.yaml 末尾追加一条新条目，并热重载世界书引擎"""
     char_id = profile_scope.resolve_profile_character_id(char_id)
@@ -121,13 +121,13 @@ async def add_lore_entry(entry: LoreEntry, char_id: str | None = None, auth=Depe
     }
     data["entries"].append(new_entry)
     _write_lorebook(data, char_id)
-    _reload_lore_engine(read_character=read_character)
+    _reload_lore_engine(read_character=read_character, reload_character=reload_character)
     return {"message": "条目已添加", "id": new_entry["id"]}
 
 
 @router.put("/lorebook/{eid}", summary="修改世界书条目")
 async def update_lore_entry(eid: str, entry: LoreEntry, char_id: str | None = None, auth=Depends(require_scopes("persona")),
-    *, read_character=Depends(require_character_reader),
+    *, read_character=Depends(require_character_reader), reload_character=Depends(require_character_reloader),
 ):
     """按 id 修改 lorebook.yaml 中的条目，并热重载世界书引擎"""
     char_id = profile_scope.resolve_profile_character_id(char_id)
@@ -146,7 +146,7 @@ async def update_lore_entry(eid: str, entry: LoreEntry, char_id: str | None = No
             }
             data["entries"] = entries
             _write_lorebook(data, char_id)
-            _reload_lore_engine(read_character=read_character)
+            _reload_lore_engine(read_character=read_character, reload_character=reload_character)
             return {"message": f"条目 {eid} 已更新"}
 
     raise HTTPException(status_code=404, detail=f"条目 {eid} 不存在")
@@ -154,7 +154,7 @@ async def update_lore_entry(eid: str, entry: LoreEntry, char_id: str | None = No
 
 @router.post("/lorebook/import/txt", summary="从 txt 文件批量导入世界书条目")
 async def import_lorebook_txt(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona")),
-    *, read_character=Depends(require_character_reader),
+    *, read_character=Depends(require_character_reader), reload_character=Depends(require_character_reloader),
 ):
     """
     读取上传的 .txt 文件，按空行分段：
@@ -202,13 +202,13 @@ async def import_lorebook_txt(file: UploadFile = File(...), char_id: str | None 
         raise HTTPException(status_code=422, detail="未解析到有效条目，请确认格式：首行关键词，空行分段")
 
     _write_lorebook(data, char_id)
-    _reload_lore_engine(read_character=read_character)
+    _reload_lore_engine(read_character=read_character, reload_character=reload_character)
     return {"message": f"已导入 {added} 条世界书条目", "added": added}
 
 
 @router.delete("/lorebook/{eid}", summary="删除世界书条目")
 async def delete_lore_entry(eid: str, char_id: str | None = None, auth=Depends(require_scopes("persona")),
-    *, read_character=Depends(require_character_reader),
+    *, read_character=Depends(require_character_reader), reload_character=Depends(require_character_reloader),
 ):
     """按 id 删除 lorebook.yaml 中的条目，并热重载世界书引擎"""
     char_id = profile_scope.resolve_profile_character_id(char_id)
@@ -219,7 +219,7 @@ async def delete_lore_entry(eid: str, char_id: str | None = None, auth=Depends(r
         raise HTTPException(status_code=404, detail=f"条目 {eid} 不存在")
     data["entries"] = new_entries
     _write_lorebook(data, char_id)
-    _reload_lore_engine(read_character=read_character)
+    _reload_lore_engine(read_character=read_character, reload_character=reload_character)
     return {"message": f"条目 {eid} 已删除"}
 
 
@@ -241,7 +241,7 @@ async def export_lorebook_json(char_id: str | None = None, auth=Depends(require_
 
 @router.post("/lorebook/import/json", summary="从JSON文件导入世界书条目")
 async def import_lorebook_json(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona")),
-    *, read_character=Depends(require_character_reader),
+    *, read_character=Depends(require_character_reader), reload_character=Depends(require_character_reloader),
 ):
     """读取上传的.json文件，合并到现有lorebook.yaml"""
     char_id = profile_scope.resolve_profile_character_id(char_id)
@@ -263,5 +263,5 @@ async def import_lorebook_json(file: UploadFile = File(...), char_id: str | None
     data = _read_lorebook(char_id)
     data["entries"].extend(new_entries)
     _write_lorebook(data, char_id)
-    _reload_lore_engine(read_character=read_character)
+    _reload_lore_engine(read_character=read_character, reload_character=reload_character)
     return {"message": f"已导入 {len(new_entries)} 条条目", "added": len(new_entries)}

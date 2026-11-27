@@ -98,6 +98,88 @@ def _run_fetch(pipeline, user_id="u1", content="hello"):
 
 # ── Shared stub layer ─────────────────────────────────────────────────────────
 
+@pytest.mark.parametrize("next_id", [TEST_CHAR_ID, "character_b"])
+async def test_inflight_context_keeps_lore_across_reload(sandbox, monkeypatch, registry, next_id):
+    """A reload during embedding must not replace the lore used by an older turn."""
+    from types import SimpleNamespace
+    from core.pipeline import Pipeline
+    from core.lore_engine import LoreEngine
+    from core.memory.scope import MemoryScope
+    from core.memory import embedding
+
+    old_card = SimpleNamespace(name="Old fixture", world_book=[])
+    old_lore = LoreEngine([{"keywords": ["fixture-keyword"], "content": "old lore"}])
+    runtime = Pipeline(old_card, old_lore, active_character_id=TEST_CHAR_ID)
+    _write_active(sandbox, TEST_CHAR_ID)
+    _apply_base_stubs(monkeypatch)
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def embed(texts):
+        entered.set()
+        await release.wait()
+        return [[] for _ in texts]
+    monkeypatch.setattr(embedding, "embed", embed)
+    new_card = SimpleNamespace(name="New fixture", world_book=[
+        {"keywords": ["fixture-keyword"], "content": "new lore"},
+    ])
+    monkeypatch.setattr("core.character_loader.load", lambda char_id: new_card)
+    task = asyncio.create_task(runtime.context.fetch(
+        "fixture-owner", "fixture-keyword details", frozen_scope=MemoryScope.reality_scope("fixture-owner", TEST_CHAR_ID),
+    ))
+    await asyncio.wait_for(entered.wait(), 3)
+    runtime.character_state.reload_character(next_id)
+    release.set()
+    old = await asyncio.wait_for(task, 5)
+    assert old["lore_entries"] == ["old lore"]
+    assert old["_scoped_character"] is old_card
+    new = await runtime.context.fetch(
+        "fixture-owner", "fixture-keyword details", frozen_scope=MemoryScope.reality_scope("fixture-owner", next_id),
+    )
+    assert new["lore_entries"] == ["new lore"]
+    assert new["_scoped_character"] is new_card
+
+
+def test_failed_lore_reload_keeps_complete_previous_character(sandbox, monkeypatch):
+    """Malformed embedded lore must not publish a card or a partially loaded engine."""
+    from types import SimpleNamespace
+    from core.character_session import CharacterSession
+    from core.lore_engine import LoreEngine
+    old_card = SimpleNamespace(world_book=[])
+    state = CharacterSession(old_card, LoreEngine([
+        {"keywords": ["fixture-keyword"], "content": "old lore"},
+    ]), TEST_CHAR_ID)
+    state.author_note_extra = "pending note"
+    _write_active(sandbox, TEST_CHAR_ID)
+    monkeypatch.setattr("core.character_loader.load", lambda char_id: SimpleNamespace(world_book=[
+        {"keywords": ["fixture-keyword"], "content": "new lore"},
+        {"keywords": ["bad"], "content": "bad lore", "insertion_order": "invalid"},
+    ]))
+    with pytest.raises(ValueError):
+        state.reload_character("character_b", clear_note=True)
+    assert state.context_snapshot().character is old_card
+    assert state.current_character_id() == TEST_CHAR_ID
+    assert state.lore_engine.match("fixture-keyword") == ["old lore"]
+    assert state.author_note_extra == "pending note"
+
+
+def test_invalid_lore_file_does_not_publish_empty_reload(sandbox, monkeypatch):
+    """A parse failure must retain the previous live lore, rather than publish empty data."""
+    from types import SimpleNamespace
+    from core.character_session import CharacterSession
+    from core.lore_engine import LoreEngine
+    import yaml
+    _write_active(sandbox, TEST_CHAR_ID)
+    card = SimpleNamespace(world_book=[])
+    state = CharacterSession(card, LoreEngine([
+        {"keywords": ["fixture-keyword"], "content": "old lore"},
+    ]), TEST_CHAR_ID)
+    path = sandbox.reality_lorebook_write_path(char_id=TEST_CHAR_ID)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("entries: [broken", encoding="utf-8")
+    monkeypatch.setattr("core.character_loader.load", lambda char_id: card)
+    with pytest.raises(yaml.YAMLError):
+        state.reload_character(TEST_CHAR_ID)
+    assert state.lore_engine.match("fixture-keyword") == ["old lore"]
+
 def _apply_base_stubs(monkeypatch):
     """
     Monkeypatch all supporting functions that would need real files/LLM.

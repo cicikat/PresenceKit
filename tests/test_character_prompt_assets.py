@@ -43,3 +43,33 @@ def test_legacy_prompt_only_imported_with_explicit_owner(sandbox):
     assert _load_jailbreak(char_id=TEST_CHAR_ID) == "private"
     assert _load_jailbreak(char_id=TEST_PEER_CHAR_ID) == ""
     assert json.loads(source.read_text(encoding="utf-8"))["entries"][0]["content"] == "private"
+
+
+def test_lore_http_edit_replaces_engine_without_mutating_old_snapshot(sandbox, monkeypatch):
+    """A live authored edit preserves in-flight lore and retains embedded card entries."""
+    from types import SimpleNamespace
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from admin.character_dependencies import require_character_reader, require_character_reloader
+    from core.character_session import CharacterSession
+    from core.safe_write import safe_write_json
+
+    safe_write_json(sandbox.active_prompt_assets(), {
+        "active_character": TEST_CHAR_ID, "enabled_lorebooks": [], "enabled_jailbreaks": [],
+    })
+    card = SimpleNamespace(world_book=[{"keywords": ["card-key"], "content": "embedded lore"}])
+    state = CharacterSession(card, LoreEngine(card.world_book), TEST_CHAR_ID)
+    old = state.context_snapshot()
+    monkeypatch.setattr("core.character_loader.load", lambda char_id: card)
+    app = FastAPI()
+    app.include_router(lorebook.router)
+    monkeypatch.setenv("YEXUAN_ADMIN_SECRET", "test-only-lore")
+    app.dependency_overrides[require_character_reader] = lambda: state.context_snapshot
+    app.dependency_overrides[require_character_reloader] = lambda: state.reload_character
+    with TestClient(app) as client:
+        result = client.post("/lorebook", headers={"Authorization": "Bearer test-only-lore"}, params={"char_id": TEST_CHAR_ID}, json={
+            "keyword": ["edited-key"], "content": "edited lore",
+        })
+    assert result.status_code == 200, result.text
+    assert old.lore_engine.match("card-key edited-key") == ["embedded lore"]
+    assert state.lore_engine.match("card-key edited-key") == ["edited lore", "embedded lore"]
