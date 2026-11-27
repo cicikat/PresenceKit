@@ -2098,3 +2098,12 @@ provenance rules.
 台账 `memory_invalidations.jsonl` 每次一条，只含 ID/计数/回滚所需旧值，不含正文；被改动的存储各写一条 `provenance_log`（`trigger_signal="invalidation:<reason>"`）。重复调用幂等。`revert_invalidation(scope, invalidation_id)` 恢复标记；dossier 由 worker 重算，episodic 向量不自动重建（走 janitor 重建）。管理端暂不暴露 revert。观测：`GET /observability/memory-invalidations`（`memory.read`）。
 
 限制：级联为同步文件读改写，不持 uid 异步锁。
+
+
+## 2026-11-27：精确轮次删除、停止与恢复（current）
+
+Reality `turn_id` 删除经 `core/conversation_recovery.py`，私有独立 SQLite 路径由 `DataPaths.conversation_control` 提供并纳入数据 registry/既有保护清单。先落 archive、再落持久 visibility/source 栅栏、最后清理精确 history/event/long-message/mobile finals/vector 及有可靠 lineage 的派生投影。中途异常保留 repair_pending 和栅栏，跨进程重启读侧/迟到写入不能复活。
+
+修改锁序为 conversation_lock → uid_lock → 存储临界区；对话忙时拒绝删除/恢复，不排队跨越新轮次快照。恢复按实体补丁 CAS 与相邻锚点保留后续无关写入；冲突不覆盖，失败仍隐藏，可用原 operation_id 重试。无可靠 lineage 的旧 identity/facts/情绪列 manual_review，不按文字猜删；向量恢复 index_pending 走既有缺失投影重建，Dossier 只还原源证据，旧结论需重算。
+
+真正停止后的输入/安全可见前缀只存控制库 stopped 展示记录，不写普通 short_term/向量/固化链。恢复不会重跑模型、工具或通知。归档不默认物理清除，恢复入口仅 desktop profile 的 chat.recovery 权限；读取也受 grant owner/character/domain 约束。当前实现、负向回归和实体端到端未验收项见 [实施记录](conversation-control-delivery.md)。

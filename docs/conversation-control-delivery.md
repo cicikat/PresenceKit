@@ -83,3 +83,29 @@ D 最终后端复核：control/recovery/desktop receipts/mobile realtime/Admin �
 停止意图恰在 preliminary lookup 与 admit 之间到达时，以 admit 返回的 stopped 状态为准，不创建 executor。已删除停止记录不允许通过原请求重放重建。撤销这条 admission 守卫后，新回归真实失败 `stopped admission executed provider`；还原后 1 passed。手机撤销旧日重读后，新用例在可见 restored answer 断言失败；还原后通过。最终后端相关组 503 passed。
 
 `e9267750862089f82e9776f21447161599880ba7` 干净远端 CI：offline-evals success；Python 3.10/3.12 full pytest 均 9018 passed、14 failed、71 skipped（另 13 subtests passed）。本单先前 route coverage 与 receipt 时序失败已消失；剩余失败为角色资产 fixture/loaded character/name 能力前置条件，未修改无关生产逻辑或降低断言。
+
+
+## E：三仓实现交付与剩余验收（2026-11-27）
+
+### 代码组合
+
+- Backend 功能提交：`6f5c0eca239f171ed29cf334864a53cb4f4dc139`（A/B/C/D 独立提交均已 push 到 main）。本节为后续纯文档交付，不代表生产已经升级。
+- Desktop：`9569de6535c5bd98d438afc6195f4144af92ef58`（前序 `df28376a70e53346da500a6ef591c9d99ee46fe1`）。右键“删除本轮”二次确认、单次停止当前一个 execution/未准入 request、电脑专有删除档案列表/详情/恢复/repair；新的删除操作在确认成功后结束重试身份，允许同一次应用会话内恢复后再次删除。
+- Mobile：`0585b768fc1fa3d983f63e5e16856a72c804d4fd`（前序 `08104877085a2d125ebe1a7fa0a54b5c7f349b01`）。长按 canonical 气泡/媒体卡片删除、停止按钮、独立状态轮询与实时提示；没有恢复 API/UI，不更改原 final-only 通道为 token streaming。
+- compatibility：上述组合的各仓定向/构建和合成入口验证通过；三端真实服务、native 窗口、实体手机同时在线端到端组合为 `not_verified`。旧客户端没有新增控件；自定义 scopes 不会自动增加恢复权限。
+
+### 最终证据
+
+- Backend Python 3.12：control/recovery/desktop receipts/mobile realtime/Admin route consumers/session cutover/scopes/data registry/Responses 协议相关组 **503 passed**；覆盖独立进程栅栏、归档失败、精确 lineage、恢复冲突、跨 scope 拒绝、真实 executor 取消与 stopped admission 竞态。不使用生产数据。
+- Desktop：`npm run build` passed（已有 chunk size 提醒）；全套 Vitest **121 files / 664 tests passed**；Rust `cargo check --manifest-path src-tauri/Cargo.toml` passed。最终取消/删除/恢复/再次删除已用真实 ConversationControls 组件在隔离浏览器实点；仅替换 auth/网络/角色边界，合成内容无真实 credential，不等于 Tauri 原生端到端。
+- Mobile：`flutter analyze --no-pub` **No issues found**；`flutter test --no-pub test/conversation_control_test.dart test/chat_recovery_upload_test.dart test/mobile_outbox_deadline_test.dart test/chat_interaction_regression_test.dart test/mobile_realtime_test.dart` **92 passed**；`flutter build apk --debug --flavor dev --no-pub` passed，未安装、未签发正式包。
+- 故障注入：移除 delete 成功后的操作号释放，真实 loopback HTTP 的“恢复后第二次删除”会因旧幂等结果而失败；恢复修复后同一请求/可见状态回归通过。其他 admission/旧日恢复负向证据见 D。
+- 干净远端 Backend 功能 SHA `6f5c0eca239f171ed29cf334864a53cb4f4dc139`：offline-evals **success**；Python 3.10/3.12 均 **9019 passed / 14 failed / 71 skipped / 13 subtests passed**。14 个失败仍为 autonomy intentions、hardware/imagegen/self tools、run_llm_retry 的角色资产/loaded character/name 前置条件；未混入本次修复，完整 CI 仍红，不能以 503 定向通过代替。
+- Desktop 前序 SHA `df28376a70e53346da500a6ef591c9d99ee46fe1` 与 Mobile 前序 SHA `08104877085a2d125ebe1a7fa0a54b5c7f349b01` 普通 CI 已 success；最新补丁 CI 另行核对，不把前序绿灯移作当前证据。
+
+### 保留边界与 open
+
+- 删除范围是精确 canonical round 与可靠来源关联的证据/派生投影；无 lineage 的旧 identity/facts/情绪不猜测删除，列 manual_review。恢复向量为 index_pending、Dossier 旧结论 recompute_required，不承诺立即还原旧结论。
+- 停止不撤销已经执行的外部工具，不保证上游立即停止计费；committing/completed 不改写为 stopped，不清空后续排队输入。请求失败不假装删除成功。
+- 尚未完成：真实模型无休止符场景、原生桌面右键/手机真机长按、双设备跨端停止/删除/恢复、弱网/后台/进程重启实测。自动化和隔离浏览器仅覆盖各自范围。
+- 未生产部署、未操作生产聊天记录、未安装 APK、未发布桌面/正式 APK。未额外清理旧分支/brief/legacy；删除候选见原工单。其他并行未提交代码与原手机插件生成文件保持原样。
