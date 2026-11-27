@@ -1491,3 +1491,9 @@ CSV保留空格、空单元格、引号与换行；XLSX提取工作表和单元�
 ## 财务队列恢复63（current / observe）
 
 current：手机同步跳过本机暂停的自动账目，手动账目独立可发送；人工处理错误停止后台重排，409/422隔离单条，网络故障保留退避。scope/HTTP字段、后端effective与桌面消费者不变；状态复用手机snapshot/sync_status，恢复经显式同步或对应记录纠错入口。observe：真实支付通知、权限往返与后台/强停/重启仍未验收，合成回归不替代。
+
+## Reality 聊天控制 A 底座（2026-11-27）
+
+current：新增 session-scoped `GET /conversation/executions`、`GET /conversation/requests/{request_id}`、`GET /conversation/mutations?after=&limit=`。均要求 chat Bearer + Reality session，返回 no-store；request 查询限本 credential，活动执行和 metadata-only mutations 按 owner/character 隔离，revision 独立于 mobile ACK/seq/history_index。持久状态与重启 interrupted、stop/commit 仲裁见 [实施记录](conversation-control-delivery.md)。
+
+open：A 尚未将现有生成接入控制库，停止/删除/恢复写接口、实时控制帧及双端按钮后续分单施工，当前无可用产品入口。observe：三仓联调/设备/真实模型未验收。

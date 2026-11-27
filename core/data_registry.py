@@ -33,6 +33,7 @@ class PathMeta:
 # ── 注册表 ─────────────────────────────────────────────────────────────────────
 # 键 = DataPaths 方法名（不含括号）。
 REGISTRY: dict[str, PathMeta] = {
+    "conversation_control": PathMeta("canonical", "reality", "per_char_user", "ignore"),
     "memory_task_outbox": PathMeta("canonical", "reality", "global", "ignore"),
     "character_cleanup_archive_dir": PathMeta("archive", "shared", "global", "ignore"),
     "character_cleanup_runtime_roots": PathMeta("runtime", "shared", "per_char", "ignore"),

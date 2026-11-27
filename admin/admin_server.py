@@ -115,6 +115,8 @@ app.include_router(character.router,      prefix="",           tags=["角色卡"
 from admin.routers import character_cleanup
 app.include_router(character_cleanup.router, tags=["角色删除与恢复"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
+from admin.routers import conversation
+app.include_router(conversation.router, tags=["聊天控制"])
 app.include_router(owner_turn.router,      prefix="",           tags=["Owner Turn"])
 app.include_router(development.router,     prefix="",           tags=["Development"])
 app.include_router(diary_sync.router,      prefix="",           tags=["Diary Sync"])

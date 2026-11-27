@@ -1115,6 +1115,10 @@ class DataPaths:
         """ACT-2：流式路径反坍缩一次性降级信号，下一轮 build_prompt 读到后立即消费清除。"""
         return self.user_memory_root(user_id, char_id=char_id) / "stream_collapse_signal.json"
 
+    def conversation_control(self, user_id: str | int, *, char_id: str) -> Path:
+        """Durable execution metadata and recoverable chat mutations (private state)."""
+        return self.user_memory_root(user_id, char_id=char_id) / "conversation_control.sqlite3"
+
     def event_store(self, user_id: str | int, *, char_id: str) -> Path:
         """Memory Event evidence ledger for one explicit character/user scope."""
         return self.user_memory_root(user_id, char_id=char_id) / "event_store.sqlite3"
